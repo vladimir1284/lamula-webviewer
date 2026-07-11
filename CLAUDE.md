@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado del repo
 
-**F0 (andamiaje) implementado** — esqueleto Nuxt 3 (preset `cloudflare-pages`) en la raíz: `pages/`, `server/api/`, `components/`, `utils/`, tests en `tests/unit/` (Vitest) y `e2e/` (Playwright contra `wrangler pages dev`). CI en `.github/workflows/ci.yml` (lint + typecheck + unit + build + e2e + deploy Pages con previews por PR). Pendiente de F0: setup Cloudflare una vez (proyecto Pages `lamula-webviewer`, `database_id` real en `wrangler.toml`) — ver README. Fases siguientes en `docs/plan-implementacion.md`.
+**F1 (contrato + DAL) implementado** sobre el esqueleto de F0. Piezas: tipos+Zod del contrato en `shared/contract/` (compartido server/cliente), DAL en `server/dal/` (adaptador live D1 y adaptador fixture con grabaciones en `server/dal/fixtures/`, switch `NUXT_DAL_ADAPTER=fixture`), server routes completas (`radars`, `products`, `rasters/{times,closest,next,prev}`, `phenomena[/series]`, `vwp`, `health`), contract tests en `tests/contract/` (snapshot del SQL del pipeline + better-sqlite3; drift via `scripts/check-contract-drift.sh` en CI), suite dual en `tests/unit/dal.spec.ts` (misma suite contra ambos adaptadores + paridad — puerta M1), COGs golden reales en `tests/fixtures/cogs/`, e2e Playwright en modo fixture sobre workerd. Pendiente (requiere credenciales Cloudflare): setup Pages una vez (README) y re-grabar fixtures desde la D1 real (`scripts/record-fixtures.sh` — hoy son seed sintético conforme al contrato). Fases siguientes en `docs/plan-implementacion.md`.
 
 El plan reconciliado vive en `docs/` (MkDocs Material, español), desplegado a Cloudflare Pages (proyecto `lamula-webviewer-docs`) al tocar `docs/**` o `mkdocs.yml` en `main`.
 

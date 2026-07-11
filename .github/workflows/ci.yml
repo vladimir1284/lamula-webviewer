@@ -40,6 +40,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Contract drift (schema del pipeline)
+        run: bash scripts/check-contract-drift.sh
+
       - name: Build (cloudflare-pages)
         run: pnpm build
 

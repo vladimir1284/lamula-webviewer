@@ -1,0 +1,22 @@
+[
+  {
+    "site_id": "AMX",
+    "icao": "KAMX",
+    "lat": 25.611,
+    "lon": -80.413,
+    "height_m": 111.0,
+    "proj4": "+proj=aeqd +lat_0=25.611 +lon_0=-80.413 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+    "first_seen_at": "2026-07-04T12:00:07",
+    "last_seen_at": "2026-07-06T15:45:17"
+  },
+  {
+    "site_id": "JUA",
+    "icao": "TJUA",
+    "lat": 18.116,
+    "lon": -66.078,
+    "height_m": 2958.0,
+    "proj4": "+proj=aeqd +lat_0=18.116 +lon_0=-66.078 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+    "first_seen_at": "2026-07-04T12:03:11",
+    "last_seen_at": "2026-07-06T15:43:47"
+  }
+]

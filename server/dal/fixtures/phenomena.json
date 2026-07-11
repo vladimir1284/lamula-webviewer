@@ -1,0 +1,54 @@
+[
+  {
+    "site_id": "AMX",
+    "product_code": 58,
+    "vol_time": "2026-07-06T15:39:17",
+    "kind": "storm_cell",
+    "cell_id": "A0",
+    "lat": 25.978,
+    "lon": -80.867,
+    "azimuth_deg": 312.0,
+    "range_km": 57.4,
+    "attrs": "{\"azran_nm\":[312,31],\"movement_deg\":250,\"movement_kt\":14}",
+    "created_at": "2026-07-06T15:41:07"
+  },
+  {
+    "site_id": "AMX",
+    "product_code": 58,
+    "vol_time": "2026-07-06T15:45:17",
+    "kind": "storm_cell",
+    "cell_id": "A0",
+    "lat": 25.981,
+    "lon": -80.891,
+    "azimuth_deg": 311.0,
+    "range_km": 59.3,
+    "attrs": "{\"azran_nm\":[311,32],\"movement_deg\":251,\"movement_kt\":15}",
+    "created_at": "2026-07-06T15:47:04"
+  },
+  {
+    "site_id": "AMX",
+    "product_code": 58,
+    "vol_time": "2026-07-06T15:45:17",
+    "kind": "storm_cell",
+    "cell_id": "B7",
+    "lat": 25.049,
+    "lon": -79.964,
+    "azimuth_deg": 145.0,
+    "range_km": 77.8,
+    "attrs": "{\"azran_nm\":[145,42],\"new\":true}",
+    "created_at": "2026-07-06T15:47:04"
+  },
+  {
+    "site_id": "AMX",
+    "product_code": 141,
+    "vol_time": "2026-07-06T15:45:17",
+    "kind": "meso",
+    "cell_id": "4",
+    "lat": 25.979,
+    "lon": -80.889,
+    "azimuth_deg": 311.0,
+    "range_km": 58.9,
+    "attrs": "{\"azran_nm\":[311,32],\"radius_km\":3.2}",
+    "created_at": "2026-07-06T15:47:05"
+  }
+]
