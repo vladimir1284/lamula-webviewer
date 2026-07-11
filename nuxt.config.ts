@@ -23,7 +23,7 @@ export default defineNuxtConfig({
     dalAdapter: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
-      r2BaseUrl: '',
+      r2BaseUrl: 'https://nexrad-raster.ladetec.com',
     },
   },
 
