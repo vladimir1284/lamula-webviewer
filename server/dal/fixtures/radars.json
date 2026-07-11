@@ -1,22 +1,42 @@
 [
   {
     "site_id": "AMX",
-    "icao": "KAMX",
+    "icao": null,
     "lat": 25.611,
     "lon": -80.413,
-    "height_m": 111.0,
+    "height_m": 111,
     "proj4": "+proj=aeqd +lat_0=25.611 +lon_0=-80.413 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
-    "first_seen_at": "2026-07-04T12:00:07",
-    "last_seen_at": "2026-07-06T15:45:17"
+    "first_seen_at": "2026-07-08T01:42:17",
+    "last_seen_at": "2026-07-11T03:17:57"
+  },
+  {
+    "site_id": "BYX",
+    "icao": null,
+    "lat": 24.597,
+    "lon": -81.703,
+    "height_m": 89,
+    "proj4": "+proj=aeqd +lat_0=24.597 +lon_0=-81.703 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+    "first_seen_at": "2026-07-10T04:29:18",
+    "last_seen_at": "2026-07-11T03:16:44"
+  },
+  {
+    "site_id": "ICT",
+    "icao": null,
+    "lat": 37.654,
+    "lon": -97.443,
+    "height_m": 1400,
+    "proj4": "+proj=aeqd +lat_0=37.654 +lon_0=-97.443 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+    "first_seen_at": "2026-07-10T05:29:57",
+    "last_seen_at": "2026-07-10T05:30:03"
   },
   {
     "site_id": "JUA",
-    "icao": "TJUA",
+    "icao": null,
     "lat": 18.116,
     "lon": -66.078,
-    "height_m": 2958.0,
+    "height_m": 2958,
     "proj4": "+proj=aeqd +lat_0=18.116 +lon_0=-66.078 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
-    "first_seen_at": "2026-07-04T12:03:11",
-    "last_seen_at": "2026-07-06T15:43:47"
+    "first_seen_at": "2026-07-08T01:42:43",
+    "last_seen_at": "2026-07-11T03:18:46"
   }
 ]

@@ -1,12 +1,62 @@
 [
-  { "code": 48, "mnemonic": "NVW", "unit": "kt", "kind": "vwp" },
-  { "code": 58, "mnemonic": "NST", "unit": null, "kind": "phenomena" },
-  { "code": 134, "mnemonic": "DVL", "unit": "kg/m2", "kind": "raster" },
-  { "code": 135, "mnemonic": "EET", "unit": "kft", "kind": "raster" },
-  { "code": 141, "mnemonic": "NMD", "unit": null, "kind": "phenomena" },
-  { "code": 153, "mnemonic": "N0B", "unit": "dBZ", "kind": "raster" },
-  { "code": 154, "mnemonic": "N0G", "unit": "kt", "kind": "raster" },
-  { "code": 170, "mnemonic": "DAA", "unit": "mm", "kind": "raster" },
-  { "code": 172, "mnemonic": "DTA", "unit": "mm", "kind": "raster" },
-  { "code": 173, "mnemonic": "DU3", "unit": "mm", "kind": "raster" }
+  {
+    "code": 48,
+    "mnemonic": "NVW",
+    "unit": "kt",
+    "kind": "vwp"
+  },
+  {
+    "code": 58,
+    "mnemonic": "NST",
+    "unit": null,
+    "kind": "phenomena"
+  },
+  {
+    "code": 134,
+    "mnemonic": "DVL",
+    "unit": "kg/m2",
+    "kind": "raster"
+  },
+  {
+    "code": 135,
+    "mnemonic": "EET",
+    "unit": "kft",
+    "kind": "raster"
+  },
+  {
+    "code": 141,
+    "mnemonic": "NMD",
+    "unit": null,
+    "kind": "phenomena"
+  },
+  {
+    "code": 153,
+    "mnemonic": "N0B",
+    "unit": "dBZ",
+    "kind": "raster"
+  },
+  {
+    "code": 154,
+    "mnemonic": "N0G",
+    "unit": "kt",
+    "kind": "raster"
+  },
+  {
+    "code": 170,
+    "mnemonic": "DAA",
+    "unit": "mm",
+    "kind": "raster"
+  },
+  {
+    "code": 172,
+    "mnemonic": "DTA",
+    "unit": "mm",
+    "kind": "raster"
+  },
+  {
+    "code": 173,
+    "mnemonic": "DU3",
+    "unit": "mm",
+    "kind": "raster"
+  }
 ]

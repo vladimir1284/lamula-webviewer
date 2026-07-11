@@ -1,24 +1,29 @@
 # Fixtures del adaptador fixture
 
-Grabaciones de las tablas D1 del contrato (una por fichero, filas tal cual
-salen de `SELECT *` menos `id`). Las consume `server/dal/fixture.ts` (bundled
-en el build — el modo fixture funciona también desplegado) y las validan los
-contract tests (`tests/contract/fixtures.spec.ts`: cada fila debe validar
-contra los schemas Zod **e insertarse limpia en el schema real del pipeline**).
+**Grabaciones de la D1 real del demo** (`nexrad-l3`), una tabla por fichero,
+filas tal cual salen de `SELECT` (sin `id`; con `created_at`, que el DAL no
+sirve). Grabadas con `scripts/record-fixtures.sh`: ventana de 15 min desde el
+último volumen (30 min para `phenomena`, para que haya celdas en ≥2 volúmenes
+y la serie por `cell_id` sea útil).
 
-> **Estado: seed sintético conforme al contrato** (radares AMX/JUA, series
-> N0B/DVL, tormenta con celdas A0/B7 + meso, perfiles VWP), construido a mano
-> a partir de los datos de test de nexrad-l3-pipeline. La puerta M1 pide
-> fixtures **grabadas de la D1 real del demo**: cuando haya credenciales,
-> ejecutar `scripts/record-fixtures.sh` y commitear el resultado.
+Las consume `server/dal/fixture.ts` (bundled en el build — el modo fixture
+funciona también desplegado) y las vigilan dos suites:
+
+- `tests/contract/fixtures.spec.ts` — cada fila valida contra los schemas Zod
+  del contrato **e inserta limpia en el schema SQL real** (FKs activas).
+- `tests/unit/dal.spec.ts` + `e2e/` — expectativas **derivadas** de estas
+  grabaciones (`tests/helpers/derive.ts`), no hardcodeadas: re-grabar no
+  rompe tests mientras las grabaciones den para cada consulta (series ≥3
+  volúmenes, algún cell_id multi-volumen…); si no dan, `derive.ts` lanza
+  con mensaje claro.
 
 Re-grabación:
 
 ```bash
-wrangler login                     # una vez
+# credenciales: wrangler login, o CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID (.env)
 bash scripts/record-fixtures.sh    # sobrescribe server/dal/fixtures/*.json
-pnpm test                          # los contract tests validan lo grabado
+pnpm test                          # valida lo grabado
 ```
 
-Los COGs golden (3–5 GeoTIFFs commiteados para F2) van en
-`tests/fixtures/cogs/` — ver README allí.
+Los COGs golden (GeoTIFFs para F2) van en `tests/fixtures/cogs/` — ver
+README allí.
