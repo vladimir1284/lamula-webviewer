@@ -73,6 +73,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # wrangler-action instala wrangler con pnpm (detecta pnpm-lock.yaml)
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/download-artifact@v4
         with:
           name: dist
