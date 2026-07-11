@@ -1,0 +1,17 @@
+# mkdocs
+site/
+
+# node / nuxt (fase F0 en adelante)
+node_modules/
+.nuxt/
+.output/
+dist/
+.wrangler/
+
+# env
+.env
+.env.*
+!.env.example
+
+# editor / os
+.DS_Store

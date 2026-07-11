@@ -1,0 +1,41 @@
+site_name: LAMULA-WebViewer
+site_description: Visualizador web de productos NEXRAD Level III — Nuxt 3 + OpenLayers sobre Cloudflare Pages (D1 + R2)
+repo_url: https://github.com/vladimir1284/lamula-webviewer
+repo_name: vladimir1284/lamula-webviewer
+
+theme:
+  name: material
+  language: es
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Modo oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Modo claro
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - toc:
+      permalink: true
+
+nav:
+  - Inicio: index.md
+  - Arquitectura: arquitectura.md
+  - Decisiones de diseño: decisiones.md
+  - Contrato de datos: contrato.md
+  - Plan de implementación: plan-implementacion.md
+  - Validaciones manuales: validaciones.md
