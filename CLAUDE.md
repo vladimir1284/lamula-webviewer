@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado del repo
 
-**Planificación** — todavía no hay código de aplicación. El contenido es el plan reconciliado del proyecto en `docs/` (MkDocs Material, español), desplegado a Cloudflare Pages (proyecto `lamula-webviewer-docs`) al tocar `docs/**` o `mkdocs.yml` en `main`. La implementación arranca en F0 según `docs/plan-implementacion.md`.
+**F0 (andamiaje) implementado** — esqueleto Nuxt 3 (preset `cloudflare-pages`) en la raíz: `pages/`, `server/api/`, `components/`, `utils/`, tests en `tests/unit/` (Vitest) y `e2e/` (Playwright contra `wrangler pages dev`). CI en `.github/workflows/ci.yml` (lint + typecheck + unit + build + e2e + deploy Pages con previews por PR). Pendiente de F0: setup Cloudflare una vez (proyecto Pages `lamula-webviewer`, `database_id` real en `wrangler.toml`) — ver README. Fases siguientes en `docs/plan-implementacion.md`.
+
+El plan reconciliado vive en `docs/` (MkDocs Material, español), desplegado a Cloudflare Pages (proyecto `lamula-webviewer-docs`) al tocar `docs/**` o `mkdocs.yml` en `main`.
 
 ## Qué es
 
@@ -22,6 +24,9 @@ Viewer web de productos NEXRAD Level III: reescritura de VestaWeb2 (Svelte 3 + D
 ## Comandos
 
 ```bash
+pnpm dev / lint / typecheck / test / build         # app (ver README)
+pnpm preview                                       # wrangler pages dev sobre dist/
+pnpm test:e2e                                      # Playwright (requiere pnpm build previo)
 uvx --with mkdocs-material mkdocs serve            # preview docs en :8000
-uvx --with mkdocs-material mkdocs build --strict   # lo que corre CI
+uvx --with mkdocs-material mkdocs build --strict   # lo que corre CI de docs
 ```
