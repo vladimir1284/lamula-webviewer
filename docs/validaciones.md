@@ -10,8 +10,8 @@ Parte manual de cada puerta del [plan de implementación](plan-implementacion.md
 
 ## F1 — Contrato + DAL
 
-1. Con `DAL=fixture`, la app arranca sin red (solo assets locales) y las rutas API devuelven las fixtures.
-2. Con `DAL=live`, las mismas rutas devuelven datos de la D1 del demo.
+1. Con `NUXT_DAL_ADAPTER=fixture`, la app arranca sin red (solo assets locales) y las rutas API devuelven las fixtures.
+2. Sin la variable (adaptador live), las mismas rutas devuelven datos de la D1 del demo.
 3. Editar a mano una fixture (renombrar una columna) → el contract test falla con mensaje claro.
 
 ## F2 — Mapa + raster (la validación crítica)

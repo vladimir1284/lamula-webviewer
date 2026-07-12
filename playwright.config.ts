@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
 // Corre contra el build real de Pages (wrangler pages dev sirve dist/
-// con el runtime workerd). Requiere `pnpm build` previo. Sin binding D1
-// real la página debe degradar a su estado de error explícito.
+// con el runtime workerd). Requiere `pnpm build` previo. El DAL corre en
+// modo fixture (grabaciones commiteadas): flujos completos deterministas
+// sin D1 real, sobre el mismo runtime que producción.
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
@@ -20,7 +21,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm exec wrangler pages dev --port 8788 --ip 127.0.0.1',
+    command:
+      'pnpm exec wrangler pages dev --port 8788 --ip 127.0.0.1 --binding NUXT_DAL_ADAPTER=fixture',
     url: 'http://127.0.0.1:8788',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

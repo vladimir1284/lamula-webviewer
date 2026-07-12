@@ -18,6 +18,15 @@ export default defineNuxtConfig({
     strict: true,
   },
 
+  runtimeConfig: {
+    // NUXT_DAL_ADAPTER=fixture → DAL sirve grabaciones commiteadas (decisión 3)
+    dalAdapter: '',
+    public: {
+      // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
+      r2BaseUrl: 'https://nexrad-raster.ladetec.com',
+    },
+  },
+
   // Decisión 14: PrimeVue v4 unstyled, Tailwind como capa de estilos.
   primevue: {
     options: {
