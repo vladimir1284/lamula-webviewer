@@ -8,7 +8,7 @@
 // Ambos runners corren con cwd = raíz del repo.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PhenomenonRow, RadarRow, RasterRow, VwpRow } from '../../shared/contract/types'
+import type { PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow } from '../../shared/contract/types'
 
 type Recorded<T> = T & { created_at: string }
 
@@ -19,6 +19,7 @@ function loadFixture<T>(name: string): T {
 }
 
 export const radars = loadFixture<RadarRow[]>('radars')
+export const products = loadFixture<ProductRow[]>('products')
 export const rasters = loadFixture<Recorded<RasterRow>[]>('rasters')
 export const phenomena = loadFixture<Recorded<PhenomenonRow>[]>('phenomena')
 export const vwp = loadFixture<Recorded<VwpRow>[]>('vwp')
