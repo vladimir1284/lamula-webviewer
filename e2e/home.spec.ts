@@ -48,6 +48,24 @@ test('deep link reproduce el frame exacto (puerta M3)', async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t)}$`))
 })
 
+test('day picker: ventana de 72h, día activo marcado, día vacío no navega', async ({ page }) => {
+  const t = series.times[1]
+  const url = `/${series.site}/${series.product}/${isoToPath(t)}`
+  await page.goto(url)
+
+  const active = page.getByTestId(`day-option-${series.day}`)
+  await expect(active).toHaveAttribute('aria-pressed', 'true')
+  // ventana de 72h ancla a last_seen_at, no a wall-clock: 4 días visibles
+  await expect(page.getByTestId('day-picker').getByRole('button')).toHaveCount(4)
+
+  // un día de la ventana sin datos grabados: SELECT_DAY no encuentra a qué
+  // frame saltar, la URL no cambia y la timeline muestra el vacío explícito
+  const emptyDay = '2026-07-09'
+  await page.getByTestId(`day-option-${emptyDay}`).click()
+  await expect(page.getByTestId('timeline-empty')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(t)}$`))
+})
+
 test('cambiar radar navega con push (URL manda)', async ({ page }) => {
   const t = series.times[1]
   await page.goto(`/${series.site}/${series.product}/${isoToPath(t)}`)

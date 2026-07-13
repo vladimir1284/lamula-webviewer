@@ -1,5 +1,6 @@
 // viewerMachine pura: navegación y fetch inyectados como mocks — sin router
-// ni red (decisión 18). El diagrama vive en docs/maquinas-estado.md.
+// ni red (decisión 18). Regiones paralelas 'raster' y 'timeline'; el
+// diagrama vive en docs/maquinas-estado.md.
 import type { RasterMeta } from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise, waitFor } from 'xstate'
@@ -8,6 +9,8 @@ import { viewerMachine } from '../../machines/viewer'
 
 const T0 = '2026-07-11T03:16:49'
 const T1 = '2026-07-11T03:11:52'
+const DAY = '2026-07-11'
+const NOW_T = '2026-07-11T04:00:00'
 
 function meta(volTime: string): RasterMeta {
   return {
@@ -40,23 +43,32 @@ function boot(opts: {
   route?: Partial<ViewerRouteState>
   initialRaster?: RasterMeta | null
   initialError?: string | null
+  initialTimes?: RasterMeta[]
+  initialTimelineError?: string | null
   fetch?: (input: { site: string, product: number, t: string }) => Promise<RasterMeta | null>
+  fetchDay?: (input: { site: string, product: number, day: string }) => Promise<RasterMeta[]>
 } = {}) {
   const navigate = vi.fn()
   const persistPrefs = vi.fn()
   const syncQuery = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
+  const fetchDay = vi.fn(opts.fetchDay ?? (async () => []))
   const input: ViewerInput = {
     radars: [],
     products: [],
     route: routeAt(opts.route),
-    nowT: '2026-07-11T04:00:00',
+    nowT: NOW_T,
     initialRaster: opts.initialRaster ?? null,
     initialError: opts.initialError ?? null,
+    initialTimes: opts.initialTimes ?? [],
+    initialTimelineError: opts.initialTimelineError ?? null,
   }
   const actor = createActor(
     viewerMachine.provide({
-      actors: { fetchClosest: fromPromise(({ input: i }) => fetch(i)) },
+      actors: {
+        fetchClosest: fromPromise(({ input: i }) => fetch(i)),
+        fetchDay: fromPromise(({ input: i }) => fetchDay(i)),
+      },
       actions: {
         navigate: (_, params) => navigate(params),
         persistPrefs: (_, params) => persistPrefs(params),
@@ -66,24 +78,24 @@ function boot(opts: {
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch, persistPrefs, syncQuery }
+  return { actor, navigate, fetch, fetchDay, persistPrefs, syncQuery }
 }
 
-describe('viewerMachine — estado inicial (SSR)', () => {
+describe('viewerMachine — región raster: estado inicial (SSR)', () => {
   it('arranca en shown con el raster del closest SSR', () => {
     const { actor } = boot({ initialRaster: meta(T0) })
-    expect(actor.getSnapshot().value).toBe('shown')
+    expect(actor.getSnapshot().matches({ raster: 'shown' })).toBe(true)
     expect(actor.getSnapshot().context.raster?.vol_time).toBe(T0)
   })
 
   it('arranca en empty con closest 404', () => {
     const { actor } = boot({ initialRaster: null })
-    expect(actor.getSnapshot().value).toBe('empty')
+    expect(actor.getSnapshot().matches({ raster: 'empty' })).toBe(true)
   })
 
   it('arranca en error con fallo del closest SSR', () => {
     const { actor } = boot({ initialError: 'D1 no disponible' })
-    expect(actor.getSnapshot().value).toBe('error')
+    expect(actor.getSnapshot().matches({ raster: 'error' })).toBe(true)
     expect(actor.getSnapshot().context.rasterError).toBe('D1 no disponible')
   })
 })
@@ -109,17 +121,17 @@ describe('viewerMachine — vista live', () => {
     })
     // back del navegador a la URL live: refetch con nowT y replace al resolver
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: null }) })
-    await waitFor(actor, s => s.matches('shown'))
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
     expect(navigate).toHaveBeenCalledWith({ patch: { time: T1 }, mode: 'replace' })
   })
 })
 
-describe('viewerMachine — ROUTE_CHANGED', () => {
+describe('viewerMachine — región raster: ROUTE_CHANGED', () => {
   it('sameFrame (materialización del time) no refetchea ni cambia de estado', () => {
     const { actor, fetch } = boot({ route: { time: null }, initialRaster: meta(T0) })
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T0 }) })
     expect(fetch).not.toHaveBeenCalled()
-    expect(actor.getSnapshot().value).toBe('shown')
+    expect(actor.getSnapshot().matches({ raster: 'shown' })).toBe(true)
     expect(actor.getSnapshot().context.time).toBe(T0)
   })
 
@@ -137,8 +149,8 @@ describe('viewerMachine — ROUTE_CHANGED', () => {
       fetch: async () => meta(T1),
     })
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ product: 154 }) })
-    expect(actor.getSnapshot().value).toBe('loading')
-    await waitFor(actor, s => s.matches('shown'))
+    expect(actor.getSnapshot().matches({ raster: 'loading' })).toBe(true)
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
     expect(fetch).toHaveBeenCalledWith({ site: 'AMX', product: 154, t: T0 })
     expect(actor.getSnapshot().context.raster?.vol_time).toBe(T1)
   })
@@ -146,7 +158,7 @@ describe('viewerMachine — ROUTE_CHANGED', () => {
   it('closest 404 degrada a empty', async () => {
     const { actor } = boot({ initialRaster: meta(T0), fetch: async () => null })
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ site: 'ICT' }) })
-    await waitFor(actor, s => s.matches('empty'))
+    await waitFor(actor, s => s.matches({ raster: 'empty' }))
     expect(actor.getSnapshot().context.raster).toBeNull()
   })
 
@@ -158,8 +170,88 @@ describe('viewerMachine — ROUTE_CHANGED', () => {
       },
     })
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ product: 154 }) })
-    await waitFor(actor, s => s.matches('error'))
+    await waitFor(actor, s => s.matches({ raster: 'error' }))
     expect(actor.getSnapshot().context.rasterError).toBe('boom')
+  })
+})
+
+describe('viewerMachine — región timeline: estado inicial (SSR)', () => {
+  it('arranca en ready con los times del día SSR', () => {
+    const { actor } = boot({ initialTimes: [meta(T1), meta(T0)] })
+    expect(actor.getSnapshot().matches({ timeline: 'ready' })).toBe(true)
+    expect(actor.getSnapshot().context.times).toHaveLength(2)
+    expect(actor.getSnapshot().context.day).toBe(DAY)
+  })
+
+  it('arranca en empty sin times', () => {
+    const { actor } = boot({ initialTimes: [] })
+    expect(actor.getSnapshot().matches({ timeline: 'empty' })).toBe(true)
+  })
+
+  it('arranca en error con fallo del /api/rasters/day en SSR', () => {
+    const { actor } = boot({ initialTimelineError: 'D1 no disponible' })
+    expect(actor.getSnapshot().matches({ timeline: 'error' })).toBe(true)
+  })
+})
+
+describe('viewerMachine — región timeline: ROUTE_CHANGED', () => {
+  it('mismo día (stepping dentro del día) no refetchea', () => {
+    const { actor, fetchDay } = boot({ initialTimes: [meta(T0)] })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T1 }) })
+    expect(fetchDay).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().context.day).toBe(DAY)
+  })
+
+  it('cambiar de site refetchea aunque el día no cambie', async () => {
+    const { actor, fetchDay } = boot({
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [meta(T1)],
+    })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ site: 'JUA' }) })
+    expect(actor.getSnapshot().matches({ timeline: 'loading' })).toBe(true)
+    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    expect(fetchDay).toHaveBeenCalledWith({ site: 'JUA', product: 153, day: DAY })
+  })
+
+  it('cambiar a un día distinto refetchea y puede degradar a empty', async () => {
+    const { actor, fetchDay } = boot({
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [],
+    })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: '2026-07-12T00:00:00' }) })
+    await waitFor(actor, s => s.matches({ timeline: 'empty' }))
+    expect(fetchDay).toHaveBeenCalledWith({ site: 'AMX', product: 153, day: '2026-07-12' })
+    expect(actor.getSnapshot().context.times).toEqual([])
+  })
+})
+
+describe('viewerMachine — SELECT_DAY', () => {
+  it('salta al último frame del día elegido (push)', async () => {
+    const { actor, navigate, fetchDay } = boot({
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [meta(T1), meta(T0)],
+    })
+    actor.send({ type: 'SELECT_DAY', day: '2026-07-10' })
+    expect(actor.getSnapshot().matches({ timeline: 'jumping' })).toBe(true)
+    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    expect(fetchDay).toHaveBeenCalledWith({ site: 'AMX', product: 153, day: '2026-07-10' })
+    expect(navigate).toHaveBeenCalledWith({ patch: { time: T0 }, mode: 'push' })
+  })
+
+  it('día sin datos: no navega (nada a lo que saltar), queda empty', async () => {
+    const { actor, navigate } = boot({
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [],
+    })
+    actor.send({ type: 'SELECT_DAY', day: '2026-07-09' })
+    await waitFor(actor, s => s.matches({ timeline: 'empty' }))
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('seleccionar el día ya activo no refetchea', () => {
+    const { actor, fetchDay } = boot({ initialTimes: [meta(T0)] })
+    actor.send({ type: 'SELECT_DAY', day: DAY })
+    expect(fetchDay).not.toHaveBeenCalled()
   })
 })
 

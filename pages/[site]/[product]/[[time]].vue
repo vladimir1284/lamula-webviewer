@@ -7,6 +7,7 @@ import { rasterProductDef } from '#shared/products'
 import { savePrefs } from '../../../composables/useViewerPrefs'
 import { viewerMachine } from '../../../machines/viewer'
 import type { NavigateParams, PrefsParams } from '../../../machines/viewer'
+import { dayWindow72h } from '../../../utils/time-window'
 
 const DEFAULT_OPACITY = 0.8
 const DEFAULT_BASE = 'osm' as const
@@ -50,6 +51,18 @@ const { data: initialRaster, error: initialRasterError } = await useFetch<Raster
   },
 )
 
+const dayInitial = tInitial.slice(0, 10)
+// Timeline inicial en SSR: misma lógica — evita el parpadeo de un loading
+// client-only al primer paint.
+const { data: initialTimes, error: initialTimesError } = await useFetch<RasterMeta[]>(
+  '/api/rasters/day',
+  {
+    key: `viewer-day:${initialRoute.site}:${initialRoute.product}:${dayInitial}`,
+    query: { site: initialRoute.site, product: initialRoute.product, day: dayInitial },
+    watch: false,
+  },
+)
+
 const navigate = useViewerNavigate()
 const router = useRouter()
 
@@ -83,6 +96,11 @@ const machine = viewerMachine.provide({
         throw err
       }
     }),
+    fetchDay: fromPromise(async ({ input }) =>
+      $fetch<RasterMeta[]>('/api/rasters/day', {
+        query: { site: input.site, product: input.product, day: input.day },
+      }),
+    ),
   },
   actions: {
     navigate: (_, params: NavigateParams) => navigate(params.patch, params.mode),
@@ -102,6 +120,10 @@ const { snapshot, send } = useActor(machine, {
       initialRasterError.value && initialRasterError.value.statusCode !== 404
         ? initialRasterError.value.statusMessage ?? initialRasterError.value.message
         : null,
+    initialTimes: initialTimes.value ?? [],
+    initialTimelineError: initialTimesError.value
+      ? initialTimesError.value.statusMessage ?? initialTimesError.value.message
+      : null,
   },
 })
 
@@ -120,11 +142,23 @@ const ctx = computed(() => snapshot.value.context)
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
 const rasterProducts = computed(() => ctx.value.products.filter(p => p.kind === 'raster'))
 const productDef = computed(() => rasterProductDef(ctx.value.product))
-const raster = computed(() => (snapshot.value.matches('shown') ? ctx.value.raster : null))
-const rasterEmpty = computed(() => snapshot.value.matches('empty'))
+const raster = computed(() => (snapshot.value.matches({ raster: 'shown' }) ? ctx.value.raster : null))
+const rasterEmpty = computed(() => snapshot.value.matches({ raster: 'empty' }))
 const rasterFetchError = computed(() =>
-  snapshot.value.matches('error') ? ctx.value.rasterError : null,
+  snapshot.value.matches({ raster: 'error' }) ? ctx.value.rasterError : null,
 )
+
+// ventana de 72h anclada a last_seen_at (decisión 11) — no wall-clock: un
+// radar muerto sigue mostrando sus días con datos, las fixtures no se pudren
+const availableDays = computed(() => (radar.value ? dayWindow72h(radar.value.last_seen_at) : []))
+const timelineEmpty = computed(() => snapshot.value.matches({ timeline: 'empty' }))
+const timelineFetchError = computed(() =>
+  snapshot.value.matches({ timeline: 'error' }) ? ctx.value.timelineError : null,
+)
+
+function onSelectDay(day: string) {
+  send({ type: 'SELECT_DAY', day })
+}
 
 const cursorLabel = computed(() => {
   const cursor = ctx.value.cursor
@@ -266,6 +300,27 @@ function onOpacityInput(event: Event) {
           class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
         >
           {{ ctx.cogError }}
+        </p>
+
+        <DayPicker
+          v-if="availableDays.length > 0"
+          :days="availableDays"
+          :model-value="ctx.day"
+          @update:model-value="onSelectDay"
+        />
+        <p
+          v-if="timelineFetchError"
+          data-testid="timeline-error"
+          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
+        >
+          Error consultando la timeline: {{ timelineFetchError }}
+        </p>
+        <p
+          v-else-if="timelineEmpty"
+          data-testid="timeline-empty"
+          class="rounded bg-slate-800 p-3 text-sm text-slate-400"
+        >
+          Sin volúmenes este día (UTC).
         </p>
       </aside>
 
