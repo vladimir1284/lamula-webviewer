@@ -106,6 +106,18 @@ test('timeline: extremo real de la serie deshabilita esa dirección (404 silenci
   await expect(page.getByTestId('raster-meta')).toContainText(`${first}Z`)
 })
 
+test('radar sin datos: degradación visible, sin errores de consola (puerta M3)', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', err => errors.push(err.message))
+  const deadRadar = radars.find(r => r.site_id === 'ICT')!
+  await page.goto(`/${deadRadar.site_id}/${series.product}/${isoToPath(series.times[0])}`)
+
+  await expect(page.getByTestId('raster-empty')).toBeVisible()
+  await expect(page.getByTestId('timeline-empty')).toBeVisible()
+  await expect(page.getByTestId('raster-error')).not.toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('cambiar radar navega con push (URL manda)', async ({ page }) => {
   const t = series.times[1]
   await page.goto(`/${series.site}/${series.product}/${isoToPath(t)}`)
