@@ -27,7 +27,11 @@ theme:
 markdown_extensions:
   - admonition
   - tables
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
   - toc:
       permalink: true
@@ -37,5 +41,6 @@ nav:
   - Arquitectura: arquitectura.md
   - Decisiones de diseño: decisiones.md
   - Contrato de datos: contrato.md
+  - Máquinas de estado: maquinas-estado.md
   - Plan de implementación: plan-implementacion.md
   - Validaciones manuales: validaciones.md

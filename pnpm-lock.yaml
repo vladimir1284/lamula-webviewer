@@ -11,6 +11,9 @@ importers:
       '@pinia/nuxt':
         specifier: ^0.11.2
         version: 0.11.3(magicast@0.5.3)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3)))
+      '@xstate/vue':
+        specifier: ^5.0.0
+        version: 5.0.0(vue@3.5.39(typescript@5.9.3))(xstate@5.32.4)
       geotiff:
         specifier: ^3.0.5
         version: 3.0.5
@@ -35,6 +38,9 @@ importers:
       vue-router:
         specifier: ^4.5.0
         version: 4.6.4(vue@3.5.39(typescript@5.9.3))
+      xstate:
+        specifier: ^5.32.4
+        version: 5.32.4
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2092,6 +2098,15 @@ packages:
       vue: 3.x
     peerDependenciesMeta:
       '@vue/server-renderer':
+        optional: true
+
+  '@xstate/vue@5.0.0':
+    resolution: {integrity: sha512-9TyJV4yz5QLJdEU44Ly9LBooEyZmv0nht3qEvDflxXAJmSn1dzaZeESdHFm+ANHtxoUed5jGqH6NT86BusvXQg==}
+    peerDependencies:
+      vue: ^3.0.0
+      xstate: ^5.20.0
+    peerDependenciesMeta:
+      xstate:
         optional: true
 
   '@zarrita/storage@0.2.0':
@@ -5434,6 +5449,9 @@ packages:
   xml-utils@1.10.2:
     resolution: {integrity: sha512-RqM+2o1RYs6T8+3DzDSoTRAUfrvaejbVHcp3+thnAtDKo8LskR+HomLajEy5UjTz24rpka7AxVBRR3g2wTUkJA==}
 
+  xstate@5.32.4:
+    resolution: {integrity: sha512-E5WtDB8DBs2ZWliz2Ry9XfbSZTbBRcK/cwefBot04qQ/L5SLP16xpnTDU4/ZFXuXFhNxi7JP2RhuoGwBnM+S4A==}
+
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -7552,6 +7570,12 @@ snapshots:
       vue-component-type-helpers: 3.3.7
     optionalDependencies:
       '@vue/server-renderer': 3.5.39(vue@3.5.39(typescript@5.9.3))
+
+  '@xstate/vue@5.0.0(vue@3.5.39(typescript@5.9.3))(xstate@5.32.4)':
+    dependencies:
+      vue: 3.5.39(typescript@5.9.3)
+    optionalDependencies:
+      xstate: 5.32.4
 
   '@zarrita/storage@0.2.0':
     dependencies:
@@ -11249,6 +11273,8 @@ snapshots:
   xml-name-validator@4.0.0: {}
 
   xml-utils@1.10.2: {}
+
+  xstate@5.32.4: {}
 
   y18n@5.0.8: {}
 

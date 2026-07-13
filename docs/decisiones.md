@@ -38,6 +38,8 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
 
 17. **Solo lectura, por disciplina.** D1 no tiene roles: el contrato es que este proyecto solo ejecuta `SELECT` y las migraciones viven en `db/` del pipeline. Cualquier cambio de schema es una migración negociada allí.
 
+18. **Todo el estado de la interfaz con XState (v5 + `@xstate/vue`), URL como fuente de verdad.** Decisión tomada al arrancar F3, amplía el stack fijado y aplica retroactivamente a F2. Las máquinas viven en `machines/` (puras, testeables con `createActor` sin DOM); los componentes las consumen vía `useSelector`. La URL manda sobre lo compartible (`/{site}/{product}/{time}` + query): los cambios de ruta —incluido back/forward— entran a la máquina como eventos, y las transiciones que cambian la selección navegan como efecto (push/replace). Cada máquina se documenta con un diagrama Mermaid en [Máquinas de estado](maquinas-estado.md), actualizado en el mismo commit que toca la máquina.
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |
