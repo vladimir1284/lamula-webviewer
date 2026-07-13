@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { RasterMeta } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { savePrefs } from '../../../composables/useViewerPrefs'
+import { animationMachine } from '../../../machines/animation'
 import { viewerMachine } from '../../../machines/viewer'
 import type { NavigateParams, PrefsParams } from '../../../machines/viewer'
 import { dayWindow72h } from '../../../utils/time-window'
@@ -195,6 +196,77 @@ function onTimelineStep(dir: 1 | -1) {
   send({ type: 'STEP', dir })
 }
 
+// ── Animación (F3 paso 6) ────────────────────────────────────────────────
+// Modo estático (F2, RadarMap con :raster) hasta que el usuario presiona
+// play por primera vez; a partir de ahí RadarMap pasa a modo pool
+// (:frames) y lo mantiene aun en pausa (scrubbing reutiliza el mismo pool).
+const { snapshot: animSnapshot, send: animSend } = useActor(animationMachine, {
+  input: { fps: 4, lastFrameDwellMs: 1500 },
+})
+const animationEngaged = ref(false)
+const pendingAutoPlay = ref(false)
+
+function currentTimesIndex(): number {
+  const idx = ctx.value.times.findIndex(r => r.vol_time === ctx.value.time)
+  return idx === -1 ? 0 : idx
+}
+
+function engageAnimation() {
+  animationEngaged.value = true
+  pendingAutoPlay.value = true
+  animSend({ type: 'SET_FRAMES', count: ctx.value.times.length, startIndex: currentTimesIndex() })
+}
+
+function onToggleAnimation() {
+  if (!animationEngaged.value) {
+    engageAnimation()
+    return
+  }
+  const wasPlaying = animSnapshot.value.matches('playing')
+  animSend({ type: 'TOGGLE' })
+  if (wasPlaying) {
+    // decisión F3: durante playback la URL no se toca; al pausar, replace
+    // con el frame que quedó visible
+    const t = ctx.value.times[animSnapshot.value.context.index]?.vol_time
+    if (t) send({ type: 'SELECT_TIME', time: t })
+  }
+}
+
+// buffering → paused automático (frame 0 objetivo listo): si el usuario
+// pidió play, arranca sola en cuanto termina de bufferear
+watch(() => animSnapshot.value.value, (state) => {
+  if (state === 'paused' && pendingAutoPlay.value) {
+    pendingAutoPlay.value = false
+    animSend({ type: 'PLAY' })
+  }
+})
+
+// cambiar de día con la animación ya activa: reconstruye el pool para el
+// nuevo día (pausa implícita — buffering exige el nuevo frame 0)
+watch(() => ctx.value.day, () => {
+  if (!animationEngaged.value) return
+  animSend({ type: 'SET_FRAMES', count: ctx.value.times.length, startIndex: currentTimesIndex() })
+})
+
+// stepping/select manuales mientras la animación está pausada: mantener el
+// índice de animación sincronizado para que "play" retome desde ahí
+watch(() => ctx.value.time, () => {
+  if (!animationEngaged.value || animSnapshot.value.matches('playing')) return
+  animSend({ type: 'SEEK', index: currentTimesIndex() })
+})
+
+const animPlaying = computed(() => animSnapshot.value.matches('playing'))
+const animFrames = computed(() => (animationEngaged.value && ctx.value.times.length > 0 ? ctx.value.times : null))
+const activeFrameIndex = computed(() => {
+  if (ctx.value.times.length === 0) return 0
+  return animPlaying.value ? animSnapshot.value.context.index : currentTimesIndex()
+})
+const animCurrentVolTime = computed(() => ctx.value.times[activeFrameIndex.value]?.vol_time ?? null)
+const animBufferReady = computed(() =>
+  animSnapshot.value.context.frames.filter(f => f.getSnapshot().matches('ready')).length,
+)
+const animBufferTotal = computed(() => animSnapshot.value.context.frames.length)
+
 const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
@@ -377,6 +449,14 @@ function onOpacityInput(event: Event) {
           @select="onTimelineSelect"
           @step="onTimelineStep"
         />
+        <AnimationControls
+          :playing="animPlaying"
+          :ready="timelineReady"
+          :current-vol-time="animCurrentVolTime"
+          :buffer-ready="animBufferReady"
+          :buffer-total="animBufferTotal"
+          @toggle="onToggleAnimation"
+        />
       </aside>
 
       <main class="min-w-0 flex-1">
@@ -385,11 +465,16 @@ function onOpacityInput(event: Event) {
             v-if="radar"
             :radar="radar"
             :raster="raster"
+            :frames="animFrames"
+            :active-frame="activeFrameIndex"
             :product-def="productDef"
             :opacity="ctx.opacity"
             :show-base="ctx.base !== 'off'"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"
+            @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"
+            @frame-error="(i, message) => animSend({ type: 'FRAME_FAILED', index: i, message })"
+            @move-end="animSend({ type: 'MOVE_END' })"
           />
         </ClientOnly>
       </main>

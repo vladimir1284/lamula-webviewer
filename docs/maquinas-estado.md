@@ -13,8 +13,8 @@ Principios:
 | Máquina | Fichero | Responsabilidad | Estado |
 |---|---|---|---|
 | `viewerMachine` | `machines/viewer.ts` | Raíz de la página viewer: selección, carga del raster, timeline, prefs | implementada |
-| `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | pendiente (F3 paso 6) |
-| `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (prefetch → ready/failed) | pendiente (F3 paso 6) |
+| `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | implementada |
+| `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 
 ## `viewerMachine`
 
@@ -97,3 +97,68 @@ stateDiagram-v2
 **Day picker (`components/DayPicker.vue`):** botones de día UTC sobre la ventana de 72h anclada a `radar.last_seen_at` (`utils/time-window.ts::dayWindow72h`, decisión 11) — no wall-clock, así un radar muerto sigue mostrando sus días con datos y las fixtures no se pudren. Click → evento `SELECT_DAY`.
 
 **Timeline strip (`components/TimelineStrip.vue`):** strip proporcional al rango `[times[0], times.at(-1)]` del día cargado; un tick por `vol_time` (click → `SELECT_TIME`), huecos marcados cuando el intervalo excede `max(2×mediana, 10 min)` (`utils/timeline/gaps.ts::computeGaps` — con menos de 3 times no hay señal para una mediana, no se marcan huecos), botones prev/next (→ `STEP`) deshabilitados según `atStart`/`atEnd`. Teclado: `←`/`→` en `window` disparan `STEP`, ignorados con foco en `input`/`select`/`textarea`.
+
+## `frameMachine`
+
+Ciclo de vida de UN frame del pool de animación, spawneado por `animationMachine` (uno por índice, no hay estado duplicado fuera del árbol de actores). El driver real (`utils/map/frame-pool.ts`) es quien decide cuándo un frame está listo — detecta `renderComplete` de su capa WebGL y llama `FRAME_READY`/`FRAME_FAILED` en la máquina padre, que reenvía `READY`/`FAILED` al hijo correspondiente.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> ready: READY
+    pending --> failed: FAILED
+    ready --> pending: INVALIDATE
+    failed --> pending: INVALIDATE
+```
+
+`INVALIDATE` lo envía `animationMachine` en `MOVE_END` a todos los frames salvo el activo (pan/zoom: sus tiles cacheados ya no sirven bajo el nuevo extent, vuelven a prefetchear).
+
+## `animationMachine`
+
+Playback de la serie del día: `idle → buffering → paused ⇄ playing`. Pura — no toca OL ni DOM; el pool real (`utils/map/frame-pool.ts`) decide *cuándo* un frame está listo, esta máquina decide *qué* mostrar y cuándo avanzar. `SET_FRAMES` spawnea un `frameMachine` hijo por índice (ids únicos por generación — evita colisión al reemplazar la serie de un día por la de otro).
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> buffering: SET_FRAMES
+    buffering --> buffering: SET_FRAMES (nueva generación)
+    buffering --> paused: frame(index) ready
+    buffering --> paused: todos resueltos (ready/failed) — salta a uno ready si hay, si no se queda igual
+    paused --> playing: PLAY / TOGGLE
+    playing --> playing: FRAME_DELAY (avanza si el siguiente está ready; hold si pending; salta si failed)
+    playing --> paused: PAUSE / TOGGLE
+    paused --> idle: MOVE_END (invalida los frames inactivos)
+    playing --> paused: MOVE_END (pausa + invalida los inactivos)
+```
+
+**Contexto:** `frames` (refs a `frameMachine` hijos), `gen` (generación, para ids únicos al respawnear), `index` (frame mostrado), `fps`, `lastFrameDwellMs`.
+
+| Evento | Efecto |
+|---|---|
+| `SET_FRAMES(count, startIndex?)` | detiene los hijos de la generación anterior, spawnea `count` nuevos, `index = clamp(startIndex ?? 0)` → `.buffering`. **`startIndex` es obligatorio en la práctica**: sin él, el buffer siempre esperaría el frame 0 aunque el viewer ya estuviera mostrando otro — bug real encontrado en el primer e2e de animación (ver más abajo) |
+| `FRAME_READY(i)` / `FRAME_FAILED(i, msg)` | reenvía `READY`/`FAILED` al `frameMachine` hijo `i` — válido en cualquier estado |
+| `PLAY` / `TOGGLE` (en `paused`) | → `playing` |
+| `PAUSE` / `TOGGLE` (en `playing`) | → `paused` |
+| `SEEK(i)` | asigna `index` (clamped); manejado en `buffering`/`paused`/`playing` |
+| `MOVE_END` | invalida (`INVALIDATE`) todos los hijos salvo el activo → `paused` (no sigue animando sobre un extent que ya no corresponde a los demás frames; el activo se conserva, sin corte visual) |
+
+**Salida de `buffering` sin bloqueo permanente:** el caso feliz es "el frame objetivo (`context.index`) está `ready`". Si ese frame específico *falla* (404 real, no un hueco transitorio), esperar solo por él colgaría la UI para siempre — por eso hay una segunda condición: en cuanto **todos** los hijos terminan de resolver (ninguno sigue `pending`), se sale igual, saltando a un índice `ready` si existe alguno; si absolutamente todos fallaron, se sale sin más (nada que mostrar, degradación vía `rasterError` del pool, no un buffering infinito).
+
+**Avance en `playing` (`nextPlayableIndex`):** un frame `failed` (hueco real) se salta de forma transparente; uno `pending` frena el avance (se reintenta el próximo tick, no se salta — una descarga lenta no se confunde con un hueco permanente). El delay entre frames (`FRAME_DELAY`) es `1000/fps`, salvo en el último índice de la serie, donde usa `lastFrameDwellMs` antes de reiniciar el ciclo.
+
+**Bug real encontrado con e2e (no solo unitario):** el primer intento de `SET_FRAMES` reseteaba `index` a `0` incondicionalmente; la página mandaba un `SEEK` aparte para corregirlo, pero `buffering` no manejaba `SEEK` en ese momento (evento ignorado silenciosamente) — el buffer esperaba el frame equivocado durante ~1 s hasta que el fallback de "todos resueltos" lo rescataba. Fix: `SET_FRAMES` acepta `startIndex` y fija el índice correcto en el mismo paso (además, `buffering` ahora sí maneja `SEEK` por robustez). Ilustra por qué la puerta de animación necesita e2e real, no solo tests de la máquina en aislamiento — el bug era de *integración* (dos eventos separados con una ventana de estado inválida en medio), invisible probando la máquina con un solo evento a la vez.
+
+**Orquestación en la página** (`pages/[site]/[product]/[[time]].vue`): modo estático (F2, `RadarMap` con `:raster`) hasta que el usuario presiona play por primera vez (`animationEngaged`); a partir de ahí `RadarMap` pasa a modo pool (`:frames`) y lo mantiene aun en pausa (el scrubbing reutiliza el mismo pool, sin destruir/recrear capas). Mientras la animación está pausada, `context.time` de `viewerMachine` y `context.index` de `animationMachine` se mantienen sincronizados en ambas direcciones (stepping externo → `SEEK`; `PLAY`/`TOGGLE` al pausar → `SELECT_TIME` con replace) — decisión F3: **durante playback la URL no se toca**, solo al pausar.
+
+## Pool de capas WebGL (`utils/map/frame-pool.ts`)
+
+No es una máquina XState — es el driver imperativo que habla con OpenLayers y alimenta `FRAME_READY`/`FRAME_FAILED`. Verificado contra `node_modules/ol` 10.9.0:
+
+- Una `WebGLTileLayer` + `GeoTIFF` **por frame** (no una sola capa con `setSource()`: eso dispone las texturas cacheadas y produce parpadeo).
+- `visible:false` no carga tiles; `opacity:0` sí — el prefetch en segundo plano es una capa `visible:true, opacity:0`; al quedar lista y no ser la activa, se oculta (`visible:false`, cero costo de render).
+- N capas con el mismo `className`/zIndex contiguo comparten **un solo contexto WebGL** — sin límite práctico de contextos, y ayuda en CI (SwiftShader pierde contexto con concurrencia).
+- "Frame listo" = `layer.getRenderer().renderComplete`, muestreado en el `postrender` del mapa. Es una propiedad **semi-pública** del renderer (no forma parte de la API documentada de ol) — protegida por el canario `tests/unit/render-complete-canary.spec.ts`; si un upgrade de `ol` la renombra o la quita, ese test falla antes que el pool deje de avanzar en silencio. Plan B si se rompe: `rendercomplete` secuencial del mapa (más lento, 100 % API pública).
+- Prefetch acotado a `PREFETCH_CONCURRENCY = 3` concurrentes; tope de seguridad `MAX_POOL = 24` frames (memoria) — 20 frames típicos caben sin evicción.
+- `invalidateInactive()` (llamado en `moveend` del mapa): el frame activo se conserva; el resto vuelve a `'loading'` y se re-prioriza.
+
+**Limitación conocida de los goldens/fixtures para e2e:** solo el `vol_time` más reciente de cada `(site, product)` tiene un COG golden commiteado (`tests/fixtures/cogs/r2/`) — el resto 404 en el entorno offline de CI. Los e2e de animación (`e2e/animation.spec.ts`) validan que la máquina no se cuelga y el ciclado es correcto ante fallos reales, pero **no** pueden validar el ciclado fluido de múltiples frames reales cargando a la vez; eso es la puerta manual contra datos vivos (`docs/validaciones.md`).
