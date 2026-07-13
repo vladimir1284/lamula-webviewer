@@ -42,6 +42,16 @@ test('/api/rasters/closest resuelve el volumen más cercano', async ({ request }
   expect(raster.r2_key).toBe(series.rows[1]!.r2_key)
 })
 
+test('/api/rasters/day devuelve la metadata completa del día, ascendente', async ({ request }) => {
+  const res = await request.get(
+    `/api/rasters/day?site=${series.site}&product=${series.product}&day=${series.day}`,
+  )
+  expect(res.status()).toBe(200)
+  const rows = await res.json()
+  expect(rows.map((r: { vol_time: string }) => r.vol_time)).toEqual(series.times)
+  expect(rows[0].cog_url).toContain(rows[0].r2_key)
+})
+
 test('/api/rasters/next en el borde → 404 explícito', async ({ request }) => {
   const res = await request.get(
     `/api/rasters/next?site=${series.site}&product=${series.product}&t=${series.times.at(-1)}`,

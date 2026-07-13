@@ -10,6 +10,7 @@ import type {
   ProductRow,
   Radar,
   RadarRow,
+  RasterMeta,
   RasterRow,
   VwpLevel,
   VwpRow,
@@ -58,6 +59,22 @@ export class FixtureDal implements Dal {
       )
       .map(r => r.vol_time)
       .sort()
+  }
+
+  async listRasters(site: string, productCode: number, day: string): Promise<RasterMeta[]> {
+    const { from, to } = dayRange(day)
+    return rasters
+      .filter(r =>
+        r.site_id === site
+        && r.product_code === productCode
+        && r.vol_time >= from
+        && r.vol_time < to,
+      )
+      .sort(byVolTime)
+      .map((row) => {
+        const { size_bytes: _size, created_at: _created, ...cols } = row
+        return toRasterMeta(cols, this.r2BaseUrl)
+      })
   }
 
   async findRaster(site: string, productCode: number, t: string, mode: RasterLookupMode) {

@@ -52,6 +52,13 @@ test('cambiar radar navega con push (URL manda)', async ({ page }) => {
   const t = series.times[1]
   await page.goto(`/${series.site}/${series.product}/${isoToPath(t)}`)
   const otherSite = radars.find(r => r.site_id !== series.site)!.site_id
-  await page.getByTestId('radar-select').selectOption(otherSite)
-  await expect(page).toHaveURL(new RegExp(`/${otherSite}/${series.product}/`))
+  // La app SSR es una página async (varios useFetch top-level): justo tras
+  // el goto, la hidratación puede seguir en curso y el 'change' nativo
+  // llega antes de que Vue adjunte su listener (se pierde sin error, y la
+  // hidratación revierte el <select> a su valor SSR). toPass reintenta la
+  // interacción hasta que la app está hidratada — no es una espera fija.
+  await expect(async () => {
+    await page.getByTestId('radar-select').selectOption(otherSite)
+    await expect(page).toHaveURL(new RegExp(`/${otherSite}/${series.product}/`), { timeout: 500 })
+  }).toPass({ timeout: 5000 })
 })
