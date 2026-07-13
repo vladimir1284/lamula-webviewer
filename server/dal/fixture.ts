@@ -99,6 +99,15 @@ export class FixtureDal implements Dal {
     return toRasterMeta(cols, this.r2BaseUrl)
   }
 
+  async listPhenomenaTimes(site: string, day: string): Promise<string[]> {
+    const { from, to } = dayRange(day)
+    return [...new Set(
+      phenomena
+        .filter(p => p.site_id === site && p.vol_time >= from && p.vol_time < to)
+        .map(p => p.vol_time),
+    )].sort()
+  }
+
   async listPhenomena(site: string, volTime: string): Promise<Phenomenon[]> {
     return phenomena
       .filter(p => p.site_id === site && p.vol_time === volTime)
@@ -113,6 +122,15 @@ export class FixtureDal implements Dal {
       .filter(p => p.site_id === site && p.cell_id === cellId)
       .sort(byVolTime)
       .map(({ created_at: _created, ...row }) => toPhenomenon(row))
+  }
+
+  async listVwpTimes(site: string, day: string): Promise<string[]> {
+    const { from, to } = dayRange(day)
+    return [...new Set(
+      vwp
+        .filter(v => v.site_id === site && v.vol_time >= from && v.vol_time < to)
+        .map(v => v.vol_time),
+    )].sort()
   }
 
   async listVwp(site: string, volTime: string): Promise<VwpLevel[]> {

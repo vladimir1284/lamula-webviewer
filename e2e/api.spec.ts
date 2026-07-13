@@ -3,11 +3,13 @@
 // expectativas se derivan de las fixtures (tests/helpers/derive.ts).
 import { expect, test } from '@playwright/test'
 import {
+  phenDay,
   phenVolume,
   series,
   shiftIso,
   siteIds,
   trackedCell,
+  vwpDay,
   vwpVolume,
 } from '../tests/helpers/derive'
 
@@ -66,6 +68,18 @@ test('/api/phenomena devuelve el overlay del volumen con attrs parseado', async 
   const rows = await res.json()
   expect(rows).toHaveLength(phenVolume.rows.length)
   expect(typeof rows[0].attrs).toBe('object')
+})
+
+test('/api/phenomena/times lista los vol_times con fenómenos del día', async ({ request }) => {
+  const res = await request.get(`/api/phenomena/times?site=${phenDay.site}&day=${phenDay.day}`)
+  expect(res.status()).toBe(200)
+  expect(await res.json()).toEqual(phenDay.times)
+})
+
+test('/api/vwp/times lista los vol_times con perfil del día', async ({ request }) => {
+  const res = await request.get(`/api/vwp/times?site=${vwpDay.site}&day=${vwpDay.day}`)
+  expect(res.status()).toBe(200)
+  expect(await res.json()).toEqual(vwpDay.times)
 })
 
 test('/api/phenomena/series devuelve la serie por cell_id', async ({ request }) => {

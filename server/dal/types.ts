@@ -25,10 +25,14 @@ export interface Dal {
     t: string,
     mode: RasterLookupMode,
   ): Promise<RasterMeta | null>
+  /** vol_times ascendentes con fenómenos de un site dentro de un día UTC — índice para el join temporal cliente (D24). */
+  listPhenomenaTimes(site: string, day: string): Promise<string[]>
   /** Fenómenos del volumen mostrado (overlay del frame). */
   listPhenomena(site: string, volTime: string): Promise<Phenomenon[]>
   /** Serie cross-volumen por cell_id (charts de tendencia). */
   listPhenomenaByCell(site: string, cellId: string): Promise<Phenomenon[]>
+  /** vol_times ascendentes con perfil VWP de un site dentro de un día UTC — índice para el join temporal cliente (D24). */
+  listVwpTimes(site: string, day: string): Promise<string[]>
   /** Niveles del perfil de viento de un volumen, por altura ascendente. */
   listVwp(site: string, volTime: string): Promise<VwpLevel[]>
   /** Frescura por radar desde radars.last_seen_at. */

@@ -13,12 +13,14 @@ import { FRESH_MAX_MINUTES, naiveUtcToEpochMs, zProductRow, zRadarRow } from '~/
 import { asD1, createSeededDb } from '../helpers/d1-sqlite'
 import {
   healthNow,
+  phenDay,
   phenVolume,
   radars,
   series,
   shiftIso,
   siteIds,
   trackedCell,
+  vwpDay,
   vwpVolume,
 } from '../helpers/derive'
 
@@ -127,6 +129,15 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     expect(await dal.findRaster(series.site, series.product, series.times[0]!, 'prev')).toBeNull()
   })
 
+  it('listPhenomenaTimes: exactamente los vol_times con fenómenos del día, ascendentes', async () => {
+    const times = await dal.listPhenomenaTimes(phenDay.site, phenDay.day)
+    expect(times).toEqual(phenDay.times)
+  })
+
+  it('listPhenomenaTimes: día sin datos → []', async () => {
+    expect(await dal.listPhenomenaTimes(phenDay.site, '2000-01-01')).toEqual([])
+  })
+
   it('listPhenomena: las filas grabadas del volumen, attrs parseado', async () => {
     const rows = await dal.listPhenomena(phenVolume.site, phenVolume.volTime)
     const expected = [...phenVolume.rows]
@@ -146,6 +157,15 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     const volTimes = serie.map(p => p.vol_time)
     expect([...volTimes].sort()).toEqual(volTimes)
     expect(serie.every(p => p.cell_id === trackedCell.cellId)).toBe(true)
+  })
+
+  it('listVwpTimes: exactamente los vol_times con perfil del día, ascendentes', async () => {
+    const times = await dal.listVwpTimes(vwpDay.site, vwpDay.day)
+    expect(times).toEqual(vwpDay.times)
+  })
+
+  it('listVwpTimes: día sin datos → []', async () => {
+    expect(await dal.listVwpTimes(vwpDay.site, '2000-01-01')).toEqual([])
   })
 
   it('listVwp: los niveles grabados del volumen, por altura ascendente', async () => {
@@ -191,7 +211,9 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['findRaster next', d => d.findRaster(series.site, series.product, series.times[0]!, 'next')],
     ['findRaster prev', d => d.findRaster(series.site, series.product, series.times[1]!, 'prev')],
     ['findRaster sin resultado', d => d.findRaster(series.site, 999, series.times[0]!, 'closest')],
+    ['listPhenomenaTimes', d => d.listPhenomenaTimes(phenDay.site, phenDay.day)],
     ['listPhenomena', d => d.listPhenomena(phenVolume.site, phenVolume.volTime)],
+    ['listVwpTimes', d => d.listVwpTimes(vwpDay.site, vwpDay.day)],
     ['listPhenomenaByCell', d => d.listPhenomenaByCell(trackedCell.site, trackedCell.cellId)],
     ['listVwp', d => d.listVwp(vwpVolume.site, vwpVolume.volTime)],
     ['health', d => d.health(healthNow)],
