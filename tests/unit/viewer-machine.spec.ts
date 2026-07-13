@@ -47,12 +47,16 @@ function boot(opts: {
   initialTimelineError?: string | null
   fetch?: (input: { site: string, product: number, t: string }) => Promise<RasterMeta | null>
   fetchDay?: (input: { site: string, product: number, day: string }) => Promise<RasterMeta[]>
+  fetchStep?: (
+    input: { site: string, product: number, t: string, mode: 'next' | 'prev' }
+  ) => Promise<RasterMeta | null>
 } = {}) {
   const navigate = vi.fn()
   const persistPrefs = vi.fn()
   const syncQuery = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
   const fetchDay = vi.fn(opts.fetchDay ?? (async () => []))
+  const fetchStep = vi.fn(opts.fetchStep ?? (async () => null))
   const input: ViewerInput = {
     radars: [],
     products: [],
@@ -68,6 +72,7 @@ function boot(opts: {
       actors: {
         fetchClosest: fromPromise(({ input: i }) => fetch(i)),
         fetchDay: fromPromise(({ input: i }) => fetchDay(i)),
+        fetchStep: fromPromise(({ input: i }) => fetchStep(i)),
       },
       actions: {
         navigate: (_, params) => navigate(params),
@@ -78,7 +83,7 @@ function boot(opts: {
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch, fetchDay, persistPrefs, syncQuery }
+  return { actor, navigate, fetch, fetchDay, fetchStep, persistPrefs, syncQuery }
 }
 
 describe('viewerMachine — región raster: estado inicial (SSR)', () => {
@@ -252,6 +257,87 @@ describe('viewerMachine — SELECT_DAY', () => {
     const { actor, fetchDay } = boot({ initialTimes: [meta(T0)] })
     actor.send({ type: 'SELECT_DAY', day: DAY })
     expect(fetchDay).not.toHaveBeenCalled()
+  })
+})
+
+describe('viewerMachine — SELECT_TIME', () => {
+  it('navega con replace al time del tick clicado', () => {
+    const { actor, navigate } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SELECT_TIME', time: T1 })
+    expect(navigate).toHaveBeenCalledWith({ patch: { time: T1 }, mode: 'replace' })
+  })
+})
+
+describe('viewerMachine — STEP', () => {
+  const T2 = '2026-07-11T03:20:00'
+  const TIMES = [meta(T1), meta(T0), meta(T2)] // ascendente: T1 < T0 < T2
+
+  it('vecino local: navega con replace, sin llamar a la API', () => {
+    const { actor, navigate, fetchStep } = boot({
+      route: { time: T1 },
+      initialRaster: meta(T1),
+      initialTimes: TIMES,
+    })
+    actor.send({ type: 'STEP', dir: 1 })
+    expect(navigate).toHaveBeenCalledWith({ patch: { time: T0 }, mode: 'replace' })
+    expect(fetchStep).not.toHaveBeenCalled()
+  })
+
+  it('extremo de la serie: llama a la API y navega si resuelve', async () => {
+    const jump = meta('2026-07-12T00:05:00')
+    const { actor, navigate, fetchStep } = boot({
+      route: { time: T2 },
+      initialRaster: meta(T2),
+      initialTimes: TIMES,
+      fetchStep: async () => jump,
+    })
+    actor.send({ type: 'STEP', dir: 1 })
+    expect(actor.getSnapshot().matches({ raster: 'steppingNext' })).toBe(true)
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
+    expect(fetchStep).toHaveBeenCalledWith({ site: 'AMX', product: 153, t: T2, mode: 'next' })
+    expect(navigate).toHaveBeenCalledWith({ patch: { time: jump.vol_time }, mode: 'replace' })
+    expect(actor.getSnapshot().context.raster?.vol_time).toBe(jump.vol_time)
+  })
+
+  it('extremo real (404): deshabilita esa dirección, se queda en el frame actual', async () => {
+    const { actor, navigate } = boot({
+      route: { time: T2 },
+      initialRaster: meta(T2),
+      initialTimes: TIMES,
+      fetchStep: async () => null,
+    })
+    actor.send({ type: 'STEP', dir: 1 })
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
+    expect(navigate).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().context.atEnd).toBe(true)
+    expect(actor.getSnapshot().context.raster?.vol_time).toBe(T2)
+  })
+
+  it('extremo ya confirmado: no repite la llamada a la API', async () => {
+    const { actor, fetchStep } = boot({
+      route: { time: T2 },
+      initialRaster: meta(T2),
+      initialTimes: TIMES,
+      fetchStep: async () => null,
+    })
+    actor.send({ type: 'STEP', dir: 1 })
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
+    expect(fetchStep).toHaveBeenCalledTimes(1)
+    actor.send({ type: 'STEP', dir: 1 })
+    expect(fetchStep).toHaveBeenCalledTimes(1)
+  })
+
+  it('prev en el otro extremo: mismo mecanismo con mode "prev"', async () => {
+    const { actor, fetchStep } = boot({
+      route: { time: T1 },
+      initialRaster: meta(T1),
+      initialTimes: TIMES,
+      fetchStep: async () => null,
+    })
+    actor.send({ type: 'STEP', dir: -1 })
+    await waitFor(actor, s => s.matches({ raster: 'shown' }))
+    expect(fetchStep).toHaveBeenCalledWith({ site: 'AMX', product: 153, t: T1, mode: 'prev' })
+    expect(actor.getSnapshot().context.atStart).toBe(true)
   })
 })
 

@@ -66,6 +66,46 @@ test('day picker: ventana de 72h, día activo marcado, día vacío no navega', a
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t)}$`))
 })
 
+test('timeline: un tick por vol_time, click salta al frame exacto', async ({ page }) => {
+  await page.goto(`/${series.site}/${series.product}/${isoToPath(series.times[0])}`)
+  const ticks = page.getByTestId('timeline-tick')
+  await expect(ticks).toHaveCount(series.times.length)
+
+  const target = series.times[3]
+  await page.locator(`[data-testid="timeline-tick"][data-time="${target}"]`).click()
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(target)}$`))
+  await expect(page.getByTestId('raster-meta')).toContainText(`${target}Z`)
+})
+
+test('timeline: stepping con botones y teclado (←/→), replace en la URL', async ({ page }) => {
+  const t1 = series.times[1]
+  const t2 = series.times[2]
+  await page.goto(`/${series.site}/${series.product}/${isoToPath(t1)}`)
+
+  await page.getByTestId('timeline-next').click()
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(t2)}$`))
+  await expect(page.getByTestId('raster-meta')).toContainText(`${t2}Z`)
+
+  await page.keyboard.press('ArrowLeft')
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(t1)}$`))
+
+  await page.keyboard.press('ArrowRight')
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(t2)}$`))
+})
+
+test('timeline: extremo real de la serie deshabilita esa dirección (404 silencioso)', async ({ page }) => {
+  const first = series.times[0]
+  await page.goto(`/${series.site}/${series.product}/${isoToPath(first)}`)
+  await expect(page.getByTestId('timeline-prev')).toBeEnabled()
+
+  await page.getByTestId('timeline-prev').click()
+  // sin frame anterior en toda la serie grabada: se queda en el mismo frame,
+  // sin error visible, y el botón se deshabilita tras la respuesta 404
+  await expect(page.getByTestId('timeline-prev')).toBeDisabled()
+  await expect(page).toHaveURL(new RegExp(`${isoToPath(first)}$`))
+  await expect(page.getByTestId('raster-meta')).toContainText(`${first}Z`)
+})
+
 test('cambiar radar navega con push (URL manda)', async ({ page }) => {
   const t = series.times[1]
   await page.goto(`/${series.site}/${series.product}/${isoToPath(t)}`)

@@ -57,6 +57,8 @@ export type ViewerEvent =
   | { type: 'SELECT_SITE', site: string }
   | { type: 'SELECT_PRODUCT', product: number }
   | { type: 'SELECT_DAY', day: string }
+  | { type: 'SELECT_TIME', time: string }
+  | { type: 'STEP', dir: 1 | -1 }
   | { type: 'SET_OPACITY', value: number }
   | { type: 'CURSOR_MOVE', sample: CursorSample | null }
   | { type: 'COG_ERROR', message: string }
@@ -74,6 +76,9 @@ interface ViewerContext {
   day: string
   times: RasterMeta[]
   timelineError: string | null
+  /** ya se confirmó (404) que no hay frame anterior/siguiente en la serie — deshabilita el botón */
+  atStart: boolean
+  atEnd: boolean
   opacity: number
   base: 'osm' | 'off'
   cursor: CursorSample | null
@@ -127,6 +132,14 @@ export const viewerMachine = setup({
         throw new Error('fetchDay sin proveer (.provide)')
       },
     ),
+    // /api/rasters/{next,prev} — solo se llama al agotar los vecinos locales
+    // de context.times (cruce de día); 404 → null (extremo real de la serie)
+    fetchStep: fromPromise<
+      RasterMeta | null,
+      { site: string, product: number, t: string, mode: 'next' | 'prev' }
+    >(async () => {
+      throw new Error('fetchStep sin proveer (.provide)')
+    }),
   },
   actions: {
     // efecto de navegación (router push/replace) — lo provee la página
@@ -170,6 +183,8 @@ export const viewerMachine = setup({
     day: dayOf(input.route.time ?? input.nowT),
     times: input.initialTimes,
     timelineError: input.initialTimelineError,
+    atStart: false,
+    atEnd: false,
     opacity: input.route.opacity,
     base: input.route.base,
     cursor: null,
@@ -208,16 +223,34 @@ export const viewerMachine = setup({
         params: ({ event }) => ({ patch: { product: event.product }, mode: 'push' as const }),
       },
     },
+    // click directo en un tick de la timeline: salto dentro del mismo día.
+    // El `assign` del time es optimista: router.replace() resuelve async y
+    // nuestro watcher de ruta reacciona un tick después (ROUTE_CHANGED), así
+    // que sin esto un segundo evento disparado de inmediato (doble click,
+    // tecla repetida) leería context.time desactualizado — confirmado con
+    // un test e2e de stepping rápido por teclado.
+    SELECT_TIME: {
+      actions: [
+        assign({ time: ({ event }) => event.time }),
+        {
+          type: 'navigate',
+          params: ({ event }) => ({ patch: { time: event.time }, mode: 'replace' as const }),
+        },
+      ],
+    },
     // vista live servida en SSR: al montar, materializa el vol_time resuelto
     MOUNTED: {
       guard: ({ context }) => context.time === null && context.raster !== null,
-      actions: {
-        type: 'navigate',
-        params: ({ context }) => ({
-          patch: { time: context.raster!.vol_time },
-          mode: 'replace' as const,
-        }),
-      },
+      actions: [
+        assign({ time: ({ context }) => context.raster!.vol_time }),
+        {
+          type: 'navigate',
+          params: ({ context }) => ({
+            patch: { time: context.raster!.vol_time },
+            mode: 'replace' as const,
+          }),
+        },
+      ],
     },
     // NOTA: en una máquina paralela, un `on` a nivel raíz queda ensombrecido
     // en cuanto CUALQUIER región define su propio `on` para el mismo evento
@@ -237,8 +270,39 @@ export const viewerMachine = setup({
           },
           {
             target: '.loading',
-            actions: [assignRoute, persistRouteParams, assign({ cogError: '', cursor: null })],
+            actions: [
+              assignRoute,
+              persistRouteParams,
+              assign({ cogError: '', cursor: null, atStart: false, atEnd: false }),
+            ],
           },
+        ],
+        // stepping: primero local sobre context.times (sin roundtrip); en
+        // los extremos de la serie cargada, next/prev API cruza el día.
+        // El `assign` del time es optimista (ver comentario en SELECT_TIME):
+        // sin él, pulsar ←/→ dos veces seguidas antes de que el roundtrip de
+        // router.replace() resuelva calcula el segundo salto desde un
+        // context.time desactualizado.
+        STEP: [
+          {
+            guard: ({ context, event }) => {
+              if (context.time === null) return false
+              const idx = context.times.findIndex(r => r.vol_time === context.time)
+              if (idx === -1) return false
+              const n = idx + event.dir
+              return n >= 0 && n < context.times.length
+            },
+            actions: enqueueActions(({ context, event, enqueue }) => {
+              const idx = context.times.findIndex(r => r.vol_time === context.time)
+              const time = context.times[idx + event.dir]!.vol_time
+              enqueue.assign({ time })
+              enqueue({ type: 'navigate', params: { patch: { time }, mode: 'replace' } })
+            }),
+          },
+          // extremo ya confirmado (404 previo) en esa dirección: no-op
+          { guard: ({ context, event }) => (event.dir === 1 ? context.atEnd : context.atStart) },
+          { guard: ({ event }) => event.dir === 1, target: '.steppingNext' },
+          { target: '.steppingPrev' },
         ],
       },
       initial: 'init',
@@ -269,8 +333,9 @@ export const viewerMachine = setup({
                   // la URL siempre refleja el frame exacto mostrado — si el
                   // time pedido (vista live, o cualquier instante que no
                   // coincida con un vol_time real) difiere del resuelto, se
-                  // corrige con replace
+                  // corrige con replace (assign optimista, ver STEP)
                   if (event.output && event.output.vol_time !== context.time) {
+                    enqueue.assign({ time: event.output.vol_time })
                     enqueue({
                       type: 'navigate',
                       params: { patch: { time: event.output.vol_time }, mode: 'replace' },
@@ -292,6 +357,72 @@ export const viewerMachine = setup({
         shown: {},
         empty: {},
         error: {},
+        steppingNext: {
+          invoke: {
+            src: 'fetchStep',
+            input: ({ context }) => ({
+              site: context.site,
+              product: context.product,
+              t: context.time ?? context.nowT,
+              mode: 'next' as const,
+            }),
+            onDone: [
+              {
+                guard: ({ event }) => event.output !== null,
+                target: 'shown',
+                actions: enqueueActions(({ event, enqueue }) => {
+                  enqueue.assign({
+                    raster: event.output,
+                    rasterError: null,
+                    atStart: false,
+                    atEnd: false,
+                    time: event.output!.vol_time,
+                  })
+                  enqueue({
+                    type: 'navigate',
+                    params: { patch: { time: event.output!.vol_time }, mode: 'replace' },
+                  })
+                }),
+              },
+              // extremo real de la serie: se queda en el frame actual, botón se deshabilita
+              { target: 'shown', actions: assign({ atEnd: true }) },
+            ],
+            // fallo de red al pisar el extremo: degrada en silencio, se queda mostrando el frame actual
+            onError: { target: 'shown' },
+          },
+        },
+        steppingPrev: {
+          invoke: {
+            src: 'fetchStep',
+            input: ({ context }) => ({
+              site: context.site,
+              product: context.product,
+              t: context.time ?? context.nowT,
+              mode: 'prev' as const,
+            }),
+            onDone: [
+              {
+                guard: ({ event }) => event.output !== null,
+                target: 'shown',
+                actions: enqueueActions(({ event, enqueue }) => {
+                  enqueue.assign({
+                    raster: event.output,
+                    rasterError: null,
+                    atStart: false,
+                    atEnd: false,
+                    time: event.output!.vol_time,
+                  })
+                  enqueue({
+                    type: 'navigate',
+                    params: { patch: { time: event.output!.vol_time }, mode: 'replace' },
+                  })
+                }),
+              },
+              { target: 'shown', actions: assign({ atStart: true }) },
+            ],
+            onError: { target: 'shown' },
+          },
+        },
       },
     },
     timeline: {
@@ -355,13 +486,12 @@ export const viewerMachine = setup({
                 guard: ({ event }) => event.output.length > 0,
                 target: 'ready',
                 actions: enqueueActions(({ event, enqueue }) => {
+                  const time = event.output.at(-1)!.vol_time
                   enqueue.assign({ times: event.output, timelineError: null })
+                  enqueue.assign({ time })
                   enqueue({
                     type: 'navigate',
-                    params: {
-                      patch: { time: event.output.at(-1)!.vol_time },
-                      mode: 'push',
-                    },
+                    params: { patch: { time }, mode: 'push' },
                   })
                 }),
               },

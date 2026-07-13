@@ -8,6 +8,7 @@ import { savePrefs } from '../../../composables/useViewerPrefs'
 import { viewerMachine } from '../../../machines/viewer'
 import type { NavigateParams, PrefsParams } from '../../../machines/viewer'
 import { dayWindow72h } from '../../../utils/time-window'
+import { computeGaps } from '../../../utils/timeline/gaps'
 
 const DEFAULT_OPACITY = 0.8
 const DEFAULT_BASE = 'osm' as const
@@ -101,6 +102,18 @@ const machine = viewerMachine.provide({
         query: { site: input.site, product: input.product, day: input.day },
       }),
     ),
+    fetchStep: fromPromise(async ({ input }) => {
+      try {
+        return await $fetch<RasterMeta>(`/api/rasters/${input.mode}`, {
+          query: { site: input.site, product: input.product, t: input.t },
+        })
+      }
+      catch (err) {
+        const status = (err as { statusCode?: number }).statusCode
+        if (status === 404) return null
+        throw err
+      }
+    }),
   },
   actions: {
     navigate: (_, params: NavigateParams) => navigate(params.patch, params.mode),
@@ -159,6 +172,38 @@ const timelineFetchError = computed(() =>
 function onSelectDay(day: string) {
   send({ type: 'SELECT_DAY', day })
 }
+
+const timelineReady = computed(() => snapshot.value.matches({ timeline: 'ready' }))
+const timelineTimes = computed(() => ctx.value.times.map(r => r.vol_time))
+const timelineGaps = computed(() => computeGaps(timelineTimes.value))
+// resaltar el frame realmente mostrado; si aún no resolvió, el time pedido
+const timelineCurrent = computed(() => raster.value?.vol_time ?? ctx.value.time)
+const currentIdx = computed(() =>
+  ctx.value.time !== null ? timelineTimes.value.indexOf(ctx.value.time) : -1,
+)
+// dentro de los vecinos locales siempre se puede pisar; en el extremo,
+// depende de si ya se confirmó (404) que no hay más en esa dirección
+const canStepPrev = computed(() => currentIdx.value > 0 || !ctx.value.atStart)
+const canStepNext = computed(() =>
+  (currentIdx.value !== -1 && currentIdx.value < timelineTimes.value.length - 1) || !ctx.value.atEnd,
+)
+
+function onTimelineSelect(time: string) {
+  send({ type: 'SELECT_TIME', time })
+}
+function onTimelineStep(dir: 1 | -1) {
+  send({ type: 'STEP', dir })
+}
+
+const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
+function onKeydown(event: KeyboardEvent) {
+  const target = event.target as HTMLElement | null
+  if (target && EDITABLE_TAGS.has(target.tagName)) return
+  if (event.key === 'ArrowLeft') onTimelineStep(-1)
+  else if (event.key === 'ArrowRight') onTimelineStep(1)
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 const cursorLabel = computed(() => {
   const cursor = ctx.value.cursor
@@ -322,6 +367,16 @@ function onOpacityInput(event: Event) {
         >
           Sin volúmenes este día (UTC).
         </p>
+        <TimelineStrip
+          v-else-if="timelineReady"
+          :times="timelineTimes"
+          :current="timelineCurrent"
+          :gaps="timelineGaps"
+          :can-prev="canStepPrev"
+          :can-next="canStepNext"
+          @select="onTimelineSelect"
+          @step="onTimelineStep"
+        />
       </aside>
 
       <main class="min-w-0 flex-1">
