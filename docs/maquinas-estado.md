@@ -12,8 +12,45 @@ Principios:
 
 | Máquina | Fichero | Responsabilidad | Estado |
 |---|---|---|---|
-| `viewerMachine` | `machines/viewer.ts` | Raíz de la página viewer: selección, carga del raster, timeline, prefs | pendiente (F3 paso 1) |
+| `viewerMachine` | `machines/viewer.ts` | Raíz de la página viewer: selección, carga del raster, timeline, prefs | implementada |
 | `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | pendiente (F3 paso 6) |
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (prefetch → ready/failed) | pendiente (F3 paso 6) |
 
-Los diagramas se añaden en el paso que implementa cada máquina.
+## `viewerMachine`
+
+Raíz de la página `pages/[site]/[product]/[[time]].vue`. El estado inicial se
+deriva del closest hecho en SSR (input `initialRaster`/`initialError`) vía el
+pseudo-estado `init` — sin trabajo async, el snapshot pre-start es idéntico en
+servidor y cliente (hidratación segura; el actor arranca en `onMounted`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> init
+    init --> shown: initialRaster ≠ null
+    init --> empty: closest SSR dio 404
+    init --> error: fallo del closest SSR
+    loading --> shown: fetchClosest → raster
+    loading --> empty: fetchClosest → 404
+    loading --> error: fetchClosest falla
+    shown --> loading: ROUTE_CHANGED ¬sameFrame
+    empty --> loading: ROUTE_CHANGED ¬sameFrame
+    error --> loading: ROUTE_CHANGED ¬sameFrame
+    loading --> loading: ROUTE_CHANGED ¬sameFrame (cancela el fetch en vuelo)
+    note right of shown
+        ROUTE_CHANGED con guard sameFrame
+        (time materializado o cambio solo
+        de query) solo asigna contexto —
+        sin refetch, sin reparpadeo
+    end note
+```
+
+**Contexto:** `radars`, `products`, `site`, `product`, `time` (ISO naive; `null` = vista live), `nowT` (instante SSR), `raster`, `rasterError`, `opacity`, `base`, `cursor`, `cogError`.
+
+| Evento | Efecto |
+|---|---|
+| `ROUTE_CHANGED` | guard `sameFrame` → asigna contexto; si no → `.loading` (reentrar cancela el fetch en vuelo — sin respuestas stale) |
+| `MOUNTED` | guard `liveResolved` (time `null` + raster resuelto) → efecto `navigate` replace al `vol_time` (la URL siempre contiene el frame exacto) |
+| `SELECT_SITE` / `SELECT_PRODUCT` | efecto `navigate` push — la máquina **no** refetchea aquí; el refetch llega por `ROUTE_CHANGED` (URL manda) |
+| `SET_OPACITY` / `CURSOR_MOVE` / `COG_ERROR` | asignan contexto |
+
+**Dependencias inyectadas** (`.provide()` en la página; mocks en tests): actor `fetchClosest` (`$fetch` a `/api/rasters/closest`, 404 → `null`) y acción `navigate` (router push/replace conservando query, `composables/useViewerRoute.ts`).

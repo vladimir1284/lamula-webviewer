@@ -64,11 +64,13 @@ Una sola aplicación **Nuxt 3** desplegada en **Cloudflare Pages** (preset `clou
 
 ## Estado en URL
 
-- **Ruta**: `/{locale?}/{radar}/{product}/{datetime}` — lo compartible.
+- **Ruta**: `/{locale?}/{radar}/{product}/{datetime}` — lo compartible. El datetime va compacto (`YYYYMMDDTHHMMSS`, p.ej. `/AMX/153/20260711T031649`): el `:` del ISO es hostil a proxies/copy-paste; la conversión con el ISO naive del contrato es 1:1 (`shared/url/time-path.ts`). Sin datetime = vista live: se resuelve el closest a "ahora" y se materializa en la URL con `replace`.
 - **Query**: `?overlays=cells,tracks,meso&base=osm&opacity=0.8` — modificadores de vista.
 - **localStorage**: solo preferencias no compartibles (locale por defecto, última capa base).
 
 Una URL pegada en otro navegador reproduce la vista exacta (mismo frame, mismos overlays).
+
+La URL es la **fuente de verdad** del estado compartible: los cambios de ruta (incluido back/forward) entran a la máquina de estados de la página como eventos, y las transiciones que cambian la selección navegan como efecto — ver [Máquinas de estado](maquinas-estado.md) (decisión 18: XState para todo el estado de UI).
 
 ## Acceso a datos compartidos
 

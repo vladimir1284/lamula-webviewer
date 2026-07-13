@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { isoToPath } from '../shared/url/time-path'
 import { products, rasters } from '../tests/helpers/derive'
 
 const mnemonicOf = new Map(products.map(p => [p.code, p.mnemonic]))
@@ -36,9 +37,10 @@ test.describe('goldens visuales', () => {
   for (const row of goldenRows) {
     const mnemonic = mnemonicOf.get(row.product_code) ?? row.product_code
     test(`${row.site_id} ${mnemonic} renderiza igual al golden`, async ({ page }) => {
-      await page.goto('/?base=off')
-      await page.getByTestId('radar-select').selectOption(row.site_id)
-      await page.getByTestId('product-select').selectOption(String(row.product_code))
+      // deep link directo al frame (F3): determinista y valida la ruta de paso
+      await page.goto(
+        `/${row.site_id}/${row.product_code}/${isoToPath(row.vol_time)}?base=off`,
+      )
 
       const map = page.getByTestId('radar-map')
       // rendercomplete de OL: tiles del COG cargados y dibujados
