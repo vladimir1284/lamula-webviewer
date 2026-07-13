@@ -12,9 +12,10 @@ Principios:
 
 | Máquina | Fichero | Responsabilidad | Estado |
 |---|---|---|---|
-| `viewerMachine` | `machines/viewer.ts` | Raíz de la página viewer: selección, carga del raster, timeline, prefs | implementada |
+| `viewerMachine` | `machines/viewer.ts` | Raíz de la página viewer: selección, carga del raster, timeline, prefs, toggles de overlays | implementada |
 | `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | implementada |
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
+| `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
 
 ## `viewerMachine`
 
@@ -85,6 +86,9 @@ stateDiagram-v2
 | `SELECT_SITE` / `SELECT_PRODUCT` | — | efecto `navigate` push — la máquina **no** refetchea aquí; el refetch llega por `ROUTE_CHANGED` en cada región (URL manda) |
 | `SET_OPACITY` | — | asigna contexto + `persistPrefs` + `syncQuery` (query `?opacity` con replace debounced 300 ms, omitida si es el default 0.8) |
 | `CURSOR_MOVE` / `COG_ERROR` | — | asignan contexto |
+| `TOGGLE_LAYER(layer)` | — | añade/quita la capa en `context.layers` + `syncOverlayQuery` (replace inmediato de `?layers` — D23; sin debounce, es acción discreta). El cambio solo-query reentra por `ROUTE_CHANGED` y cae en `sameFrame`: el raster no reparpadea |
+| `SELECT_PANEL(panel\|null)` | — | asigna `context.panel` + `syncOverlayQuery` (`?panel`) |
+| `SELECT_CELL(cellId\|null)` | — | asigna `context.cell` (+ si el panel está cerrado, lo abre en `trend` — el gesto pide ver esa celda) + `syncOverlayQuery` (`?cell`) |
 
 **Corrección de URL generalizada:** cuando `fetchClosest` resuelve, si el `vol_time` devuelto difiere del `time` pedido (vista live, o cualquier instante que no coincide con un vol_time real — p.ej. el `SELECT_DAY` pide "fin de día" implícitamente vía `/api/rasters/day` y salta al último real), se hace `replace`/`push` al `vol_time` exacto. La URL nunca muestra un instante distinto del frame realmente exhibido (puerta M3).
 
@@ -97,6 +101,106 @@ stateDiagram-v2
 **Day picker (`components/DayPicker.vue`):** botones de día UTC sobre la ventana de 72h anclada a `radar.last_seen_at` (`utils/time-window.ts::dayWindow72h`, decisión 11) — no wall-clock, así un radar muerto sigue mostrando sus días con datos y las fixtures no se pudren. Click → evento `SELECT_DAY`.
 
 **Timeline strip (`components/TimelineStrip.vue`):** strip proporcional al rango `[times[0], times.at(-1)]` del día cargado; un tick por `vol_time` (click → `SELECT_TIME`), huecos marcados cuando el intervalo excede `max(2×mediana, 10 min)` (`utils/timeline/gaps.ts::computeGaps` — con menos de 3 times no hay señal para una mediana, no se marcan huecos), botones prev/next (→ `STEP`) deshabilitados según `atStart`/`atEnd`. Teclado: `←`/`→` en `window` disparan `STEP`, ignorados con foco en `input`/`select`/`textarea`.
+
+## `overlayMachine`
+
+Overlays de fenómenos + panel VWP (F4, decisiones 24/27). Separada de
+`viewerMachine` (patrón `animationMachine`): el vol_time efectivo durante la
+animación vive en la página (`times[activeFrameIndex]`), no en `viewerMachine`.
+La página la orquesta con watchers — `SET_SCOPE` (site/día), `SET_TIME` (frame
+mostrado, animación o estático), `SET_ACTIVE` (toggles parseados de la URL),
+`SELECT_CELL` (celda de `?cell`). Arranca con todo `idle` y **sin fetch** en
+SSR y cliente por igual (la activación llega por eventos tras el mount) — sin
+mismatch de hidratación.
+
+`type: 'parallel'`, cuatro regiones. **Todos los eventos se manejan a nivel de
+región** (ninguno en la raíz — la lección del ensombrecido de `viewerMachine`
+aplicada por diseño): varias regiones pueden manejar el mismo evento porque en
+XState v5 los eventos se difunden a todas las regiones activas. Dos sutilezas
+de esa difusión, aprovechadas aquí: (1) los *guards* de todas las regiones se
+evalúan contra el snapshot **previo** al micropaso — por eso los guards de
+`SET_ACTIVE` leen el payload del evento y no `context.layers/panel` (el assign
+corre en `index`); (2) las *acciones* sí se ejecutan en orden de documento
+sobre el contexto ya actualizado — por eso el `entry` de `vwp.sync` puede leer
+el `volTime` que `frame` asignó en el mismo micropaso.
+
+```mermaid
+stateDiagram-v2
+    state "index — índices del día (fetchTimes)" as I {
+        [*] --> i_idle
+        i_idle --> i_loading: SET_ACTIVE con algo activo e índice sin cargar
+        i_loading --> i_ready: phen+vwp times (raise INDEX_READY)
+        i_loading --> i_error: fetchTimes falla
+        i_ready --> i_deciding: SET_SCOPE (limpia todo)
+        i_deciding --> i_loading: algo sigue activo
+        i_deciding --> i_idle: nada activo
+    }
+    --
+    state "frame — fenómenos del frame mostrado" as F {
+        [*] --> f_idle
+        f_idle --> f_join: SET_TIME / SET_ACTIVE / INDEX_READY (activo + índice cargado)
+        f_join --> f_noData: joined = null (nada ≤ tolerancia)
+        f_join --> f_resolved: cache hit por vol_time
+        f_join --> f_fetching: volumen casado sin cache
+        f_fetching --> f_resolved: fetchPhenomena → filas (cachea)
+        f_fetching --> f_error: fetchPhenomena falla
+        f_resolved --> f_shown: filas > 0
+        f_resolved --> f_noData: volumen sin fenómenos (joined presente)
+        f_shown --> f_join: SET_TIME (reentra, last-wins)
+        f_noData --> f_join: SET_TIME
+        f_shown --> f_idle: SET_ACTIVE sin capas ni panel de celdas / SET_SCOPE
+    }
+    --
+    state "series — tendencia por cell_id" as S {
+        [*] --> s_idle
+        s_idle --> s_loading: SELECT_CELL(id)
+        s_loading --> s_shown: fetchSeries → serie
+        s_loading --> s_error: fetchSeries falla
+        s_shown --> s_idle: SELECT_CELL(null) / SET_SCOPE
+        s_shown --> s_loading: SELECT_CELL(otro id)
+    }
+    --
+    state "vwp — perfiles del día (solo panel=vwp)" as V {
+        [*] --> v_idle
+        v_idle --> v_sync: SET_ACTIVE panel=vwp / INDEX_READY / SET_TIME
+        v_sync --> v_empty: sin perfiles hasta el frame
+        v_sync --> v_shown: ventana completa en cache
+        v_sync --> v_loading: faltan perfiles
+        v_loading --> v_shown: fetchVwp (batch de los que faltan)
+        v_loading --> v_error: fetchVwp falla
+        v_shown --> v_sync: SET_TIME (recalcula ventana/joined)
+        v_shown --> v_idle: SET_ACTIVE panel≠vwp / SET_SCOPE
+    }
+```
+
+**Contexto:** `site`, `day`, `volTime` (frame mostrado; `SET_SCOPE` lo anula —
+el de un scope anterior no vale, la página reemite `SET_TIME`), `layers`,
+`panel`, `cellId`, `phenTimes`/`vwpTimes` (índices; `null` = sin cargar),
+`joined` (vol_time de fenómenos casado; `null` con estado `noData` distingue
+"nada en tolerancia" de "volumen sin fenómenos" — `phenomena: []`),
+`phenomena`, `phenCache` (inmutable por vol_time → cache sin invalidación),
+`series`, `vwpWindow` (≤12 columnas del día hasta el frame), `vwpJoined`,
+`vwpProfiles` (cache por vol_time), errores por región.
+
+| Evento | Regiones que lo manejan | Efecto |
+|---|---|---|
+| `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding` recarga si algo sigue activo |
+| `SET_TIME(volTime)` | `frame`, `vwp` | `frame` asigna `volTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto |
+| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba) |
+| `SELECT_CELL(cellId\|null)` | `series` | carga la serie cross-volumen o la limpia |
+| `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice |
+
+**Join temporal (D24):** `joined = nearestWithin(phenTimes, volTime, 600 s)`
+(`utils/overlay/join.ts`; empate → anterior, la regla de `pickClosest`).
+Durante animación la mayoría de frames casan al mismo volumen → cache hit sin
+red; los fetch reales son ≤ nº de volúmenes de fenómenos del día. Fuera de
+tolerancia el overlay se limpia (`noData`) — nunca celdas de otro momento
+presentadas como actuales.
+
+**Dependencias inyectadas:** actores `fetchTimes` (`Promise.all` de
+`/api/phenomena/times` + `/api/vwp/times`), `fetchPhenomena`
+(`/api/phenomena`), `fetchSeries` (`/api/phenomena/series`), `fetchVwp`
+(batch de `/api/vwp` para los vol_times sin cache).
 
 ## `frameMachine`
 

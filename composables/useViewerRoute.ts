@@ -3,11 +3,14 @@
 // invoca vía la acción 'navigate'.
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { isoToPath, pathToIso } from '#shared/url/time-path'
-import type { NavigatePatch, ViewerRouteState } from '../machines/viewer'
+import type { OverlayLayerId, PanelId } from '../machines/overlay'
+import { OVERLAY_LAYERS, PANELS } from '../machines/overlay'
+import type { NavigatePatch, OverlayQueryParams, ViewerRouteState } from '../machines/viewer'
 
 export const SITE_RE = /^[A-Z0-9]{3}$/
 export const PRODUCT_RE = /^\d+$/
 export const DEFAULT_OPACITY = 0.8
+export const CELL_ID_RE = /^[A-Z0-9]{1,8}$/
 
 /** null si la ruta actual no es una ruta del viewer o trae params inválidos */
 export function parseViewerRoute(
@@ -28,12 +31,37 @@ export function parseViewerRoute(
     ? Math.min(1, Math.max(0, rawOpacity))
     : DEFAULT_OPACITY
 
+  // overlays (D23): valores inválidos degradan al default, nunca anulan la ruta
+  const layers = [...new Set(
+    String(route.query.layers ?? '')
+      .split(',')
+      .filter((l): l is OverlayLayerId => (OVERLAY_LAYERS as readonly string[]).includes(l)),
+  )]
+  const rawPanel = route.query.panel
+  const panel = typeof rawPanel === 'string' && (PANELS as readonly string[]).includes(rawPanel)
+    ? rawPanel as PanelId
+    : null
+  const rawCell = route.query.cell
+  const cell = typeof rawCell === 'string' && CELL_ID_RE.test(rawCell) ? rawCell : null
+
   return {
     site,
     product: Number(product),
     time: timeIso,
     opacity,
     base: route.query.base === 'off' ? 'off' : 'osm',
+    layers,
+    panel,
+    cell,
+  }
+}
+
+/** Query patch para syncOverlayQuery: ausencia = default (URLs de F3 intactas) */
+export function overlayQueryPatch(params: OverlayQueryParams): Record<string, string | undefined> {
+  return {
+    layers: params.layers.length > 0 ? params.layers.join(',') : undefined,
+    panel: params.panel ?? undefined,
+    cell: params.cell ?? undefined,
   }
 }
 

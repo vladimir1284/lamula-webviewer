@@ -7,6 +7,7 @@
 import type { Product, Radar, RasterMeta } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
 import type { CursorSample } from '../utils/map/cursor'
+import type { OverlayLayerId, PanelId } from './overlay'
 
 /** Lo compartible de la URL, ya parseado (ver composables/useViewerRoute.ts) */
 export interface ViewerRouteState {
@@ -16,6 +17,12 @@ export interface ViewerRouteState {
   time: string | null
   opacity: number
   base: 'osm' | 'off'
+  /** capas de fenómenos activas (?layers=cells,meso — D23) */
+  layers: OverlayLayerId[]
+  /** panel derecho abierto (?panel=cells|trend|vwp) */
+  panel: PanelId | null
+  /** celda seleccionada (?cell=D4) */
+  cell: string | null
 }
 
 export interface NavigatePatch {
@@ -62,6 +69,9 @@ export type ViewerEvent =
   | { type: 'SET_OPACITY', value: number }
   | { type: 'CURSOR_MOVE', sample: CursorSample | null }
   | { type: 'COG_ERROR', message: string }
+  | { type: 'TOGGLE_LAYER', layer: OverlayLayerId }
+  | { type: 'SELECT_PANEL', panel: PanelId | null }
+  | { type: 'SELECT_CELL', cellId: string | null }
 
 interface ViewerContext {
   radars: Radar[]
@@ -81,8 +91,18 @@ interface ViewerContext {
   atEnd: boolean
   opacity: number
   base: 'osm' | 'off'
+  layers: OverlayLayerId[]
+  panel: PanelId | null
+  cell: string | null
   cursor: CursorSample | null
   cogError: string
+}
+
+/** slice de la query que refleja el estado de overlays (D23) */
+export interface OverlayQueryParams {
+  layers: OverlayLayerId[]
+  panel: PanelId | null
+  cell: string | null
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10)
@@ -96,6 +116,9 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
       time: route.time,
       opacity: route.opacity,
       base: route.base,
+      layers: route.layers,
+      panel: route.panel,
+      cell: route.cell,
     }
   },
 )
@@ -150,6 +173,8 @@ export const viewerMachine = setup({
     // persistir prefs en localStorage y reflejar opacity/base en la query
     persistPrefs: (_args, _params: PrefsParams) => {},
     syncQuery: (_args, _params: { opacity: number, base: 'osm' | 'off' }) => {},
+    // reflejar toggles de overlays en la query (replace inmediato — D23)
+    syncOverlayQuery: (_args, _params: OverlayQueryParams) => {},
   },
   guards: {
     /**
@@ -187,6 +212,9 @@ export const viewerMachine = setup({
     atEnd: false,
     opacity: input.route.opacity,
     base: input.route.base,
+    layers: input.route.layers,
+    panel: input.route.panel,
+    cell: input.route.cell,
     cursor: null,
     cogError: '',
   }),
@@ -211,6 +239,42 @@ export const viewerMachine = setup({
       ],
     },
     COG_ERROR: { actions: assign({ cogError: ({ event }) => event.message }) },
+    // Toggles de overlays (D23): assign optimista + replace de la query.
+    // Cambios solo-query reentran por ROUTE_CHANGED y caen en sameFrame —
+    // el raster no reparpadea.
+    TOGGLE_LAYER: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        const layers = context.layers.includes(event.layer)
+          ? context.layers.filter(l => l !== event.layer)
+          : [...context.layers, event.layer]
+        enqueue.assign({ layers })
+        enqueue({
+          type: 'syncOverlayQuery',
+          params: { layers, panel: context.panel, cell: context.cell },
+        })
+      }),
+    },
+    SELECT_PANEL: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        enqueue.assign({ panel: event.panel })
+        enqueue({
+          type: 'syncOverlayQuery',
+          params: { layers: context.layers, panel: event.panel, cell: context.cell },
+        })
+      }),
+    },
+    // click en celda (mapa o tabla): selecciona y, con el panel cerrado,
+    // abre la tendencia — el gesto pide ver esa celda
+    SELECT_CELL: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        const panel = event.cellId !== null && context.panel === null ? 'trend' : context.panel
+        enqueue.assign({ cell: event.cellId, panel })
+        enqueue({
+          type: 'syncOverlayQuery',
+          params: { layers: context.layers, panel, cell: event.cellId },
+        })
+      }),
+    },
     SELECT_SITE: {
       actions: {
         type: 'navigate',
