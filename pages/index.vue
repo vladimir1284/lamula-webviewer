@@ -1,19 +1,30 @@
 <script setup lang="ts">
 // La raíz solo redirige al viewer: /{site}/{product} (vista live; el time
 // resuelto se materializa allí con replace). Client-side porque las prefs
-// de localStorage (paso 2 de F3) no existen en SSR.
+// de localStorage no existen en SSR. Prefs validadas contra el catálogo —
+// una selección persistida que ya no existe (radar retirado, código
+// reasignado) no debe romper la redirección.
 import { onMounted } from 'vue'
+import { loadPrefs } from '../composables/useViewerPrefs'
 
 const N0B = 153
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
 
 onMounted(() => {
-  const site = radars.value?.[0]?.site_id
   const rasterProducts = products.value?.filter(p => p.kind === 'raster') ?? []
-  const product = rasterProducts.some(p => p.code === N0B)
-    ? N0B
-    : rasterProducts[0]?.code
+  const prefs = loadPrefs()
+
+  const site = radars.value?.some(r => r.site_id === prefs?.site)
+    ? prefs!.site
+    : radars.value?.[0]?.site_id
+
+  const product = rasterProducts.some(p => p.code === prefs?.product)
+    ? prefs!.product
+    : rasterProducts.some(p => p.code === N0B)
+      ? N0B
+      : rasterProducts[0]?.code
+
   if (site && product != null) {
     navigateTo(`/${site}/${product}`, { replace: true })
   }

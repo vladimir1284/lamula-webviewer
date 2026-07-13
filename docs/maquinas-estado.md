@@ -48,9 +48,12 @@ stateDiagram-v2
 
 | Evento | Efecto |
 |---|---|
-| `ROUTE_CHANGED` | guard `sameFrame` → asigna contexto; si no → `.loading` (reentrar cancela el fetch en vuelo — sin respuestas stale) |
+| `ROUTE_CHANGED` | guard `sameFrame` → asigna contexto + `persistPrefs`; si no → `.loading` (reentrar cancela el fetch en vuelo — sin respuestas stale) + `persistPrefs` |
 | `MOUNTED` | guard `liveResolved` (time `null` + raster resuelto) → efecto `navigate` replace al `vol_time` (la URL siempre contiene el frame exacto) |
 | `SELECT_SITE` / `SELECT_PRODUCT` | efecto `navigate` push — la máquina **no** refetchea aquí; el refetch llega por `ROUTE_CHANGED` (URL manda) |
-| `SET_OPACITY` / `CURSOR_MOVE` / `COG_ERROR` | asignan contexto |
+| `SET_OPACITY` | asigna contexto + `persistPrefs` + `syncQuery` (query `?opacity` con replace debounced 300 ms, omitida si es el default 0.8) |
+| `CURSOR_MOVE` / `COG_ERROR` | asignan contexto |
 
-**Dependencias inyectadas** (`.provide()` en la página; mocks en tests): actor `fetchClosest` (`$fetch` a `/api/rasters/closest`, 404 → `null`) y acción `navigate` (router push/replace conservando query, `composables/useViewerRoute.ts`).
+**Prefs (`lamula:prefs` en localStorage, nunca el `time`):** toda navegación (`ROUTE_CHANGED`) y todo cambio de opacidad disparan `persistPrefs` con `{site, product, opacity, base}` — así `/` siempre redirige a la última selección real, no a un valor mudo. `composables/useViewerPrefs.ts` valida versión/shape al leer (corrupto o `v` desconocida → `null`, no rompe la redirección).
+
+**Dependencias inyectadas** (`.provide()` en la página; mocks en tests): actor `fetchClosest` (`$fetch` a `/api/rasters/closest`, 404 → `null`); acciones `navigate` (router push/replace conservando query, `composables/useViewerRoute.ts`), `persistPrefs` (`savePrefs`) y `syncQuery` (replace debounced de `?opacity&base`, ambas en la página).

@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { RasterMeta } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
+import { savePrefs } from '../../../composables/useViewerPrefs'
 import { viewerMachine } from '../../../machines/viewer'
-import type { NavigateParams } from '../../../machines/viewer'
+import type { NavigateParams, PrefsParams } from '../../../machines/viewer'
+
+const DEFAULT_OPACITY = 0.8
+const DEFAULT_BASE = 'osm' as const
+const QUERY_SYNC_DEBOUNCE_MS = 300
 
 definePageMeta({
   // params malformados → 404 de Nuxt (corre también en SSR). La validez
@@ -46,6 +51,23 @@ const { data: initialRaster, error: initialRasterError } = await useFetch<Raster
 )
 
 const navigate = useViewerNavigate()
+const router = useRouter()
+
+// query modifiers (opacity/base) con replace debounced — solo si difieren
+// del default, para no ensuciar la URL con el estado inicial
+let queryTimer: ReturnType<typeof setTimeout> | undefined
+function syncQuery(params: { opacity: number, base: 'osm' | 'off' }) {
+  clearTimeout(queryTimer)
+  queryTimer = setTimeout(() => {
+    const query = { ...route.query }
+    if (params.opacity === DEFAULT_OPACITY) delete query.opacity
+    else query.opacity = String(params.opacity)
+    if (params.base === DEFAULT_BASE) delete query.base
+    else query.base = params.base
+    router.replace({ query })
+  }, QUERY_SYNC_DEBOUNCE_MS)
+}
+onBeforeUnmount(() => clearTimeout(queryTimer))
 
 const machine = viewerMachine.provide({
   actors: {
@@ -64,6 +86,8 @@ const machine = viewerMachine.provide({
   },
   actions: {
     navigate: (_, params: NavigateParams) => navigate(params.patch, params.mode),
+    persistPrefs: (_, params: PrefsParams) => savePrefs(params),
+    syncQuery: (_, params: { opacity: number, base: 'osm' | 'off' }) => syncQuery(params),
   },
 })
 

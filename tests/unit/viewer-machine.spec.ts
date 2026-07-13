@@ -43,6 +43,8 @@ function boot(opts: {
   fetch?: (input: { site: string, product: number, t: string }) => Promise<RasterMeta | null>
 } = {}) {
   const navigate = vi.fn()
+  const persistPrefs = vi.fn()
+  const syncQuery = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
   const input: ViewerInput = {
     radars: [],
@@ -55,12 +57,16 @@ function boot(opts: {
   const actor = createActor(
     viewerMachine.provide({
       actors: { fetchClosest: fromPromise(({ input: i }) => fetch(i)) },
-      actions: { navigate: (_, params) => navigate(params) },
+      actions: {
+        navigate: (_, params) => navigate(params),
+        persistPrefs: (_, params) => persistPrefs(params),
+        syncQuery: (_, params) => syncQuery(params),
+      },
     }),
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch }
+  return { actor, navigate, fetch, persistPrefs, syncQuery }
 }
 
 describe('viewerMachine — estado inicial (SSR)', () => {
@@ -177,5 +183,33 @@ describe('viewerMachine — eventos de UI', () => {
     expect(ctx.opacity).toBe(0.4)
     expect(ctx.cursor?.value).toBe(12.5)
     expect(ctx.cogError).toBe('no COG')
+  })
+
+  it('SET_OPACITY persiste prefs y sincroniza la query (nunca el time)', () => {
+    const { actor, persistPrefs, syncQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SET_OPACITY', value: 0.4 })
+    expect(persistPrefs).toHaveBeenCalledWith({
+      site: 'AMX',
+      product: 153,
+      opacity: 0.4,
+      base: 'osm',
+    })
+    expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.4, base: 'osm' })
+  })
+})
+
+describe('viewerMachine — prefs vía ROUTE_CHANGED', () => {
+  it('toda navegación persiste site/product/opacity/base', () => {
+    const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
+    actor.send({
+      type: 'ROUTE_CHANGED',
+      route: routeAt({ product: 154, opacity: 0.5, base: 'off' }),
+    })
+    expect(persistPrefs).toHaveBeenCalledWith({
+      site: 'AMX',
+      product: 154,
+      opacity: 0.5,
+      base: 'off',
+    })
   })
 })

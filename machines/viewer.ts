@@ -28,6 +28,14 @@ export interface NavigateParams {
   mode: 'push' | 'replace'
 }
 
+/** slice persistible en localStorage (composables/useViewerPrefs.ts) */
+export interface PrefsParams {
+  site: string
+  product: number
+  opacity: number
+  base: 'osm' | 'off'
+}
+
 export interface ViewerInput {
   radars: Radar[]
   products: Product[]
@@ -76,6 +84,20 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
   },
 )
 
+// toda navegación deja las prefs al día (site/product/opacity/base — nunca el time)
+const persistRouteParams = {
+  type: 'persistPrefs' as const,
+  params: ({ event }: { event: ViewerEvent }) => {
+    const { route } = event as Extract<ViewerEvent, { type: 'ROUTE_CHANGED' }>
+    return {
+      site: route.site,
+      product: route.product,
+      opacity: route.opacity,
+      base: route.base,
+    }
+  },
+}
+
 export const viewerMachine = setup({
   types: {} as {
     context: ViewerContext
@@ -95,6 +117,10 @@ export const viewerMachine = setup({
     navigate: (_args, _params: NavigateParams) => {
       throw new Error('navigate sin proveer (.provide)')
     },
+    // efectos opcionales (noop por defecto; la página los provee):
+    // persistir prefs en localStorage y reflejar opacity/base en la query
+    persistPrefs: (_args, _params: PrefsParams) => {},
+    syncQuery: (_args, _params: { opacity: number, base: 'osm' | 'off' }) => {},
   },
   guards: {
     /**
@@ -127,7 +153,24 @@ export const viewerMachine = setup({
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },
-    SET_OPACITY: { actions: assign({ opacity: ({ event }) => event.value }) },
+    SET_OPACITY: {
+      actions: [
+        assign({ opacity: ({ event }) => event.value }),
+        {
+          type: 'persistPrefs',
+          params: ({ context, event }) => ({
+            site: context.site,
+            product: context.product,
+            opacity: event.value,
+            base: context.base,
+          }),
+        },
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({ opacity: event.value, base: context.base }),
+        },
+      ],
+    },
     COG_ERROR: { actions: assign({ cogError: ({ event }) => event.message }) },
     SELECT_SITE: {
       actions: {
@@ -155,12 +198,12 @@ export const viewerMachine = setup({
     ROUTE_CHANGED: [
       {
         guard: { type: 'sameFrame', params: ({ event }) => event.route },
-        actions: assignRoute,
+        actions: [assignRoute, persistRouteParams],
       },
       {
         // reentrar en loading cancela el fetch en vuelo (sin respuestas stale)
         target: '.loading',
-        actions: [assignRoute, assign({ cogError: '', cursor: null })],
+        actions: [assignRoute, assign({ cogError: '', cursor: null }), persistRouteParams],
       },
     ],
   },
