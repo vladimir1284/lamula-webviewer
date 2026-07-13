@@ -38,22 +38,20 @@ Una fila por `(site, vol_time, kind, cell_id)` con `lat`/`lon`, `azimuth_deg`/`r
 
 #### Claves de `attrs` (parte del contrato)
 
-Estado **observado en el feed real** (grabación de fixtures, jul-2026) + resto de la extensión acordada (marcada ⏳, tarea del lado pipeline, prerequisito de la fase F4 del viewer):
+Estado **observado en el feed real** (grabación de fixtures, jul-2026). La tabla canónica vive en `db/README.md` del pipeline; los tipos + parsers tolerantes del viewer en `shared/contract/attrs.ts` (`stormCellAttrs()`/`mesoAttrs()` — toda clave es opcional, un campo corrupto se descarta sin tumbar la fila):
 
-| `kind` | Clave | Estado | Contenido |
-|---|---|---|---|
-| `storm_cell` | `azran_nm` | ✅ | `[az_deg, range_nm]` posición radar-céntrica |
-| `storm_cell` | `movement_deg`, `movement_kt` | ✅ | vector de movimiento |
-| `storm_cell` | `new` | ✅ | celda nueva en este volumen |
-| `storm_cell` | `past`, `forecast` | ✅ | arrays de posiciones `[[x_km, y_km], …]` de los packets 23/24 (SCIT) |
-| `storm_cell` | `dbz_max`, `dbz_max_height_kft` | ✅ | reflectividad máxima y su altura, del tabular de NST |
-| `storm_cell` | `vil_kg_m2`, `top_kft` | ⏳ | del tabular "STORM CELL ATTRIBUTES" de NST |
-| `storm_cell` | `poh_pct`, `posh_pct`, `hail_size_in` | ⏳ | probabilidad/tamaño de granizo, mismo tabular |
-| `meso` | `radius_km`, `azran_nm`, `storm_id` | ✅ | geometría y celda asociada del mesociclón |
-| `meso` | `strength_rank`, `msi`, `tvs` | ✅ | rango de intensidad, MSI, flag TVS (bool) del tabular NMD |
-| `meso` | `low_level_rv_kt`, `low_level_dv_kt`, `base_kft`, `depth_kft`, `depth_stmrel_pct`, `max_rv_kft`, `max_rv_kt`, `movement_deg`, `movement_kt` | ✅ | resto del tabular NMD |
+| `kind` | Clave | Contenido |
+|---|---|---|
+| `storm_cell` | `azran_nm` | `[az_deg, range_nm]` posición radar-céntrica |
+| `storm_cell` | `movement_deg`, `movement_kt` | vector de movimiento (`movement_deg` convención "desde") |
+| `storm_cell` | `new` | celda nueva en este volumen (sin tracks) |
+| `storm_cell` | `past`, `forecast` | arrays de posiciones `[[x_km, y_km], …]` AEQD de los packets 23/24 (SCIT); `past` reciente→viejo, `forecast` cercano→lejano — semántica deducida de las grabaciones, **pendiente de confirmar con el experto** (puerta M4; test canario en `tests/unit/tracks.spec.ts`) |
+| `storm_cell` | `dbz_max`, `dbz_max_height_kft` | reflectividad máxima y su altura, del GAB de NST — el GAB pagina de a 6 celdas: **puede faltar** |
+| `meso` | `radius_km`, `azran_nm`, `storm_id` | geometría del mesociclón y `cell_id` de la celda NST asociada (el `cell_id` de la fila meso es el ID del mesociclón, no la celda) |
+| `meso` | `strength_rank`, `msi`, `tvs` | rango de intensidad, MSI, flag TVS (bool) del tabular NMD — `tvs` es LA señal TVS del feed |
+| `meso` | `low_level_rv_kt`, `low_level_dv_kt`, `base_kft`, `depth_kft`, `depth_stmrel_pct`, `max_rv_kft`, `max_rv_kt`, `movement_deg`, `movement_kt` | resto del tabular NMD |
 
-Cuando aterricen las claves ⏳ (VIL/top/granizo), esta tabla se actualiza y los contract tests del viewer las asertan. Las claves ✅ están presentes en las fixtures grabadas (`server/dal/fixtures/phenomena.json`) que los contract tests validan.
+**Fuera de alcance — el feed no lo distribuye** (acordado con el pipeline, jul-2026): `vil_kg_m2`, `top_kft` (producto SS/62) y `poh_pct`/`posh_pct`/`hail_size_in` (HI/59) — esos productos no fluyen en el bucket de Unidata; el NST no los trae. VIL y echo top sí existen como rasters de grilla (DVL, EET). Si algún día aterrizan, `attrs.ts` suma claves opcionales sin migración. Las claves de la tabla están presentes en las fixtures grabadas (`server/dal/fixtures/phenomena.json`) que los contract tests y `tests/unit/attrs.spec.ts` validan.
 
 ### `vwp` — perfiles de viento
 
@@ -74,8 +72,8 @@ Una fila por `(site_id, vol_time, height_ft)`: `wind_dir_deg`, `wind_speed_kt`, 
 
 ## Puntos de coordinación abiertos con el pipeline
 
-1. ⏳ Resto de la extensión de `attrs` de NST (arriba): VIL, echo top y granizo por celda. Tracks (packets 23/24), dbz_max y el tabular NMD completo ya fluyen en el feed (verificado jul-2026).
+1. ~~Extensión de `attrs` de NST~~ — cerrado jul-2026: tracks (packets 23/24), dbz_max y el tabular NMD completo fluyen; VIL/top/granizo quedan fuera de alcance (el feed no distribuye SS/HI — barrido verificado por el pipeline).
 2. `radars.icao` llega null en todo el feed del demo — si el pipeline puede mapear ICAO desde su config, el display mejora sin tocar el viewer.
-3. Documentar formalmente las claves de `attrs` en `db/README.md` del pipeline (hoy `attrs` es caja negra en su doc).
+3. ~~Documentar claves de `attrs` en el pipeline~~ — hecho: tabla canónica en `db/README.md` de aquel repo.
 4. Acceso público de lectura + CORS del bucket R2 y `NUXT_PUBLIC_R2_BASE_URL` en el proyecto Pages del viewer — sin esto `cog_url` va null; bloqueante de F2, no de F1.
-5. Verificación opcional: barrido del bucket por 62/NSS (storm structure) — solo si las series de tendencia por `cell_id` resultaran insuficientes; no bloquea nada.
+5. Confirmar con el experto la semántica de `past`/`forecast`/`movement_deg` (orden y convención "desde") — parte de la puerta M4.
