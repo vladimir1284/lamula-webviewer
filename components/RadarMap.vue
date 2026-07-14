@@ -11,7 +11,7 @@
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
 import View from 'ol/View'
-import { circular } from 'ol/geom/Polygon'
+import Polygon, { circular } from 'ol/geom/Polygon'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
@@ -19,7 +19,7 @@ import { fromLonLat } from 'ol/proj'
 import GeoTIFF from 'ol/source/GeoTIFF'
 import OSM from 'ol/source/OSM'
 import VectorSource from 'ol/source/Vector'
-import Stroke from 'ol/style/Stroke'
+import Fill from 'ol/style/Fill'
 import Style from 'ol/style/Style'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
@@ -81,8 +81,23 @@ function coverageRadiusM(): number {
 
 function updateCoverage() {
   coverageSource.clear()
+  const center = fromLonLat([props.radar.lon, props.radar.lat])
   const circle = circular([props.radar.lon, props.radar.lat], coverageRadiusM(), 128)
-  coverageSource.addFeature(new Feature(circle.transform('EPSG:4326', 'EPSG:3857')))
+  circle.transform('EPSG:4326', 'EPSG:3857')
+  const circleCoords = circle.getCoordinates()
+  
+  // Aumentamos half a 2e7 (20 millones de metros, aprox el mundo entero) 
+  // para evitar que se vean los bordes del cuadrado al hacer zoom out.
+  const half = 2e7
+  const worldExtent = [
+    [center[0] - half, center[1] - half],
+    [center[0] + half, center[1] - half],
+    [center[0] + half, center[1] + half],
+    [center[0] - half, center[1] + half],
+    [center[0] - half, center[1] - half],
+  ]
+  const mask = new Polygon([worldExtent, circleCoords[0]])
+  coverageSource.addFeature(new Feature(mask))
 }
 
 // ── Overlay de fenómenos (F4) ────────────────────────────────────────────
@@ -183,7 +198,9 @@ onMounted(() => {
       new VectorLayer({
         source: coverageSource,
         zIndex: 10,
-        style: new Style({ stroke: new Stroke({ color: 'rgba(148,163,184,0.9)', width: 1.5 }) }),
+        style: new Style({
+          fill: new Fill({ color: 'rgba(15, 23, 42, 1)' }),
+        }),
       }),
       (phenomenaLayer = new VectorLayer({
         source: phenomenaSource,
