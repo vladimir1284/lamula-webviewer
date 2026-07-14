@@ -29,7 +29,7 @@ async function setup() {
     try {
       const { rmSync } = await import('node:fs');
       rmSync(join(WORKSPACE_DIR, '.wrangler/state/v3/d1'), { recursive: true, force: true });
-    } catch (e) {
+    } catch {
       // Ignore
     }
 
