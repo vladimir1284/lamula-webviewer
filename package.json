@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "nuxt dev",
+    "db:setup": "node scripts/seed-local-db.mjs",
     "build": "nuxt build",
     "preview": "wrangler pages dev",
     "postinstall": "nuxt prepare",

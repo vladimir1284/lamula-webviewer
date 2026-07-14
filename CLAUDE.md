@@ -30,6 +30,7 @@ Viewer web de productos NEXRAD Level III: reescritura de VestaWeb2 (Svelte 3 + D
 ## Comandos
 
 ```bash
+pnpm db:setup                                      # inicializar y poblar D1 localmente
 pnpm dev / lint / typecheck / test / build         # app (ver README)
 pnpm preview                                       # wrangler pages dev sobre dist/
 pnpm test:e2e                                      # Playwright (requiere pnpm build previo)
