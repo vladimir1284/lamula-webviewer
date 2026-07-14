@@ -33,11 +33,14 @@ Parte manual de cada puerta del [plan de implementación](plan-implementacion.md
 
 ## F4 — Fenómenos + VWP
 
-1. Con un episodio convectivo real capturado como fixture: las celdas aparecen en las posiciones esperadas, con tracks pasado/pronóstico orientados según el movimiento conocido.
-2. La tabla de celdas ordena por VIL y sus valores coinciden con el tabular NST crudo (cotejo manual de 2–3 celdas).
-3. Charts de tendencia de una celda seguida ≥ 4 volúmenes: la serie es continua y coherente (sin saltos por confusión de `cell_id`).
-4. Markers de meso/TVS/granizo con atributos legibles en el popup.
-5. VWP: barbas y tabla contra el tabular crudo del producto NVW del mismo volumen (dirección/velocidad por altura, 2–3 niveles cotejados a mano).
+Alcance recortado (decisión 22): sin VIL/top/granizo por celda — el feed no distribuye SS/HI. La puerta se valida contra datos vivos en un día de tormenta (preview deployment con D1/R2 reales).
+
+1. Con un episodio convectivo real: las celdas aparecen en las posiciones esperadas, con tracks pasado/pronóstico orientados según el movimiento conocido. **Incluye confirmar la semántica deducida de las grabaciones** (decisión 25): `past` reciente→viejo y `movement_deg` convención "desde" — si la convención resulta otra, solo cambian `utils/overlay/tracks.ts` y su test canario.
+2. La tabla de celdas ordena por dBZ máx y sus valores (dBZ + altura) coinciden con el GAB del NST crudo (cotejo manual de 2–3 celdas; las celdas fuera de la paginación de 6 del GAB muestran "—", no un valor inventado).
+3. Charts de tendencia de una celda seguida ≥ 4 volúmenes: la serie es continua y coherente (sin saltos por confusión de `cell_id`), con huecos visibles donde el GAB no listó la celda.
+4. Markers de meso con anillo a escala (`radius_km`) y severidad por `strength_rank`; el flag TVS del NMD se refleja en el marker y en la tabla.
+5. VWP: barbas y tabla contra el tabular crudo del producto NVW del mismo volumen (dirección/velocidad por altura, 2–3 niveles cotejados a mano; los u/v derivados ya se validan contra el perfil grabado en `tests/unit/vwp-panel.spec.ts`).
+6. Join temporal (decisión 24): pisando frames N0B intermedios, el overlay muestra el volumen de fenómenos vecino (≤ 600 s) y se limpia con mensaje al salir de tolerancia — nunca celdas viejas presentadas como actuales.
 
 ## F5 — Mosaico + i18n + pulido
 

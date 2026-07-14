@@ -87,17 +87,24 @@ export const vwpDay = (() => {
   return { site, day, times: [...best[1]].sort() }
 })()
 
-/** Volumen con ≥1 mesociclón — caso e2e de markers meso/TVS. */
+/**
+ * Volumen con ≥1 mesociclón Y raster propio (mismo site+vol_time) — caso
+ * e2e de markers meso/TVS sobre un frame real. Un volumen con más mesos
+ * pero sin raster no sirve: no hay frame al que hacer deep link.
+ */
 export const mesoVolume = (() => {
+  const rasterVols = new Set(rasters.map(r => `${r.site_id}|${r.vol_time}`))
   const groups = new Map<string, Recorded<PhenomenonRow>[]>()
   for (const p of phenomena) {
     if (p.kind !== 'meso') continue
     const key = `${p.site_id}|${p.vol_time}`
     groups.set(key, [...(groups.get(key) ?? []), p])
   }
-  const best = [...groups.values()].sort((a, b) => b.length - a.length)[0]
-  if (!best) fail('ningún volumen grabado tiene mesociclones')
-  return { site: best[0]!.site_id, volTime: best[0]!.vol_time, rows: best }
+  const best = [...groups.entries()]
+    .filter(([key]) => rasterVols.has(key))
+    .sort((a, b) => b[1].length - a[1].length)[0]
+  if (!best) fail('ningún volumen con mesociclones tiene raster propio')
+  return { site: best[1][0]!.site_id, volTime: best[1][0]!.vol_time, rows: best[1] }
 })()
 
 /**

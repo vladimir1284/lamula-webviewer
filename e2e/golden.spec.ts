@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
-import { products, rasters } from '../tests/helpers/derive'
+import { mesoVolume, products, rasters } from '../tests/helpers/derive'
 
 const mnemonicOf = new Map(products.map(p => [p.code, p.mnemonic]))
 
@@ -55,4 +55,29 @@ test.describe('goldens visuales', () => {
       })
     })
   }
+
+  // F4: overlay de fenómenos sobre el volumen con mesociclones (celdas +
+  // tracks + meso/TVS). Vectorial puro sobre base apagada — determinista.
+  // Los goldens sin ?layers quedan intactos (default off).
+  test('overlay de fenómenos renderiza igual al golden', async ({ page }) => {
+    const row = rasters.find(
+      r => r.site_id === mesoVolume.site
+        && r.vol_time === mesoVolume.volTime
+        && existsSync(join(process.cwd(), 'tests/fixtures/cogs/r2', r.r2_key)),
+    )
+    test.skip(!row, 'el volumen con meso no tiene COG golden commiteado')
+
+    await page.goto(
+      `/${row!.site_id}/${row!.product_code}/${isoToPath(row!.vol_time)}?base=off&layers=cells,meso`,
+    )
+    const map = page.getByTestId('radar-map')
+    await expect(map).toHaveAttribute('data-raster-loaded', 'true', { timeout: 30_000 })
+    // además del settle del raster, las features llegan tras el fetch de
+    // fenómenos del cliente — esperar a que la capa vectorial tenga algo
+    await page.waitForTimeout(1500)
+
+    await expect(map).toHaveScreenshot(`${row!.site_id}-overlay.png`, {
+      maxDiffPixelRatio: 0.01,
+    })
+  })
 })
