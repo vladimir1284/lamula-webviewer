@@ -16,6 +16,8 @@ export interface Dal {
   listProducts(): Promise<Product[]>
   /** vol_times ascendentes de un (site, product) dentro de un día UTC. */
   listRasterTimes(site: string, productCode: number, day: string): Promise<string[]>
+  /** Metadata completa (batch) de un (site, product) dentro de un día UTC, ascendente — timeline y frames de animación en un solo request. */
+  listRasters(site: string, productCode: number, day: string): Promise<RasterMeta[]>
   /** Raster más cercano / siguiente estricto / anterior estricto a t. */
   findRaster(
     site: string,

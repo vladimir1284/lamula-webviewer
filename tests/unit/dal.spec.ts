@@ -58,6 +58,20 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     expect(await dal.listRasterTimes(series.site, 999, series.day)).toEqual([])
   })
 
+  it('listRasters: metadata completa del día, ascendente, coherente con listRasterTimes', async () => {
+    const rows = await dal.listRasters(series.site, series.product, series.day)
+    expect(rows.map(r => r.vol_time)).toEqual(series.times)
+    expect(rows.map(r => r.vol_time)).toEqual([...rows.map(r => r.vol_time)].sort())
+    for (const row of rows) {
+      expect(row.cog_url).toBe(`${R2_BASE}/${row.r2_key}`)
+    }
+  })
+
+  it('listRasters: día sin datos y producto desconocido → []', async () => {
+    expect(await dal.listRasters(series.site, series.product, '2000-01-01')).toEqual([])
+    expect(await dal.listRasters(series.site, 999, series.day)).toEqual([])
+  })
+
   it('closest: hit exacto devuelve ese volumen con cog_url resuelta', async () => {
     const target = series.rows[1]!
     const r = await dal.findRaster(series.site, series.product, target.vol_time, 'closest')
@@ -171,6 +185,7 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['listRadars', d => d.listRadars()],
     ['listProducts', d => d.listProducts()],
     ['listRasterTimes', d => d.listRasterTimes(series.site, series.product, series.day)],
+    ['listRasters', d => d.listRasters(series.site, series.product, series.day)],
     ['findRaster closest', d =>
       d.findRaster(series.site, series.product, shiftIso(series.times[1]!, -1), 'closest')],
     ['findRaster next', d => d.findRaster(series.site, series.product, series.times[0]!, 'next')],

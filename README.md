@@ -24,7 +24,7 @@ CI (`.github/workflows/ci.yml`): lint + typecheck + unit/contract + drift del sc
 
 ### Datos: DAL con dos adaptadores
 
-Las server routes (`/api/radars`, `/api/products`, `/api/rasters/{times,closest,next,prev}`, `/api/phenomena[/series]`, `/api/vwp`, `/api/health`) hablan con una interfaz única (`server/dal/`) con dos implementaciones:
+Las server routes (`/api/radars`, `/api/products`, `/api/rasters/{times,day,closest,next,prev}`, `/api/phenomena[/series]`, `/api/vwp`, `/api/health`) hablan con una interfaz única (`server/dal/`) con dos implementaciones:
 
 - **live** (por defecto): binding D1 `DB` (solo `SELECT`) + URLs de COG desde `rasters.r2_key` sobre `NUXT_PUBLIC_R2_BASE_URL`.
 - **fixture** (`NUXT_DAL_ADAPTER=fixture`): grabaciones commiteadas en `server/dal/fixtures/` — CI determinista y desarrollo offline. Re-grabar desde la D1 real: `bash scripts/record-fixtures.sh` (requiere `wrangler login` + `jq`).

@@ -38,6 +38,14 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
 
 17. **Solo lectura, por disciplina.** D1 no tiene roles: el contrato es que este proyecto solo ejecuta `SELECT` y las migraciones viven en `db/` del pipeline. Cualquier cambio de schema es una migración negociada allí.
 
+18. **Todo el estado de la interfaz con XState (v5 + `@xstate/vue`), URL como fuente de verdad.** Decisión tomada al arrancar F3, amplía el stack fijado y aplica retroactivamente a F2. Las máquinas viven en `machines/` (puras, testeables con `createActor` sin DOM); los componentes las consumen vía `useSelector`. La URL manda sobre lo compartible (`/{site}/{product}/{time}` + query): los cambios de ruta —incluido back/forward— entran a la máquina como eventos, y las transiciones que cambian la selección navegan como efecto (push/replace). Cada máquina se documenta con un diagrama Mermaid en [Máquinas de estado](maquinas-estado.md), actualizado en el mismo commit que toca la máquina.
+
+19. **Datetime compacto (`YYYYMMDDTHHMMSS`) en el path de la ruta, no el ISO con `:`.** El `:` del ISO es hostil a proxies/copy-paste; el formato compacto conserva el orden lexicográfico y su conversión con el ISO naive del contrato es 1:1 (`shared/url/time-path.ts`). Sin datetime en el path = vista live (closest a "ahora"), materializada con `replace` al `vol_time` resuelto en cuanto se conoce — la URL nunca queda apuntando a un instante que no sea exactamente el frame mostrado.
+
+20. **Huecos de la timeline: umbral relativo a la cadencia real, no fijo.** Un intervalo se marca como hueco cuando excede `max(2×mediana de los intervalos, 10 min)` (`utils/timeline/gaps.ts`). Un umbral fijo (p.ej. "todo intervalo > 10 min") marcaría huecos falsos en radares con cadencia lenta legítima; uno puramente relativo (solo 2×mediana) sería demasiado sensible en series muy densas. Con menos de 3 `vol_time` no hay señal suficiente para una mediana — no se computan huecos.
+
+21. **Animación: pool de una `WebGLTileLayer` por frame, no una sola capa con `setSource()`.** Verificado contra `ol` 10.9.0: `setSource()` dispone las texturas cacheadas de la capa (parpadeo en cada frame); N capas con el mismo `className`/zIndex contiguo comparten un solo contexto WebGL, así que el pool no choca con el límite de contextos del navegador. Prefetch en segundo plano se logra con `visible:true, opacity:0` (sí carga tiles, no se ve) y swap instantáneo cuando ya está en GPU. "Frame listo" se lee de `layer.getRenderer().renderComplete` (propiedad semi-pública del renderer, no de la API documentada de `ol`) — protegido por un test canario (`tests/unit/render-complete-canary.spec.ts`) que debe fallar primero si un upgrade de `ol` la renombra o la quita; el plan B documentado es volver a `rendercomplete` secuencial del mapa (más lento, 100% API pública).
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |

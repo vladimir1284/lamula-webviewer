@@ -60,15 +60,17 @@ Una sola aplicación **Nuxt 3** desplegada en **Cloudflare Pages** (preset `clou
 3. `ol/source/GeoTIFF` abre `https://<r2-público>/{r2_key}` — descarga solo los tiles/overviews del viewport (range requests).
 4. Estilo WebGL mapea nivel crudo → color con la paleta del producto; niveles 0 (nodata) y 1 (range folded) con tratamiento especial.
 5. Overlays (celdas, meso, TVS, VWP) llegan de `/api/phenomena` y `/api/vwp` por `(site, vol_time)` del raster mostrado.
-6. Timeline pide `/api/rasters/times?site&product&day` para poblar el slider; animación prefetchea los N frames siguientes.
+6. Timeline pide `/api/rasters/day?site&product&day` (metadata completa, batch, ascendente) para poblar el strip y alimentar el pool de frames de la animación; `/api/rasters/times` (solo vol_times) sigue disponible para consumidores que no necesitan la fila completa.
 
 ## Estado en URL
 
-- **Ruta**: `/{locale?}/{radar}/{product}/{datetime}` — lo compartible.
+- **Ruta**: `/{locale?}/{radar}/{product}/{datetime}` — lo compartible. El datetime va compacto (`YYYYMMDDTHHMMSS`, p.ej. `/AMX/153/20260711T031649`): el `:` del ISO es hostil a proxies/copy-paste; la conversión con el ISO naive del contrato es 1:1 (`shared/url/time-path.ts`). Sin datetime = vista live: se resuelve el closest a "ahora" y se materializa en la URL con `replace`.
 - **Query**: `?overlays=cells,tracks,meso&base=osm&opacity=0.8` — modificadores de vista.
 - **localStorage**: solo preferencias no compartibles (locale por defecto, última capa base).
 
 Una URL pegada en otro navegador reproduce la vista exacta (mismo frame, mismos overlays).
+
+La URL es la **fuente de verdad** del estado compartible: los cambios de ruta (incluido back/forward) entran a la máquina de estados de la página como eventos, y las transiciones que cambian la selección navegan como efecto — ver [Máquinas de estado](maquinas-estado.md) (decisión 18: XState para todo el estado de UI).
 
 ## Acceso a datos compartidos
 

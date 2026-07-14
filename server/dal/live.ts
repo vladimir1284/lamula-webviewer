@@ -5,6 +5,7 @@ import type {
   PhenomenonRow,
   Product,
   Radar,
+  RasterMeta,
   RasterRow,
   VwpLevel,
 } from '../../shared/contract'
@@ -54,6 +55,19 @@ export class LiveDal implements Dal {
       .bind(site, productCode, from, to)
       .all<{ vol_time: string }>()
     return results.map(r => r.vol_time)
+  }
+
+  async listRasters(site: string, productCode: number, day: string): Promise<RasterMeta[]> {
+    const { from, to } = dayRange(day)
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${RASTER_COLS} FROM rasters `
+        + 'WHERE site_id = ? AND product_code = ? AND vol_time >= ? AND vol_time < ? '
+        + 'ORDER BY vol_time',
+      )
+      .bind(site, productCode, from, to)
+      .all<RasterCols>()
+    return results.map(row => toRasterMeta(row, this.r2BaseUrl))
   }
 
   async findRaster(site: string, productCode: number, t: string, mode: RasterLookupMode) {
