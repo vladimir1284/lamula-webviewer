@@ -608,6 +608,33 @@ function onOpacityInput(event: Event) {
           />
         </ClientOnly>
       </main>
+
+      <SidePanel :panel="ctx.panel" @select="send({ type: 'SELECT_PANEL', panel: $event })">
+        <template #cells>
+          <CellTable
+            :phenomena="overlayCtx.phenomena"
+            :joined="overlayCtx.joined"
+            :selected-cell="ctx.cell"
+            @select="send({ type: 'SELECT_CELL', cellId: $event })"
+          />
+        </template>
+        <template #trend>
+          <TrendChart
+            :series="overlayCtx.series"
+            :cell-id="ctx.cell"
+            :error="overlayCtx.seriesError"
+          />
+        </template>
+        <template #vwp>
+          <VwpPanel
+            :profiles="overlayCtx.vwpProfiles"
+            :window="overlayCtx.vwpWindow"
+            :joined="overlayCtx.vwpJoined"
+            :error="overlayCtx.vwpError"
+            :empty="overlaySnapshot.matches({ vwp: 'empty' })"
+          />
+        </template>
+      </SidePanel>
     </div>
   </div>
 </template>
