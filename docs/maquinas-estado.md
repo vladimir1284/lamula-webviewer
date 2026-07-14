@@ -38,38 +38,40 @@ test canario antes de fiarse de este comportamiento.
 
 ```mermaid
 stateDiagram-v2
-    state "raster" as R {
-        [*] --> r_init
-        r_init --> r_shown: initialRaster ≠ null
-        r_init --> r_empty: closest SSR dio 404
-        r_init --> r_error: fallo del closest SSR
-        r_loading --> r_shown: fetchClosest → raster
-        r_loading --> r_empty: fetchClosest → 404
-        r_loading --> r_error: fetchClosest falla
-        r_shown --> r_loading: ROUTE_CHANGED ¬sameFrame
-        r_empty --> r_loading: ROUTE_CHANGED ¬sameFrame
-        r_error --> r_loading: ROUTE_CHANGED ¬sameFrame
-        r_loading --> r_loading: ROUTE_CHANGED ¬sameFrame (cancela el fetch en vuelo)
-        r_shown --> r_steppingNext: STEP +1 (sin vecino local)
-        r_shown --> r_steppingPrev: STEP -1 (sin vecino local)
-        r_steppingNext --> r_shown: fetchStep → raster (navigate replace) / 404 (atEnd)
-        r_steppingPrev --> r_shown: fetchStep → raster (navigate replace) / 404 (atStart)
-    }
-    --
-    state "timeline" as T {
-        [*] --> t_init
-        t_init --> t_ready: initialTimes.length > 0
-        t_init --> t_empty: initialTimes vacío
-        t_init --> t_error: fallo del /api/rasters/day SSR
-        t_loading --> t_ready: fetchDay → times
-        t_loading --> t_empty: fetchDay → []
-        t_loading --> t_error: fetchDay falla
-        t_ready --> t_loading: ROUTE_CHANGED ¬sameDay
-        t_empty --> t_loading: ROUTE_CHANGED ¬sameDay
-        t_ready --> t_jumping: SELECT_DAY ¬sameDaySelected
-        t_empty --> t_jumping: SELECT_DAY ¬sameDaySelected
-        t_jumping --> t_ready: fetchDay → times (+ navigate push al último vol_time)
-        t_jumping --> t_empty: fetchDay → [] (sin frame al que saltar, la URL no cambia)
+    state "viewerMachine" as VM {
+        state "raster" as R {
+            [*] --> r_init
+            r_init --> r_shown: initialRaster ≠ null
+            r_init --> r_empty: closest SSR dio 404
+            r_init --> r_error: fallo del closest SSR
+            r_loading --> r_shown: fetchClosest → raster
+            r_loading --> r_empty: fetchClosest → 404
+            r_loading --> r_error: fetchClosest falla
+            r_shown --> r_loading: ROUTE_CHANGED ¬sameFrame
+            r_empty --> r_loading: ROUTE_CHANGED ¬sameFrame
+            r_error --> r_loading: ROUTE_CHANGED ¬sameFrame
+            r_loading --> r_loading: ROUTE_CHANGED ¬sameFrame (cancela el fetch en vuelo)
+            r_shown --> r_steppingNext: STEP +1 (sin vecino local)
+            r_shown --> r_steppingPrev: STEP -1 (sin vecino local)
+            r_steppingNext --> r_shown: fetchStep → raster (navigate replace) / 404 (atEnd)
+            r_steppingPrev --> r_shown: fetchStep → raster (navigate replace) / 404 (atStart)
+        }
+        --
+        state "timeline" as T {
+            [*] --> t_init
+            t_init --> t_ready: initialTimes.length > 0
+            t_init --> t_empty: initialTimes vacío
+            t_init --> t_error: fallo del /api/rasters/day SSR
+            t_loading --> t_ready: fetchDay → times
+            t_loading --> t_empty: fetchDay → []
+            t_loading --> t_error: fetchDay falla
+            t_ready --> t_loading: ROUTE_CHANGED ¬sameDay
+            t_empty --> t_loading: ROUTE_CHANGED ¬sameDay
+            t_ready --> t_jumping: SELECT_DAY ¬sameDaySelected
+            t_empty --> t_jumping: SELECT_DAY ¬sameDaySelected
+            t_jumping --> t_ready: fetchDay → times (+ navigate push al último vol_time)
+            t_jumping --> t_empty: fetchDay → [] (sin frame al que saltar, la URL no cambia)
+        }
     }
 ```
 
@@ -126,50 +128,52 @@ el `volTime` que `frame` asignó en el mismo micropaso.
 
 ```mermaid
 stateDiagram-v2
-    state "index — índices del día (fetchTimes)" as I {
-        [*] --> i_idle
-        i_idle --> i_loading: SET_ACTIVE con algo activo e índice sin cargar
-        i_loading --> i_ready: phen+vwp times (raise INDEX_READY)
-        i_loading --> i_error: fetchTimes falla
-        i_ready --> i_deciding: SET_SCOPE (limpia todo)
-        i_deciding --> i_loading: algo sigue activo
-        i_deciding --> i_idle: nada activo
-    }
-    --
-    state "frame — fenómenos del frame mostrado" as F {
-        [*] --> f_idle
-        f_idle --> f_join: SET_TIME / SET_ACTIVE / INDEX_READY (activo + índice cargado)
-        f_join --> f_noData: joined = null (nada ≤ tolerancia)
-        f_join --> f_resolved: cache hit por vol_time
-        f_join --> f_fetching: volumen casado sin cache
-        f_fetching --> f_resolved: fetchPhenomena → filas (cachea)
-        f_fetching --> f_error: fetchPhenomena falla
-        f_resolved --> f_shown: filas > 0
-        f_resolved --> f_noData: volumen sin fenómenos (joined presente)
-        f_shown --> f_join: SET_TIME (reentra, last-wins)
-        f_noData --> f_join: SET_TIME
-        f_shown --> f_idle: SET_ACTIVE sin capas ni panel de celdas / SET_SCOPE
-    }
-    --
-    state "series — tendencia por cell_id" as S {
-        [*] --> s_idle
-        s_idle --> s_loading: SELECT_CELL(id)
-        s_loading --> s_shown: fetchSeries → serie
-        s_loading --> s_error: fetchSeries falla
-        s_shown --> s_idle: SELECT_CELL(null) / SET_SCOPE
-        s_shown --> s_loading: SELECT_CELL(otro id)
-    }
-    --
-    state "vwp — perfiles del día (solo panel=vwp)" as V {
-        [*] --> v_idle
-        v_idle --> v_sync: SET_ACTIVE panel=vwp / INDEX_READY / SET_TIME
-        v_sync --> v_empty: sin perfiles hasta el frame
-        v_sync --> v_shown: ventana completa en cache
-        v_sync --> v_loading: faltan perfiles
-        v_loading --> v_shown: fetchVwp (batch de los que faltan)
-        v_loading --> v_error: fetchVwp falla
-        v_shown --> v_sync: SET_TIME (recalcula ventana/joined)
-        v_shown --> v_idle: SET_ACTIVE panel≠vwp / SET_SCOPE
+    state "overlayMachine" as OM {
+        state "index — índices del día (fetchTimes)" as I {
+            [*] --> i_idle
+            i_idle --> i_loading: SET_ACTIVE con algo activo e índice sin cargar
+            i_loading --> i_ready: phen+vwp times (raise INDEX_READY)
+            i_loading --> i_error: fetchTimes falla
+            i_ready --> i_deciding: SET_SCOPE (limpia todo)
+            i_deciding --> i_loading: algo sigue activo
+            i_deciding --> i_idle: nada activo
+        }
+        --
+        state "frame — fenómenos del frame mostrado" as F {
+            [*] --> f_idle
+            f_idle --> f_join: SET_TIME / SET_ACTIVE / INDEX_READY (activo + índice cargado)
+            f_join --> f_noData: joined = null (nada ≤ tolerancia)
+            f_join --> f_resolved: cache hit por vol_time
+            f_join --> f_fetching: volumen casado sin cache
+            f_fetching --> f_resolved: fetchPhenomena → filas (cachea)
+            f_fetching --> f_error: fetchPhenomena falla
+            f_resolved --> f_shown: filas > 0
+            f_resolved --> f_noData: volumen sin fenómenos (joined presente)
+            f_shown --> f_join: SET_TIME (reentra, last-wins)
+            f_noData --> f_join: SET_TIME
+            f_shown --> f_idle: SET_ACTIVE sin capas ni panel de celdas / SET_SCOPE
+        }
+        --
+        state "series — tendencia por cell_id" as S {
+            [*] --> s_idle
+            s_idle --> s_loading: SELECT_CELL(id)
+            s_loading --> s_shown: fetchSeries → serie
+            s_loading --> s_error: fetchSeries falla
+            s_shown --> s_idle: SELECT_CELL(null) / SET_SCOPE
+            s_shown --> s_loading: SELECT_CELL(otro id)
+        }
+        --
+        state "vwp — perfiles del día (solo panel=vwp)" as V {
+            [*] --> v_idle
+            v_idle --> v_sync: SET_ACTIVE panel=vwp / INDEX_READY / SET_TIME
+            v_sync --> v_empty: sin perfiles hasta el frame
+            v_sync --> v_shown: ventana completa en cache
+            v_sync --> v_loading: faltan perfiles
+            v_loading --> v_shown: fetchVwp (batch de los que faltan)
+            v_loading --> v_error: fetchVwp falla
+            v_shown --> v_sync: SET_TIME (recalcula ventana/joined)
+            v_shown --> v_idle: SET_ACTIVE panel≠vwp / SET_SCOPE
+        }
     }
 ```
 
