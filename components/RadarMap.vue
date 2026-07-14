@@ -23,11 +23,12 @@ import Stroke from 'ol/style/Stroke'
 import Style from 'ol/style/Style'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
-import type { Radar, RasterMeta } from '#shared/contract'
+import type { Phenomenon, Radar, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
 import { FramePool } from '../utils/map/frame-pool'
+import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
 
@@ -41,7 +42,10 @@ const props = withDefaults(defineProps<{
   opacity: number
   /** apagar la base OSM (goldens visuales: fondo determinista) */
   showBase?: boolean
-}>(), { showBase: true, frames: null, activeFrame: 0 })
+  /** overlay de fenómenos del frame mostrado, ya filtrado por capas activas (F4) */
+  phenomena?: Phenomenon[] | null
+  selectedCell?: string | null
+}>(), { showBase: true, frames: null, activeFrame: 0, phenomena: null, selectedCell: null })
 
 const emit = defineEmits<{
   cursor: [sample: CursorSample | null]
@@ -49,6 +53,7 @@ const emit = defineEmits<{
   frameReady: [index: number]
   frameError: [index: number, message: string]
   moveEnd: []
+  selectCell: [cellId: string]
 }>()
 
 const container = ref<HTMLDivElement>()
@@ -58,6 +63,8 @@ let baseLayer: TileLayer<OSM> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
 let pool: FramePool | undefined // modo animación
 const coverageSource = new VectorSource()
+const phenomenaSource = new VectorSource()
+let phenomenaLayer: VectorLayer<VectorSource> | undefined
 
 const animationMode = () => Array.isArray(props.frames) && props.frames.length > 0
 
@@ -76,6 +83,19 @@ function updateCoverage() {
   coverageSource.clear()
   const circle = circular([props.radar.lon, props.radar.lat], coverageRadiusM(), 128)
   coverageSource.addFeature(new Feature(circle.transform('EPSG:4326', 'EPSG:3857')))
+}
+
+// ── Overlay de fenómenos (F4) ────────────────────────────────────────────
+// Capa vectorial independiente del modo estático/pool: en animación las
+// features del volumen casado se actualizan por props sin tocar el raster.
+
+function updatePhenomena() {
+  phenomenaSource.clear()
+  if (!map || !props.phenomena || props.phenomena.length === 0) return
+  const projCode = registerRadarProjection(props.radar.site_id, props.radar.proj4)
+  phenomenaSource.addFeatures(
+    buildPhenomenaFeatures(props.phenomena, props.selectedCell ?? null, projCode),
+  )
 }
 
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
@@ -165,6 +185,14 @@ onMounted(() => {
         zIndex: 10,
         style: new Style({ stroke: new Stroke({ color: 'rgba(148,163,184,0.9)', width: 1.5 }) }),
       }),
+      (phenomenaLayer = new VectorLayer({
+        source: phenomenaSource,
+        zIndex: 20,
+        // labels de cell_id con 100+ celdas: declutter sacrifica labels
+        // solapados antes que markers
+        declutter: true,
+        style: overlayStyle,
+      })),
     ],
     view: new View({
       center: fromLonLat([props.radar.lon, props.radar.lat]),
@@ -194,8 +222,19 @@ onMounted(() => {
     if (animationMode()) pool?.invalidateInactive()
     emit('moveEnd')
   })
+  // click en el marker de una celda → seleccionar (las líneas de track y
+  // los anillos meso no son objetivo de click)
+  map.on('singleclick', (evt) => {
+    const cellId = map!.forEachFeatureAtPixel(
+      evt.pixel,
+      f => (f.get('f4') === 'cell' ? (f.get('cellId') as string | null) ?? undefined : undefined),
+      { layerFilter: l => l === phenomenaLayer, hitTolerance: 6 },
+    )
+    if (cellId) emit('selectCell', cellId)
+  })
 
   updateCoverage()
+  updatePhenomena()
   if (animationMode()) initOrUpdatePool()
   else updateRasterLayer()
 })
@@ -232,6 +271,8 @@ watch(() => props.activeFrame, (i) => {
   pool.activate(i)
   rasterLoaded.value = pool.isReady(i) ? 'true' : 'false'
 })
+
+watch(() => [props.phenomena, props.selectedCell], updatePhenomena)
 
 watch(() => props.opacity, (o) => {
   rasterLayer?.setOpacity(o)

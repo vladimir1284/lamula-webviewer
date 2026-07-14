@@ -11,6 +11,12 @@ Playwright (`e2e/golden.spec.ts`) los sirven con `scripts/serve-cogs.mjs`
 (CORS + Range) apuntando `NUXT_PUBLIC_R2_BASE_URL` ahí: corren 100 % offline.
 Baselines en `e2e/golden.spec.ts-snapshots/` (commiteados).
 
+**Excepción F4:** `BYX/{DVL,N0B}/…_030818.tif` — `2026-07-11T03:08:18` es el
+único vol_time de las fixtures con raster + celdas + mesociclón + VWP
+simultáneos (los 4 meso grabados son de BYX), así que es el caso e2e/golden de
+fenómenos. Para BYX|N0B no es la fila más reciente (esa es 03:15:20, que sigue
+404 offline por diseño).
+
 Tras re-grabar fixtures (`scripts/record-fixtures.sh`): re-descargar del
 dominio público (`curl https://nexrad-raster.ladetec.com/<r2_key> -o
 tests/fixtures/cogs/r2/<r2_key>` para la fila más reciente de cada serie) y

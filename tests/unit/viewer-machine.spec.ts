@@ -36,6 +36,9 @@ const routeAt = (patch: Partial<ViewerRouteState> = {}): ViewerRouteState => ({
   time: T0,
   opacity: 0.8,
   base: 'osm',
+  layers: [],
+  panel: null,
+  cell: null,
   ...patch,
 })
 
@@ -54,6 +57,7 @@ function boot(opts: {
   const navigate = vi.fn()
   const persistPrefs = vi.fn()
   const syncQuery = vi.fn()
+  const syncOverlayQuery = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
   const fetchDay = vi.fn(opts.fetchDay ?? (async () => []))
   const fetchStep = vi.fn(opts.fetchStep ?? (async () => null))
@@ -78,12 +82,13 @@ function boot(opts: {
         navigate: (_, params) => navigate(params),
         persistPrefs: (_, params) => persistPrefs(params),
         syncQuery: (_, params) => syncQuery(params),
+        syncOverlayQuery: (_, params) => syncOverlayQuery(params),
       },
     }),
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch, fetchDay, fetchStep, persistPrefs, syncQuery }
+  return { actor, navigate, fetch, fetchDay, fetchStep, persistPrefs, syncQuery, syncOverlayQuery }
 }
 
 describe('viewerMachine — región raster: estado inicial (SSR)', () => {
@@ -373,6 +378,56 @@ describe('viewerMachine — eventos de UI', () => {
       base: 'osm',
     })
     expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.4, base: 'osm' })
+  })
+})
+
+describe('viewerMachine — overlays (D23)', () => {
+  it('TOGGLE_LAYER añade y quita la capa con replace de query', () => {
+    const { actor, syncOverlayQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    expect(actor.getSnapshot().context.layers).toEqual(['cells'])
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['cells'], panel: null, cell: null })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'meso' })
+    expect(actor.getSnapshot().context.layers).toEqual(['cells', 'meso'])
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    expect(actor.getSnapshot().context.layers).toEqual(['meso'])
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['meso'], panel: null, cell: null })
+  })
+
+  it('SELECT_PANEL abre y cierra el panel', () => {
+    const { actor, syncOverlayQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SELECT_PANEL', panel: 'vwp' })
+    expect(actor.getSnapshot().context.panel).toBe('vwp')
+    actor.send({ type: 'SELECT_PANEL', panel: null })
+    expect(actor.getSnapshot().context.panel).toBeNull()
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: null, cell: null })
+  })
+
+  it('SELECT_CELL con panel cerrado abre la tendencia; con panel abierto lo respeta', () => {
+    const { actor, syncOverlayQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SELECT_CELL', cellId: 'D4' })
+    expect(actor.getSnapshot().context.cell).toBe('D4')
+    expect(actor.getSnapshot().context.panel).toBe('trend')
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: 'trend', cell: 'D4' })
+
+    actor.send({ type: 'SELECT_PANEL', panel: 'cells' })
+    actor.send({ type: 'SELECT_CELL', cellId: 'A1' })
+    expect(actor.getSnapshot().context.panel).toBe('cells')
+    actor.send({ type: 'SELECT_CELL', cellId: null })
+    expect(actor.getSnapshot().context.cell).toBeNull()
+    expect(actor.getSnapshot().context.panel).toBe('cells')
+  })
+
+  it('el raster no reparpadea al cambiar solo la query de overlays (sameFrame)', () => {
+    const { actor, fetch } = boot({ initialRaster: meta(T0) })
+    actor.send({
+      type: 'ROUTE_CHANGED',
+      route: routeAt({ layers: ['cells'], panel: 'cells' }),
+    })
+    expect(actor.getSnapshot().matches({ raster: 'shown' })).toBe(true)
+    expect(actor.getSnapshot().context.layers).toEqual(['cells'])
+    expect(actor.getSnapshot().context.panel).toBe('cells')
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
 

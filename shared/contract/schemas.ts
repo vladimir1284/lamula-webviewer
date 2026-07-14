@@ -92,6 +92,11 @@ export const zSiteProductTime = z.object({
   t: zIsoNaive,
 })
 
+export const zSiteDay = z.object({
+  site: zSiteId,
+  day: zDay,
+})
+
 export const zSiteVolTime = z.object({
   site: zSiteId,
   vol_time: zIsoNaive,

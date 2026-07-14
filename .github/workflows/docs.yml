@@ -22,6 +22,10 @@ jobs:
       - name: Build site
         run: uvx --with mkdocs-material==9.* mkdocs build --strict
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:

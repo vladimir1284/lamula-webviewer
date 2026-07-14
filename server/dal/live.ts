@@ -95,6 +95,18 @@ export class LiveDal implements Dal {
     return row ? toRasterMeta(row, this.r2BaseUrl) : null
   }
 
+  async listPhenomenaTimes(site: string, day: string): Promise<string[]> {
+    const { from, to } = dayRange(day)
+    const { results } = await this.db
+      .prepare(
+        'SELECT DISTINCT vol_time FROM phenomena '
+        + 'WHERE site_id = ? AND vol_time >= ? AND vol_time < ? ORDER BY vol_time',
+      )
+      .bind(site, from, to)
+      .all<{ vol_time: string }>()
+    return results.map(r => r.vol_time)
+  }
+
   async listPhenomena(site: string, volTime: string): Promise<Phenomenon[]> {
     const { results } = await this.db
       .prepare(
@@ -115,6 +127,18 @@ export class LiveDal implements Dal {
       .bind(site, cellId)
       .all<PhenomenonRow>()
     return results.map(toPhenomenon)
+  }
+
+  async listVwpTimes(site: string, day: string): Promise<string[]> {
+    const { from, to } = dayRange(day)
+    const { results } = await this.db
+      .prepare(
+        'SELECT DISTINCT vol_time FROM vwp '
+        + 'WHERE site_id = ? AND vol_time >= ? AND vol_time < ? ORDER BY vol_time',
+      )
+      .bind(site, from, to)
+      .all<{ vol_time: string }>()
+    return results.map(r => r.vol_time)
   }
 
   async listVwp(site: string, volTime: string): Promise<VwpLevel[]> {

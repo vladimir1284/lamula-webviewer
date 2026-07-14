@@ -61,6 +61,82 @@ export const phenVolume = (() => {
   return { site: best[0]!.site_id, volTime: best[0]!.vol_time, rows: best }
 })()
 
+/** (site, día UTC) con más volúmenes de fenómenos — para el índice de times. */
+export const phenDay = (() => {
+  const groups = new Map<string, Set<string>>()
+  for (const p of phenomena) {
+    const key = `${p.site_id}|${p.vol_time.slice(0, 10)}`
+    groups.set(key, (groups.get(key) ?? new Set()).add(p.vol_time))
+  }
+  const best = [...groups.entries()].sort((a, b) => b[1].size - a[1].size)[0]
+  if (!best) fail('no hay fenómenos grabados')
+  const [site, day] = best[0].split('|') as [string, string]
+  return { site, day, times: [...best[1]].sort() }
+})()
+
+/** (site, día UTC) con más volúmenes VWP — para el índice de times. */
+export const vwpDay = (() => {
+  const groups = new Map<string, Set<string>>()
+  for (const v of vwp) {
+    const key = `${v.site_id}|${v.vol_time.slice(0, 10)}`
+    groups.set(key, (groups.get(key) ?? new Set()).add(v.vol_time))
+  }
+  const best = [...groups.entries()].sort((a, b) => b[1].size - a[1].size)[0]
+  if (!best) fail('no hay VWP grabado')
+  const [site, day] = best[0].split('|') as [string, string]
+  return { site, day, times: [...best[1]].sort() }
+})()
+
+/**
+ * Volumen con ≥1 mesociclón Y raster propio (mismo site+vol_time) — caso
+ * e2e de markers meso/TVS sobre un frame real. Un volumen con más mesos
+ * pero sin raster no sirve: no hay frame al que hacer deep link.
+ */
+export const mesoVolume = (() => {
+  const rasterVols = new Set(rasters.map(r => `${r.site_id}|${r.vol_time}`))
+  const groups = new Map<string, Recorded<PhenomenonRow>[]>()
+  for (const p of phenomena) {
+    if (p.kind !== 'meso') continue
+    const key = `${p.site_id}|${p.vol_time}`
+    groups.set(key, [...(groups.get(key) ?? []), p])
+  }
+  const best = [...groups.entries()]
+    .filter(([key]) => rasterVols.has(key))
+    .sort((a, b) => b[1].length - a[1].length)[0]
+  if (!best) fail('ningún volumen con mesociclones tiene raster propio')
+  return { site: best[1][0]!.site_id, volTime: best[1][0]!.vol_time, rows: best[1] }
+})()
+
+/**
+ * Frame raster SIN fila de fenómenos exacta pero con volumen de fenómenos
+ * vecino dentro de la tolerancia — ejercita el join temporal (D24).
+ */
+export const JOIN_TOLERANCE_S = 600
+export const joinCase = (() => {
+  const phenTimes = new Map<string, string[]>()
+  for (const p of phenomena) {
+    phenTimes.set(p.site_id, [...(phenTimes.get(p.site_id) ?? []), p.vol_time])
+  }
+  for (const r of rasters) {
+    const times = phenTimes.get(r.site_id)
+    if (!times || times.includes(r.vol_time)) continue
+    const t = Date.parse(`${r.vol_time}Z`)
+    const nearest = times
+      .map(v => ({ v, d: Math.abs(Date.parse(`${v}Z`) - t) }))
+      .sort((a, b) => a.d - b.d)[0]!
+    if (nearest.d <= JOIN_TOLERANCE_S * 1000) {
+      return {
+        site: r.site_id,
+        product: r.product_code,
+        rasterVolTime: r.vol_time,
+        phenVolTime: nearest.v,
+        deltaS: nearest.d / 1000,
+      }
+    }
+  }
+  fail(`ningún raster sin fila de fenómenos exacta con vecino ≤${JOIN_TOLERANCE_S}s`)
+})()
+
 /** cell_id presente en más volúmenes — para la serie de tendencia. */
 export const trackedCell = (() => {
   const groups = new Map<string, Set<string>>()
