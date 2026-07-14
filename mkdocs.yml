@@ -43,4 +43,5 @@ nav:
   - Contrato de datos: contrato.md
   - Máquinas de estado: maquinas-estado.md
   - Plan de implementación: plan-implementacion.md
+  - Estrategia de pruebas: pruebas.md
   - Validaciones manuales: validaciones.md
