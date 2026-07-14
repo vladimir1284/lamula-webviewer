@@ -199,7 +199,7 @@ onMounted(() => {
         source: coverageSource,
         zIndex: 10,
         style: new Style({
-          fill: new Fill({ color: 'rgba(15, 23, 42, 1)' }),
+          fill: new Fill({ color: 'rgba(15, 23, 42, 0.1)' }),
         }),
       }),
       (phenomenaLayer = new VectorLayer({
