@@ -2,12 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
-import type { RasterMeta } from '#shared/contract'
+import type { Phenomenon, RasterMeta, VwpLevel } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
+import { overlayMachine } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
-import type { NavigateParams, PrefsParams } from '../../../machines/viewer'
+import type { NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
 
@@ -84,6 +85,16 @@ function syncQuery(params: { opacity: number, base: 'osm' | 'off' }) {
 }
 onBeforeUnmount(() => clearTimeout(queryTimer))
 
+// toggles de overlays (D23): replace inmediato, sin debounce — acciones
+// discretas; ausencia en la query = default off (URLs de F3 intactas)
+function syncOverlayQuery(params: OverlayQueryParams) {
+  const patch = overlayQueryPatch(params)
+  const query = Object.fromEntries(
+    Object.entries({ ...route.query, ...patch }).filter(([, v]) => v !== undefined),
+  )
+  router.replace({ query })
+}
+
 const machine = viewerMachine.provide({
   actors: {
     fetchClosest: fromPromise(async ({ input }) => {
@@ -120,6 +131,7 @@ const machine = viewerMachine.provide({
     navigate: (_, params: NavigateParams) => navigate(params.patch, params.mode),
     persistPrefs: (_, params: PrefsParams) => savePrefs(params),
     syncQuery: (_, params: { opacity: number, base: 'osm' | 'off' }) => syncQuery(params),
+    syncOverlayQuery: (_, params: OverlayQueryParams) => syncOverlayQuery(params),
   },
 })
 
@@ -266,6 +278,92 @@ const animBufferReady = computed(() =>
   animSnapshot.value.context.frames.filter(f => f.getSnapshot().matches('ready')).length,
 )
 const animBufferTotal = computed(() => animSnapshot.value.context.frames.length)
+
+// ── Overlays de fenómenos + VWP (F4) ─────────────────────────────────────
+// overlayMachine arranca idle sin fetch (SSR-safe); la activación llega por
+// los watchers post-mount. El vol_time efectivo mostrado es el del pool en
+// animación y el del raster resuelto en estático.
+const { snapshot: overlaySnapshot, send: overlaySend } = useActor(
+  overlayMachine.provide({
+    actors: {
+      fetchTimes: fromPromise(async ({ input }) => {
+        const query = { site: input.site, day: input.day }
+        const [phen, vwp] = await Promise.all([
+          $fetch<string[]>('/api/phenomena/times', { query }),
+          $fetch<string[]>('/api/vwp/times', { query }),
+        ])
+        return { phen, vwp }
+      }),
+      fetchPhenomena: fromPromise(async ({ input }) =>
+        $fetch<Phenomenon[]>('/api/phenomena', {
+          query: { site: input.site, vol_time: input.volTime },
+        }),
+      ),
+      fetchSeries: fromPromise(async ({ input }) =>
+        $fetch<Phenomenon[]>('/api/phenomena/series', {
+          query: { site: input.site, cell_id: input.cellId },
+        }),
+      ),
+      fetchVwp: fromPromise(async ({ input }) => {
+        const entries = await Promise.all(
+          input.volTimes.map(async t => [
+            t,
+            await $fetch<VwpLevel[]>('/api/vwp', { query: { site: input.site, vol_time: t } }),
+          ] as const),
+        )
+        return Object.fromEntries(entries)
+      }),
+    },
+  }),
+  { input: { site: initialRoute.site, day: dayInitial } },
+)
+const overlayCtx = computed(() => overlaySnapshot.value.context)
+
+const displayedVolTime = computed(() =>
+  animationEngaged.value ? animCurrentVolTime.value : raster.value?.vol_time ?? null,
+)
+
+onMounted(() => {
+  overlaySend({ type: 'SET_TIME', volTime: displayedVolTime.value })
+  overlaySend({ type: 'SET_ACTIVE', layers: ctx.value.layers, panel: ctx.value.panel })
+  if (ctx.value.cell !== null) overlaySend({ type: 'SELECT_CELL', cellId: ctx.value.cell })
+})
+watch([() => ctx.value.site, () => ctx.value.day], ([site, day]) => {
+  overlaySend({ type: 'SET_SCOPE', site, day })
+})
+watch(displayedVolTime, volTime => overlaySend({ type: 'SET_TIME', volTime }))
+watch([() => ctx.value.layers, () => ctx.value.panel], ([layers, panel]) => {
+  overlaySend({ type: 'SET_ACTIVE', layers, panel })
+})
+watch(() => ctx.value.cell, cellId => overlaySend({ type: 'SELECT_CELL', cellId }))
+
+// filas del volumen casado, filtradas por capas activas (el mapa no decide)
+const overlayPhenomena = computed(() => {
+  const rows = overlayCtx.value.phenomena
+  if (!rows || ctx.value.layers.length === 0) return null
+  const wantCells = ctx.value.layers.includes('cells')
+  const wantMeso = ctx.value.layers.includes('meso')
+  return rows.filter(p =>
+    (p.kind === 'storm_cell' && wantCells) || (p.kind === 'meso' && wantMeso),
+  )
+})
+// el volumen de fenómenos mostrado no es (necesariamente) el del raster
+const overlayJoinInfo = computed(() => {
+  if (ctx.value.layers.length === 0) return null
+  if (overlaySnapshot.value.matches({ frame: 'noData' })) {
+    return overlayCtx.value.joined === null
+      ? 'Sin datos de celdas cerca de este instante.'
+      : 'Sin fenómenos detectados en este volumen.'
+  }
+  if (overlaySnapshot.value.matches({ frame: 'error' })) {
+    return `Error consultando fenómenos: ${overlayCtx.value.frameError}`
+  }
+  return null
+})
+
+function onToggleLayer(layer: 'cells' | 'meso') {
+  send({ type: 'TOGGLE_LAYER', layer })
+}
 
 const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
@@ -419,6 +517,35 @@ function onOpacityInput(event: Event) {
           {{ ctx.cogError }}
         </p>
 
+        <fieldset class="rounded bg-slate-800 p-3 text-sm">
+          <legend class="px-1 text-slate-400">Fenómenos</legend>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="layer-toggle-cells"
+              :checked="ctx.layers.includes('cells')"
+              @change="onToggleLayer('cells')"
+            >
+            <span>Celdas de tormenta</span>
+          </label>
+          <label class="mt-1 flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="layer-toggle-meso"
+              :checked="ctx.layers.includes('meso')"
+              @change="onToggleLayer('meso')"
+            >
+            <span>Mesociclones / TVS</span>
+          </label>
+          <p
+            v-if="overlayJoinInfo"
+            data-testid="overlay-info"
+            class="mt-2 text-xs text-slate-400"
+          >
+            {{ overlayJoinInfo }}
+          </p>
+        </fieldset>
+
         <DayPicker
           v-if="availableDays.length > 0"
           :days="availableDays"
@@ -470,6 +597,9 @@ function onOpacityInput(event: Event) {
             :product-def="productDef"
             :opacity="ctx.opacity"
             :show-base="ctx.base !== 'off'"
+            :phenomena="overlayPhenomena"
+            :selected-cell="ctx.cell"
+            @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"
             @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"

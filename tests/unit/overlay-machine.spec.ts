@@ -39,7 +39,7 @@ function vwpLevel(volTime: string, heightFt: number): VwpLevel {
 function boot(opts: {
   phenTimes?: string[]
   vwpTimes?: string[]
-  fetchTimes?: () => Promise<{ phen: string[], vwp: string[] }>
+  fetchTimes?: (i: { site: string, day: string }) => Promise<{ phen: string[], vwp: string[] }>
   fetchPhenomena?: (i: { site: string, volTime: string }) => Promise<Phenomenon[]>
   fetchSeries?: (i: { site: string, cellId: string }) => Promise<Phenomenon[]>
   fetchVwp?: (i: { site: string, volTimes: string[] }) => Promise<Record<string, VwpLevel[]>>
@@ -54,7 +54,7 @@ function boot(opts: {
   const fetchSeries = vi.fn(opts.fetchSeries ?? (async ({ cellId }) => [phen(PT[0]!, cellId)]))
   const fetchVwp = vi.fn(
     opts.fetchVwp
-    ?? (async ({ volTimes }) =>
+    ?? (async ({ volTimes }: { site: string, volTimes: string[] }) =>
       Object.fromEntries(volTimes.map(t => [t, [vwpLevel(t, 1000)]]))),
   )
   const actor = createActor(
