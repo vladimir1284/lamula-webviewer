@@ -17,6 +17,7 @@ const DEFAULT_BASE = 'osm' as const
 const QUERY_SYNC_DEBOUNCE_MS = 300
 
 definePageMeta({
+  key: route => route.params.site as string,
   // params malformados → 404 de Nuxt (corre también en SSR). La validez
   // semántica de la fecha (mes 13, hora 25) se resuelve abajo con pathToIso.
   validate(route) {

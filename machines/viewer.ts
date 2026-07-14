@@ -185,8 +185,8 @@ export const viewerMachine = setup({
     sameFrame: ({ context }, route: ViewerRouteState) =>
       route.site === context.site
       && route.product === context.product
-      && (route.time === context.time
-        || (route.time !== null && route.time === context.raster?.vol_time)),
+      && route.time !== null
+      && route.time === context.raster?.vol_time,
     /** el día objetivo de la timeline no cambia — evita refetch al hacer stepping dentro del mismo día */
     sameDay: ({ context }, route: ViewerRouteState) =>
       route.site === context.site
@@ -331,6 +331,32 @@ export const viewerMachine = setup({
           {
             guard: { type: 'sameFrame', params: ({ event }) => event.route },
             actions: [assignRoute, persistRouteParams],
+          },
+          {
+            target: '.shown',
+            guard: ({ context, event }) => {
+              const { route } = event as Extract<ViewerEvent, { type: 'ROUTE_CHANGED' }>
+              return route.site === context.site
+                && route.product === context.product
+                && route.time !== null
+                && context.times.some(r => r.vol_time === route.time)
+            },
+            actions: [
+              assignRoute,
+              persistRouteParams,
+              assign(({ context, event }) => {
+                const { route } = event as Extract<ViewerEvent, { type: 'ROUTE_CHANGED' }>
+                const targetRaster = context.times.find(r => r.vol_time === route.time)!
+                return {
+                  raster: targetRaster,
+                  rasterError: null,
+                  cogError: '',
+                  cursor: null,
+                  atStart: false,
+                  atEnd: false,
+                }
+              }),
+            ],
           },
           {
             target: '.loading',
