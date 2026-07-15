@@ -7,9 +7,13 @@
 import { computed } from 'vue'
 import type { VwpLevel } from '#shared/contract'
 import { linearScale } from '../utils/charts/scale'
+import type { ClockPref } from '../utils/time-display'
+import { formatHhmm } from '../utils/time-display'
+import type { UnitsPref } from '../utils/units'
+import { convertHeightFt, convertSpeedKt, heightUnit, speedUnit } from '../utils/units'
 import { uvFromDirSpeed } from '../utils/wind/uv'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** cache de perfiles por vol_time (contexto de overlayMachine) */
   profiles: Record<string, VwpLevel[]>
   /** columnas del grid: vol_times del día hasta el frame, ascendentes */
@@ -18,7 +22,9 @@ const props = defineProps<{
   joined: string | null
   error?: string | null
   empty?: boolean
-}>()
+  units?: UnitsPref
+  clock?: ClockPref
+}>(), { units: 'imperial', clock: 'utc', error: null })
 
 const W = 340
 const H = 430
@@ -30,8 +36,12 @@ const columns = computed(() =>
   props.window.map(t => ({ volTime: t, levels: props.profiles[t] ?? [] })),
 )
 
+// alturas ya convertidas a la unidad mostrada ANTES de escalar: así los
+// ticks del eje salen redondos también en SI (metros)
+const toDisplayH = (ft: number) => convertHeightFt(ft, props.units)
+
 const heightScale = computed(() => {
-  const heights = columns.value.flatMap(c => c.levels.map(l => l.height_ft))
+  const heights = columns.value.flatMap(c => c.levels.map(l => toDisplayH(l.height_ft)))
   if (heights.length === 0) return null
   return linearScale([Math.min(...heights), Math.max(...heights)], [H - PAD.bottom, PAD.top])
 })
@@ -46,7 +56,7 @@ const barbs = computed(() => {
     col.levels.map(l => ({
       key: `${col.volTime}|${l.height_ft}`,
       x: xOf(i),
-      y: y.map(l.height_ft),
+      y: y.map(toDisplayH(l.height_ft)),
       dir: l.wind_dir_deg,
       speed: l.wind_speed_kt,
       color: l.rms_kt === null
@@ -62,7 +72,17 @@ const yTicks = computed(() => {
   return y.ticks(6).map(t => ({ y: y.map(t), label: `${(t / 1000).toFixed(t < 10000 ? 1 : 0)}k` }))
 })
 
-const hhmm = (iso: string) => iso.slice(11, 16)
+const hhmm = (iso: string) => formatHhmm(iso, props.clock)
+
+// la tabla en imperial debe ser byte-idéntica al render histórico (los
+// specs comparan String(valor crudo)); solo SI convierte y formatea
+const heightLabel = (ft: number) =>
+  props.units === 'si' ? String(Math.round(convertHeightFt(ft, 'si'))) : String(ft)
+const speedLabel = (kt: number) =>
+  props.units === 'si' ? convertSpeedKt(kt, 'si').toFixed(0) : String(kt)
+const rmsLabel = (kt: number | null) =>
+  kt === null ? '—' : props.units === 'si' ? convertSpeedKt(kt, 'si').toFixed(1) : String(kt)
+const uvLabel = (kt: number) => convertSpeedKt(kt, props.units).toFixed(1)
 
 /** tabla del volumen casado: filas descendentes (altura arriba primero) */
 const tableRows = computed(() => {
@@ -131,7 +151,8 @@ const tableRows = computed(() => {
           />
         </svg>
         <figcaption class="mt-1 text-xs text-slate-400">
-          Altura (ft) × hora Z — barbas WMO; ámbar = RMS &gt; {{ RMS_WARN_KT }} kt, gris = sin RMS
+          Altura ({{ heightUnit(units, 'ft') }}) × hora {{ clock === 'utc' ? 'Z' : 'local' }} —
+          barbas WMO (kt); ámbar = RMS &gt; {{ rmsLabel(RMS_WARN_KT) }} {{ speedUnit(units) }}, gris = sin RMS
         </figcaption>
       </figure>
 
@@ -145,9 +166,9 @@ const tableRows = computed(() => {
       <table v-else data-testid="vwp-table" class="w-full border-collapse">
         <thead>
           <tr class="border-b border-slate-700 text-left text-xs text-slate-400">
-            <th class="py-1 pr-2 text-right">Alt (ft)</th>
+            <th class="py-1 pr-2 text-right">Alt ({{ heightUnit(units, 'ft') }})</th>
             <th class="py-1 pr-2 text-right">Dir</th>
-            <th class="py-1 pr-2 text-right">Vel (kt)</th>
+            <th class="py-1 pr-2 text-right">Vel ({{ speedUnit(units) }})</th>
             <th class="py-1 pr-2 text-right">RMS</th>
             <th class="py-1 pr-2 text-right">u</th>
             <th class="py-1 text-right">v</th>
@@ -159,12 +180,12 @@ const tableRows = computed(() => {
             :key="row.height_ft"
             class="border-b border-slate-800 font-mono text-xs"
           >
-            <td class="py-0.5 pr-2 text-right">{{ row.height_ft }}</td>
+            <td class="py-0.5 pr-2 text-right">{{ heightLabel(row.height_ft) }}</td>
             <td class="py-0.5 pr-2 text-right">{{ row.wind_dir_deg }}°</td>
-            <td class="py-0.5 pr-2 text-right">{{ row.wind_speed_kt }}</td>
-            <td class="py-0.5 pr-2 text-right">{{ row.rms_kt ?? '—' }}</td>
-            <td class="py-0.5 pr-2 text-right">{{ row.u.toFixed(1) }}</td>
-            <td class="py-0.5 text-right">{{ row.v.toFixed(1) }}</td>
+            <td class="py-0.5 pr-2 text-right">{{ speedLabel(row.wind_speed_kt) }}</td>
+            <td class="py-0.5 pr-2 text-right">{{ rmsLabel(row.rms_kt) }}</td>
+            <td class="py-0.5 pr-2 text-right">{{ uvLabel(row.u) }}</td>
+            <td class="py-0.5 text-right">{{ uvLabel(row.v) }}</td>
           </tr>
         </tbody>
       </table>

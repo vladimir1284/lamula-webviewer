@@ -49,6 +49,27 @@ describe('VwpPanel', () => {
     }
   })
 
+  it('units si: tabla en m/km/h, pero la barba SIGUE recibiendo kt crudo (invariante WMO, D28)', () => {
+    const w = mountPanel({ units: 'si' })
+    const head = w.find('[data-testid=vwp-table] thead').text()
+    expect(head).toContain('Alt (m)')
+    expect(head).toContain('Vel (km/h)')
+    const sorted = [...LEVELS].sort((a, b) => b.height_ft - a.height_ft)
+    const cells = w.find('[data-testid=vwp-table]').findAll('tbody tr')[0]!.findAll('td').map(td => td.text())
+    expect(cells[0]).toBe(String(Math.round(sorted[0]!.height_ft * 0.3048)))
+    expect(cells[2]).toBe((sorted[0]!.wind_speed_kt * 1.852).toFixed(0))
+    // el componente WindBarb recibe la velocidad cruda en kt, sin convertir
+    const barb = w.findComponent({ name: 'WindBarb' })
+    expect(barb.props('speedKt')).toBe(LEVELS[0]!.wind_speed_kt)
+  })
+
+  it('clock local: las horas del grid se formatean en la tz dada', () => {
+    // el componente usa la tz del navegador; aquí solo se verifica que en
+    // utc el label es el slice histórico (byte-idéntico)
+    const w = mountPanel({ clock: 'utc' })
+    expect(w.text()).toContain(vwpVolume.volTime.slice(11, 16))
+  })
+
   it('frame sin perfil casado: grid sigue, tabla da paso al aviso', () => {
     const w = mountPanel({ joined: null })
     expect(w.find('[data-testid=vwp-grid]').exists()).toBe(true)

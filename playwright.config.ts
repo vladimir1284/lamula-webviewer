@@ -13,6 +13,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8788',
     trace: 'on-first-retry',
+    // El default de la pref de reloj es la hora local (D28): tz fija para
+    // asserts deterministas, y NO-UTC a propósito — una tz UTC enmascararía
+    // bugs de conversión. Los specs computan lo esperado con formatFull.
+    timezoneId: 'America/New_York',
   },
   projects: [
     {

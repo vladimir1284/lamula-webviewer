@@ -6,14 +6,17 @@
 import { computed } from 'vue'
 import type { Phenomenon } from '#shared/contract'
 import { mesoAttrs, stormCellAttrs } from '#shared/contract'
+import type { UnitsPref } from '../utils/units'
+import { formatHeightKft, formatSpeedKt, heightUnit, speedUnit } from '../utils/units'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** filas completas del volumen casado (todas las kinds), o null */
   phenomena: Phenomenon[] | null
   /** null = nada dentro de tolerancia (mensaje distinto a volumen sin celdas) */
   joined: string | null
   selectedCell: string | null
-}>()
+  units?: UnitsPref
+}>(), { units: 'imperial' })
 
 const emit = defineEmits<{
   select: [cellId: string | null]
@@ -89,7 +92,7 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
         <tr class="border-b border-slate-700 text-left text-xs text-slate-400">
           <th class="py-1 pr-2">ID</th>
           <th class="py-1 pr-2 text-right">dBZ máx</th>
-          <th class="py-1 pr-2 text-right">Alt (kft)</th>
+          <th class="py-1 pr-2 text-right">Alt ({{ heightUnit(units, 'kft') }})</th>
           <th class="py-1 pr-2 text-right">Mov</th>
           <th class="py-1">Flags</th>
         </tr>
@@ -105,9 +108,9 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
         >
           <td class="py-1 pr-2 font-mono">{{ row.cellId }}</td>
           <td class="py-1 pr-2 text-right font-mono">{{ fmt(row.dbzMax) }}</td>
-          <td class="py-1 pr-2 text-right font-mono">{{ fmt(row.heightKft, 1) }}</td>
+          <td class="py-1 pr-2 text-right font-mono">{{ formatHeightKft(row.heightKft, units) }}</td>
           <td class="py-1 pr-2 text-right font-mono">
-            {{ row.movementDeg === null ? '—' : `${row.movementDeg}°/${fmt(row.movementKt)}kt` }}
+            {{ row.movementDeg === null ? '—' : `${row.movementDeg}°/${formatSpeedKt(row.movementKt, units)}${speedUnit(units)}` }}
           </td>
           <td class="py-1 text-xs">
             <span v-if="row.isNew" class="mr-1 rounded bg-sky-900 px-1 text-sky-200">Nueva</span>

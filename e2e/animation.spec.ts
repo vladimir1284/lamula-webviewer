@@ -8,6 +8,10 @@
 import { expect, test } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
 import { series } from '../tests/helpers/derive'
+import { formatFull } from '../utils/time-display'
+
+// default de reloj = hora local (D28): tz fijada en playwright.config.ts
+const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 
 // La página es SSR con setup() async: justo tras el goto, la hidratación
 // puede seguir en curso y el 'change'/'click' nativo se pierde antes de
@@ -28,13 +32,13 @@ test('animación: play arranca en el frame que se venía viendo, sin errores', a
   const golden = series.times.at(-1)! // único vol_time con COG golden real
   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)
 
-  await expect(page.getByTestId('anim-frame-label')).toHaveText(`${golden}Z`)
+  await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
   await page.getByTestId('anim-play').click()
 
   // arranca YA en el frame golden, no en el primero de la serie (regresión:
   // SET_FRAMES reseteaba el índice a 0 y el buffer esperaba el frame
   // equivocado hasta que el resto fallaba)
-  await expect(page.getByTestId('anim-frame-label')).toHaveText(`${golden}Z`)
+  await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
 
   await page.waitForTimeout(2000)

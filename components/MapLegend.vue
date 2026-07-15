@@ -3,8 +3,21 @@
 // la paleta es fuente única para raster y leyenda).
 import { computed } from 'vue'
 import type { Palette } from '#shared/products'
+import type { UnitsPref } from '../utils/units'
+import { convertRasterValue, rasterUnitLabel } from '../utils/units'
 
-const props = defineProps<{ palette: Palette }>()
+const props = withDefaults(
+  defineProps<{ palette: Palette, units?: UnitsPref }>(),
+  { units: 'imperial' },
+)
+
+// solo el TEXTO del tick se convierte (D28): la geometría x(value) sigue
+// posicionando con el valor crudo en unidades de paleta
+const unitLabel = computed(() => rasterUnitLabel(props.palette.unit, props.units))
+const tickLabel = (tick: number) =>
+  props.units === 'si'
+    ? convertRasterValue(tick, props.palette.unit, 'si').value.toFixed(0)
+    : String(tick)
 
 const W = 320
 const BAR_X = 8
@@ -53,7 +66,7 @@ const gradientStops = computed(() =>
       :viewBox="`0 0 ${W} 46`"
       class="w-full"
       role="img"
-      :aria-label="`Leyenda (${palette.unit})`"
+      :aria-label="`Leyenda (${unitLabel})`"
     >
       <defs v-if="palette.mode === 'interpolated'">
         <linearGradient id="legend-ramp" x1="0" y1="0" x2="1" y2="0">
@@ -99,10 +112,10 @@ const gradientStops = computed(() =>
           text-anchor="middle"
           font-size="10"
           fill="currentColor"
-        >{{ tick }}</text>
+        >{{ tickLabel(tick) }}</text>
       </g>
       <text :x="W - BAR_X" y="44" text-anchor="end" font-size="10" fill="currentColor" opacity="0.7">
-        {{ palette.unit }}
+        {{ unitLabel }}
       </text>
     </svg>
 

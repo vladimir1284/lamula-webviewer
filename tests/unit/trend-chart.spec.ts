@@ -38,6 +38,18 @@ describe('TrendChart', () => {
     expect(charts[0]!.find('polyline').attributes('points')!.split(' ')).toHaveLength(2)
   })
 
+  it('units si: caption de altura en km y dBZ intacto (D28)', () => {
+    const w = mount(TrendChart, { props: { series: SERIE, cellId: 'D4', units: 'si' } })
+    const captions = w.findAll('figcaption').map(c => c.text())
+    expect(captions[0]).toBe('dBZ máx (dBZ)')
+    expect(captions[1]).toBe('Altura del máx (km)')
+  })
+
+  it('clock utc: labels del eje X con sufijo Z (byte-idéntico al histórico)', () => {
+    const w = mount(TrendChart, { props: { series: SERIE, cellId: 'D4', clock: 'utc' } })
+    expect(w.text()).toContain('02:50Z')
+  })
+
   it('sin celda seleccionada → mensaje de invitación', () => {
     const w = mount(TrendChart, { props: { series: null, cellId: null } })
     expect(w.find('[data-testid=trend-no-cell]').exists()).toBe(true)

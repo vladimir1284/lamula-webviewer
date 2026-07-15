@@ -1,12 +1,16 @@
 <script setup lang="ts">
-defineProps<{
+import type { ClockPref } from '../utils/time-display'
+import { formatFull } from '../utils/time-display'
+
+withDefaults(defineProps<{
   playing: boolean
   /** la región timeline tiene frames cargados (fuera de 'idle') */
   ready: boolean
   currentVolTime: string | null
   bufferReady: number
   bufferTotal: number
-}>()
+  clock?: ClockPref
+}>(), { clock: 'utc' })
 
 defineEmits<{ toggle: [] }>()
 </script>
@@ -22,7 +26,7 @@ defineEmits<{ toggle: [] }>()
       {{ playing ? '⏸' : '▶' }}
     </button>
     <span data-testid="anim-frame-label" class="font-mono text-slate-300">
-      {{ currentVolTime ? `${currentVolTime}Z` : '—' }}
+      {{ currentVolTime ? formatFull(currentVolTime, clock) : '—' }}
     </span>
     <span
       v-if="bufferReady < bufferTotal"

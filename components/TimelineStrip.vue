@@ -5,15 +5,18 @@
 // en sí vive en viewerMachine — este componente solo emite intención).
 import { computed } from 'vue'
 import { naiveUtcToEpochMs } from '#shared/contract'
+import type { ClockPref } from '../utils/time-display'
+import { formatFull } from '../utils/time-display'
 import type { Gap } from '../utils/timeline/gaps'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   times: string[]
   current: string | null
   gaps: Gap[]
   canPrev: boolean
   canNext: boolean
-}>()
+  clock?: ClockPref
+}>(), { clock: 'utc' })
 
 const emit = defineEmits<{
   select: [iso: string]
@@ -78,7 +81,7 @@ const gapBands = computed(() =>
           ? 'bg-slate-100'
           : 'bg-slate-500 hover:bg-slate-300'"
         :style="{ left: `${pct(time)}%` }"
-        :title="`${time}Z`"
+        :title="formatFull(time, clock)"
         @click="emit('select', time)"
       />
     </div>

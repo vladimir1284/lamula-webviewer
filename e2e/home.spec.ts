@@ -1,8 +1,14 @@
 import { expect, test } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
 import { radars, series } from '../tests/helpers/derive'
+import { formatFull } from '../utils/time-display'
 
 const VIEWER_URL_RE = /\/[A-Z0-9]{3}\/\d+\/\d{8}T\d{6}$/
+
+// default de reloj = hora local (D28): lo esperado se computa con el mismo
+// helper y la tz fijada en playwright.config.ts (Intl de Node coincide con
+// Chromium para la misma IANA tz)
+const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 
 test('el shell renderiza servido por el runtime de Pages', async ({ page }) => {
   await page.goto('/')
@@ -43,7 +49,7 @@ test('deep link reproduce el frame exacto (puerta M3)', async ({ page }) => {
   const t = series.times[1]
   const url = `/${series.site}/${series.product}/${isoToPath(t)}`
   await page.goto(url)
-  await expect(page.getByTestId('raster-meta')).toContainText(`${t}Z`)
+  await expect(page.getByTestId('raster-meta')).toContainText(local(t))
   // la URL no se reescribe: lo pegado es lo reproducido
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t)}$`))
 })
@@ -74,7 +80,7 @@ test('timeline: un tick por vol_time, click salta al frame exacto', async ({ pag
   const target = series.times[3]
   await page.locator(`[data-testid="timeline-tick"][data-time="${target}"]`).click()
   await expect(page).toHaveURL(new RegExp(`${isoToPath(target)}$`))
-  await expect(page.getByTestId('raster-meta')).toContainText(`${target}Z`)
+  await expect(page.getByTestId('raster-meta')).toContainText(local(target))
 })
 
 test('timeline: stepping con botones y teclado (←/→), replace en la URL', async ({ page }) => {
@@ -84,7 +90,7 @@ test('timeline: stepping con botones y teclado (←/→), replace en la URL', as
 
   await page.getByTestId('timeline-next').click()
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t2)}$`))
-  await expect(page.getByTestId('raster-meta')).toContainText(`${t2}Z`)
+  await expect(page.getByTestId('raster-meta')).toContainText(local(t2))
 
   await page.keyboard.press('ArrowLeft')
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t1)}$`))
@@ -103,7 +109,7 @@ test('timeline: extremo real de la serie deshabilita esa dirección (404 silenci
   // sin error visible, y el botón se deshabilita tras la respuesta 404
   await expect(page.getByTestId('timeline-prev')).toBeDisabled()
   await expect(page).toHaveURL(new RegExp(`${isoToPath(first)}$`))
-  await expect(page.getByTestId('raster-meta')).toContainText(`${first}Z`)
+  await expect(page.getByTestId('raster-meta')).toContainText(local(first))
 })
 
 test('radar sin datos: degradación visible, sin errores de consola (puerta M3)', async ({ page }) => {

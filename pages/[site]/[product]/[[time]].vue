@@ -9,8 +9,10 @@ import { animationMachine } from '../../../machines/animation'
 import { overlayMachine } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
+import { formatFull } from '../../../utils/time-display'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
+import { convertRasterValue } from '../../../utils/units'
 
 const DEFAULT_OPACITY = 0.8
 const DEFAULT_BASE = 'osm' as const
@@ -395,9 +397,15 @@ const cursorLabel = computed(() => {
   const cursor = ctx.value.cursor
   if (!cursor) return null
   if (cursor.rangeFolded) return 'RF'
-  const unit = productDef.value?.unit ?? ''
-  return `${cursor.value?.toFixed(1)} ${unit}`
+  // leyenda y cursor comparten conversión (D28): mostrar km/h en uno y kt
+  // en la otra sería mentir en una de las dos superficies
+  const converted = convertRasterValue(cursor.value ?? 0, productDef.value?.unit ?? '', ctx.value.units)
+  return `${converted.value.toFixed(1)} ${converted.unit}`
 })
+
+const volTimeLabel = computed(() =>
+  raster.value ? formatFull(raster.value.vol_time, ctx.value.clock) : null,
+)
 
 function onSelectSite(event: Event) {
   send({ type: 'SELECT_SITE', site: (event.target as HTMLSelectElement).value })
@@ -485,7 +493,7 @@ function onOpacityInput(event: Event) {
         </p>
 
         <template v-if="productDef">
-          <MapLegend :palette="productDef.palette" />
+          <MapLegend :palette="productDef.palette" :units="ctx.units" />
 
           <label class="block text-sm">
             <span class="mb-1 block text-slate-400">Opacidad</span>
@@ -530,7 +538,7 @@ function onOpacityInput(event: Event) {
         >
           <div class="flex justify-between">
             <dt class="text-slate-400">Volumen</dt>
-            <dd class="font-mono">{{ raster.vol_time }}Z</dd>
+            <dd class="font-mono">{{ volTimeLabel }}</dd>
           </div>
           <div v-if="raster.vcp != null" class="flex justify-between">
             <dt class="text-slate-400">VCP</dt>
@@ -607,6 +615,7 @@ function onOpacityInput(event: Event) {
           :gaps="timelineGaps"
           :can-prev="canStepPrev"
           :can-next="canStepNext"
+          :clock="ctx.clock"
           @select="onTimelineSelect"
           @step="onTimelineStep"
         />
@@ -616,6 +625,7 @@ function onOpacityInput(event: Event) {
           :current-vol-time="animCurrentVolTime"
           :buffer-ready="animBufferReady"
           :buffer-total="animBufferTotal"
+          :clock="ctx.clock"
           @toggle="onToggleAnimation"
         />
       </aside>
@@ -650,6 +660,7 @@ function onOpacityInput(event: Event) {
             :phenomena="overlayCtx.phenomena"
             :joined="overlayCtx.joined"
             :selected-cell="ctx.cell"
+            :units="ctx.units"
             @select="send({ type: 'SELECT_CELL', cellId: $event })"
           />
         </template>
@@ -658,6 +669,8 @@ function onOpacityInput(event: Event) {
             :series="overlayCtx.series"
             :cell-id="ctx.cell"
             :error="overlayCtx.seriesError"
+            :units="ctx.units"
+            :clock="ctx.clock"
           />
         </template>
         <template #vwp>
@@ -667,6 +680,8 @@ function onOpacityInput(event: Event) {
             :joined="overlayCtx.vwpJoined"
             :error="overlayCtx.vwpError"
             :empty="overlaySnapshot.matches({ vwp: 'empty' })"
+            :units="ctx.units"
+            :clock="ctx.clock"
           />
         </template>
       </SidePanel>

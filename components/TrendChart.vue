@@ -6,13 +6,19 @@ import { computed } from 'vue'
 import type { Phenomenon } from '#shared/contract'
 import { stormCellAttrs } from '#shared/contract'
 import { linearScale } from '../utils/charts/scale'
+import type { ClockPref } from '../utils/time-display'
+import { clockSuffix, formatHhmm } from '../utils/time-display'
+import type { UnitsPref } from '../utils/units'
+import { convertHeightKft, heightUnit } from '../utils/units'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** serie cross-volumen de /api/phenomena/series, o null */
   series: Phenomenon[] | null
   cellId: string | null
   error?: string | null
-}>()
+  units?: UnitsPref
+  clock?: ClockPref
+}>(), { units: 'imperial', clock: 'utc', error: null })
 
 const W = 340
 const H = 110
@@ -61,7 +67,7 @@ function buildChart(title: string, unit: string, pick: (a: ReturnType<typeof sto
   })
   if (current.length > 1) segments.push(current.join(' '))
 
-  const hhmm = (iso: string) => iso.slice(11, 16)
+  const hhmm = (iso: string) => formatHhmm(iso, props.clock)
   return {
     title,
     unit,
@@ -78,7 +84,11 @@ function buildChart(title: string, unit: string, pick: (a: ReturnType<typeof sto
 const charts = computed(() => {
   const list = [
     buildChart('dBZ máx', 'dBZ', a => a.dbz_max),
-    buildChart('Altura del máx', 'kft', a => a.dbz_max_height_kft),
+    // convertir dentro del pick, ANTES de linearScale: ticks redondos en km
+    buildChart('Altura del máx', heightUnit(props.units, 'kft'), (a) => {
+      const v = a.dbz_max_height_kft
+      return v === undefined ? undefined : convertHeightKft(v, props.units)
+    }),
   ]
   return list.filter((c): c is ChartModel => c !== null)
 })
@@ -147,7 +157,7 @@ const charts = computed(() => {
             :key="label.label + label.x"
             :x="label.x" :y="H - 5"
             text-anchor="middle" font-size="9" fill="#94a3b8"
-          >{{ label.label }}Z</text>
+          >{{ label.label }}{{ clockSuffix(clock) }}</text>
         </svg>
       </figure>
     </template>

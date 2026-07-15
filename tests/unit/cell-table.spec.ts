@@ -60,6 +60,17 @@ describe('CellTable', () => {
     expect(w.emitted('select')![1]).toEqual([null])
   })
 
+  it('units si: header en km y movimiento en km/h; dBZ intacto (D28)', () => {
+    const w = mount(CellTable, {
+      props: { phenomena: ROWS, joined: '2026-07-11T03:08:18', selectedCell: null, units: 'si' },
+    })
+    expect(w.find('thead').text()).toContain('Alt (km)')
+    const a1 = w.find('[data-testid=cell-row-A1]').text()
+    expect(a1).toContain('3.0') // 10 kft × 0.3048
+    expect(a1).toContain('120°/37km/h') // 20 kt × 1.852
+    expect(a1).toContain('45') // dBZ no se convierte
+  })
+
   it('dos estados vacíos distinguibles: sin join vs volumen sin celdas', () => {
     const noJoin = mount(CellTable, { props: { phenomena: null, joined: null, selectedCell: null } })
     expect(noJoin.find('[data-testid=cells-no-join]').exists()).toBe(true)
