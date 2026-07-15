@@ -4,7 +4,7 @@ import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { Phenomenon, RasterMeta, VwpLevel } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
-import { savePrefs } from '../../../composables/useViewerPrefs'
+import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
 import { overlayMachine } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
@@ -30,6 +30,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const prefsDialog = ref<{ open: () => void }>()
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -163,7 +164,21 @@ watch(
     if (parsed) send({ type: 'ROUTE_CHANGED', route: parsed })
   },
 )
-onMounted(() => send({ type: 'MOUNTED' }))
+onMounted(() => {
+  send({ type: 'MOUNTED' })
+  // prefs de display (D28): localStorage no existe en SSR — el contexto
+  // arranca con placeholders (clock:'utc') y aquí entran los valores reales;
+  // sin nada guardado aplican los defaults (clock:'local')
+  const prefs = loadPrefs()
+  send({
+    type: 'PREFS_LOADED',
+    prefs: {
+      coverage: prefs?.coverage ?? PREF_DEFAULTS.coverage,
+      units: prefs?.units ?? PREF_DEFAULTS.units,
+      clock: prefs?.clock ?? PREF_DEFAULTS.clock,
+    },
+  })
+})
 
 const ctx = computed(() => snapshot.value.context)
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
@@ -403,7 +418,25 @@ function onOpacityInput(event: Event) {
         <span class="font-mono">{{ radar.icao ?? radar.site_id }}</span>
         <FreshnessBadge :last-seen-at="radar.last_seen_at" class="ml-2" />
       </p>
+      <!-- leading-none + sin padding vertical: no debe crecer el header — el
+           mapa se encogería y los goldens comparan su render píxel a píxel -->
+      <button
+        data-testid="prefs-open"
+        aria-label="Preferencias"
+        class="ml-auto self-center rounded px-2 leading-none text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+        @click="prefsDialog?.open()"
+      >
+        ⚙
+      </button>
     </header>
+
+    <PrefsDialog
+      ref="prefsDialog"
+      :coverage="ctx.coverage"
+      :units="ctx.units"
+      :clock="ctx.clock"
+      @set-pref="send({ type: 'SET_PREF', patch: $event })"
+    />
 
     <div class="flex min-h-0 flex-1">
       <aside class="w-80 shrink-0 space-y-4 overflow-y-auto border-r border-slate-700 p-4">

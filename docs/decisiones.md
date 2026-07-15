@@ -58,6 +58,13 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
 
 27. **`overlayMachine` separada, no una tercera región de `viewerMachine`.** Patrón `animationMachine` (orquestación por la página con watchers): (a) el vol_time efectivo durante la animación vive en la página (`times[activeFrameIndex]`), fuera de `viewerMachine`; (b) el ensombrecido por región de XState v5 encarece cada evento compartido en una máquina paralela que crece; (c) el overlay tiene ciclo de vida propio (caches por vol_time, gating por toggles) que no debe reiniciarse con el del raster. En `overlayMachine` **ningún evento se maneja en la raíz** — todo a nivel de región, con las dos sutilezas de la difusión de eventos documentadas en [Máquinas de estado](maquinas-estado.md).
 
+28. **Preferencias de usuario (alcance del radar / unidades / hora) en `lamula:prefs` v2, jamás en la URL.** Son preferencias de display personales, no estado compartible — la línea de la decisión 18 (compartible → URL) las manda a localStorage; a diferencia del locale (decisión 15), no cambian *qué* se ve sino *cómo se formatea*. Detalles y descartes:
+    - **Contexto de `viewerMachine` con eventos raíz** (`PREFS_LOADED`/`SET_PREF`), no máquina aparte: el criterio de la 27 no aplica — las prefs no tienen ciclo de vida (sin fetch/cache) y `persistPrefs` ya estaba inyectado. Los valores iniciales del contexto son placeholders SSR deterministas; los reales entran post-mount.
+    - **Default del reloj = hora local** (zona del navegador vía `Intl`; los días/agrupación de la timeline siguen en UTC — el día UTC es clave de partición de datos, reagrupar por día local exigiría fetch cross-día). Consecuencia aceptada: flash UTC→local de un frame en cada carga — el server no conoce la zona del navegador.
+    - **Conversión de unidades solo-texto** (`utils/units.ts`): kft→km, kt→km/h en tablas, charts, leyenda y cursor (mapa passthrough — dBZ/mm/kg/m² y unidades futuras pasan intactas). Las **barbas WMO siguen siempre en kt** (convención meteorológica; banderín = 50 kt) igual que la matemática interna. Consecuencia: ticks no redondos en la leyenda SI (20 kt → 37 km/h) — preferible a duplicar paletas; si el experto lo veta, el fallback es convertir solo el cursor.
+    - **Diálogo `<dialog>` nativo**, no PrimeVue (la 26 sigue vigente): unstyled sin design tokens obliga a escribir el mismo CSS, y `showModal()` da top-layer/focus-trap/Esc gratis. Reversible si las preferencias crecen.
+    - Migración v1→v2 de `lamula:prefs` en memoria al leer (rellena defaults, conserva lo guardado); shape inválido o versión desconocida degradan a `null` como siempre.
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |
