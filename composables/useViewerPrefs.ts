@@ -2,31 +2,70 @@
 // localStorage no existe en SSR — los llamadores aplican prefs tras montar.
 // El time jamás se persiste (se pudre con la retención de 72 h).
 export interface ViewerPrefs {
-  v: 1
+  v: 2
   site: string
   product: number
   opacity: number
   base: 'osm' | 'off'
+  /** overlay de alcance del radar visible */
+  coverage: boolean
+  units: 'imperial' | 'si'
+  clock: 'utc' | 'local'
 }
 
+export const PREF_DEFAULTS = {
+  site: '',
+  product: 0,
+  opacity: 0.8,
+  base: 'osm',
+  coverage: true,
+  units: 'imperial',
+  clock: 'local',
+} as const satisfies Omit<ViewerPrefs, 'v'>
+
 const KEY = 'lamula:prefs'
+
+// shape v1 histórico (pre coverage/units/clock) — se migra en memoria al leer
+// y se materializa como v2 en el siguiente savePrefs
+function isValidV1(p: Record<string, unknown>): boolean {
+  return p.v === 1
+    && typeof p.site === 'string'
+    && typeof p.product === 'number'
+    && typeof p.opacity === 'number'
+    && (p.base === 'osm' || p.base === 'off')
+}
+
+function isValidV2(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
+  return p.v === 2
+    && typeof p.site === 'string'
+    && typeof p.product === 'number'
+    && typeof p.opacity === 'number'
+    && (p.base === 'osm' || p.base === 'off')
+    && typeof p.coverage === 'boolean'
+    && (p.units === 'imperial' || p.units === 'si')
+    && (p.clock === 'utc' || p.clock === 'local')
+}
 
 export function loadPrefs(): ViewerPrefs | null {
   if (typeof localStorage === 'undefined') return null
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<ViewerPrefs>
-    if (
-      parsed.v !== 1
-      || typeof parsed.site !== 'string'
-      || typeof parsed.product !== 'number'
-      || typeof parsed.opacity !== 'number'
-      || (parsed.base !== 'osm' && parsed.base !== 'off')
-    ) {
-      return null
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (isValidV2(parsed)) return parsed
+    if (isValidV1(parsed)) {
+      return {
+        v: 2,
+        site: parsed.site as string,
+        product: parsed.product as number,
+        opacity: parsed.opacity as number,
+        base: parsed.base as 'osm' | 'off',
+        coverage: PREF_DEFAULTS.coverage,
+        units: PREF_DEFAULTS.units,
+        clock: PREF_DEFAULTS.clock,
+      }
     }
-    return parsed as ViewerPrefs
+    return null
   }
   catch {
     return null // JSON corrupto → como si no hubiera prefs
@@ -37,11 +76,14 @@ export function savePrefs(patch: Partial<Omit<ViewerPrefs, 'v'>>): void {
   if (typeof localStorage === 'undefined') return
   const current = loadPrefs()
   const next: ViewerPrefs = {
-    v: 1,
-    site: current?.site ?? '',
-    product: current?.product ?? 0,
-    opacity: current?.opacity ?? 0.8,
-    base: current?.base ?? 'osm',
+    v: 2,
+    site: current?.site ?? PREF_DEFAULTS.site,
+    product: current?.product ?? PREF_DEFAULTS.product,
+    opacity: current?.opacity ?? PREF_DEFAULTS.opacity,
+    base: current?.base ?? PREF_DEFAULTS.base,
+    coverage: current?.coverage ?? PREF_DEFAULTS.coverage,
+    units: current?.units ?? PREF_DEFAULTS.units,
+    clock: current?.clock ?? PREF_DEFAULTS.clock,
     ...patch,
   }
   try {
