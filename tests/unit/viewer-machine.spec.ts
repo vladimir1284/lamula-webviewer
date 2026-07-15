@@ -432,7 +432,7 @@ describe('viewerMachine — overlays (D23)', () => {
 })
 
 describe('viewerMachine — prefs vía ROUTE_CHANGED', () => {
-  it('toda navegación persiste site/product/opacity/base', () => {
+  it('toda navegación persiste site/product/opacity/base (nunca las prefs de display)', () => {
     const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
     actor.send({
       type: 'ROUTE_CHANGED',
@@ -444,5 +444,45 @@ describe('viewerMachine — prefs vía ROUTE_CHANGED', () => {
       opacity: 0.5,
       base: 'off',
     })
+  })
+})
+
+describe('viewerMachine — preferencias de display (D28)', () => {
+  it('el contexto inicial usa placeholders SSR deterministas', () => {
+    const { actor } = boot({ initialRaster: meta(T0) })
+    const ctx = actor.getSnapshot().context
+    expect(ctx.coverage).toBe(true)
+    expect(ctx.units).toBe('imperial')
+    expect(ctx.clock).toBe('utc')
+  })
+
+  it('PREFS_LOADED asigna sin persistir (write-on-read prohibido)', () => {
+    const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'si', clock: 'local' } })
+    const ctx = actor.getSnapshot().context
+    expect(ctx.coverage).toBe(false)
+    expect(ctx.units).toBe('si')
+    expect(ctx.clock).toBe('local')
+    expect(persistPrefs).not.toHaveBeenCalled()
+  })
+
+  it('SET_PREF asigna y persiste exactamente el patch', () => {
+    const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SET_PREF', patch: { units: 'si' } })
+    expect(actor.getSnapshot().context.units).toBe('si')
+    expect(actor.getSnapshot().context.coverage).toBe(true) // el resto intacto
+    expect(persistPrefs).toHaveBeenCalledWith({ units: 'si' })
+  })
+
+  it('canario ensombrecido: ambos eventos surten efecto con las dos regiones paralelas activas', () => {
+    // en XState v5 un `on` raíz muere si alguna región define el mismo evento;
+    // este test detecta si un refactor futuro lo introduce sin querer
+    const { actor } = boot({ initialRaster: meta(T0) })
+    const snap = actor.getSnapshot()
+    expect(Object.keys(snap.value)).toEqual(['raster', 'timeline'])
+    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'imperial', clock: 'utc' } })
+    expect(actor.getSnapshot().context.coverage).toBe(false)
+    actor.send({ type: 'SET_PREF', patch: { coverage: true } })
+    expect(actor.getSnapshot().context.coverage).toBe(true)
   })
 })

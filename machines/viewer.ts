@@ -6,6 +6,7 @@
 // del día). Diagrama: docs/maquinas-estado.md (actualizar en el mismo commit).
 import type { Product, Radar, RasterMeta } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
+import type { ViewerPrefs } from '../composables/useViewerPrefs'
 import type { CursorSample } from '../utils/map/cursor'
 import type { OverlayLayerId, PanelId } from './overlay'
 
@@ -36,13 +37,11 @@ export interface NavigateParams {
   mode: 'push' | 'replace'
 }
 
-/** slice persistible en localStorage (composables/useViewerPrefs.ts) */
-export interface PrefsParams {
-  site: string
-  product: number
-  opacity: number
-  base: 'osm' | 'off'
-}
+/** patch persistible en localStorage (composables/useViewerPrefs.ts) */
+export type PrefsParams = Partial<Omit<ViewerPrefs, 'v'>>
+
+/** preferencias de display del usuario (no compartibles — nunca en la URL) */
+export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock'>
 
 export interface ViewerInput {
   radars: Radar[]
@@ -72,6 +71,8 @@ export type ViewerEvent =
   | { type: 'TOGGLE_LAYER', layer: OverlayLayerId }
   | { type: 'SELECT_PANEL', panel: PanelId | null }
   | { type: 'SELECT_CELL', cellId: string | null }
+  | { type: 'PREFS_LOADED', prefs: UserPrefsSlice }
+  | { type: 'SET_PREF', patch: Partial<UserPrefsSlice> }
 
 interface ViewerContext {
   radars: Radar[]
@@ -96,6 +97,12 @@ interface ViewerContext {
   cell: string | null
   cursor: CursorSample | null
   cogError: string
+  /** preferencias de display; los iniciales son placeholders SSR deterministas
+   * (el server no conoce la zona del navegador) — los reales llegan por
+   * PREFS_LOADED tras montar */
+  coverage: boolean
+  units: 'imperial' | 'si'
+  clock: 'utc' | 'local'
 }
 
 /** slice de la query que refleja el estado de overlays (D23) */
@@ -217,6 +224,9 @@ export const viewerMachine = setup({
     cell: input.route.cell,
     cursor: null,
     cogError: '',
+    coverage: true,
+    units: 'imperial',
+    clock: 'utc',
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },
@@ -239,6 +249,18 @@ export const viewerMachine = setup({
       ],
     },
     COG_ERROR: { actions: assign({ cogError: ({ event }) => event.message }) },
+    // Preferencias de display. PREFS_LOADED (post-mount, desde localStorage)
+    // solo asigna — persistir aquí sería write-on-read. SET_PREF (diálogo)
+    // asigna y persiste el patch exacto.
+    PREFS_LOADED: {
+      actions: assign(({ event }) => ({ ...event.prefs })),
+    },
+    SET_PREF: {
+      actions: [
+        assign(({ event }) => ({ ...event.patch })),
+        { type: 'persistPrefs', params: ({ event }) => event.patch },
+      ],
+    },
     // Toggles de overlays (D23): assign optimista + replace de la query.
     // Cambios solo-query reentran por ROUTE_CHANGED y caen en sameFrame —
     // el raster no reparpadea.
