@@ -42,10 +42,12 @@ const props = withDefaults(defineProps<{
   opacity: number
   /** apagar la base OSM (goldens visuales: fondo determinista) */
   showBase?: boolean
+  /** overlay de alcance del radar (donut mask) — pref de usuario (D28) */
+  showCoverage?: boolean
   /** overlay de fenómenos del frame mostrado, ya filtrado por capas activas (F4) */
   phenomena?: Phenomenon[] | null
   selectedCell?: string | null
-}>(), { showBase: true, frames: null, activeFrame: 0, phenomena: null, selectedCell: null })
+}>(), { showBase: true, showCoverage: true, frames: null, activeFrame: 0, phenomena: null, selectedCell: null })
 
 const emit = defineEmits<{
   cursor: [sample: CursorSample | null]
@@ -60,6 +62,7 @@ const container = ref<HTMLDivElement>()
 
 let map: Map | undefined
 let baseLayer: TileLayer<OSM> | undefined
+let coverageLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
 let pool: FramePool | undefined // modo animación
 const coverageSource = new VectorSource()
@@ -195,13 +198,14 @@ onMounted(() => {
     target: container.value,
     layers: [
       baseLayer,
-      new VectorLayer({
+      (coverageLayer = new VectorLayer({
         source: coverageSource,
         zIndex: 10,
+        visible: props.showCoverage,
         style: new Style({
           fill: new Fill({ color: 'rgba(15, 23, 42, 0.1)' }),
         }),
-      }),
+      })),
       (phenomenaLayer = new VectorLayer({
         source: phenomenaSource,
         zIndex: 20,
@@ -296,6 +300,7 @@ watch(() => props.opacity, (o) => {
   pool?.setOpacity(o)
 })
 watch(() => props.showBase, v => baseLayer?.setVisible(v))
+watch(() => props.showCoverage, v => coverageLayer?.setVisible(v))
 
 onBeforeUnmount(() => {
   teardownPool()

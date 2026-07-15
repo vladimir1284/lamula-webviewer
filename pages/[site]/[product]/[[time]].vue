@@ -598,6 +598,7 @@ function onOpacityInput(event: Event) {
             :product-def="productDef"
             :opacity="ctx.opacity"
             :show-base="ctx.base !== 'off'"
+            :show-coverage="ctx.coverage"
             :phenomena="overlayPhenomena"
             :selected-cell="ctx.cell"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
