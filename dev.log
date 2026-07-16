@@ -1,0 +1,96 @@
+
+> dev
+> nuxt dev
+
+│
+●  Nuxt 3.21.8 (with Nitro 2.13.4, Vite 7.3.6 and Vue 3.5.39)
+
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
+
+[nuxt:tailwindcss] ℹ Using default Tailwind CSS file
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.4)
+
+ℹ Using cloudflare-dev emulation in development mode.
+[nuxt:tailwindcss] ℹ Tailwind Viewer: http://localhost:3000/_tailwind/
+✔ Vite client built in 172ms
+✔ Vite server built in 2011ms
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else {
+
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else { (x2)
+
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else { (x3)
+
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else { (x4)
+
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else { (x5)
+
+
+ ERROR  Pre-transform error: Failed to resolve import "#app-manifest" from "node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/node/workspace/lamula-webviewer/node_modules/.pnpm/nuxt@3.21.8_@parcel+watcher@2.5.6_@types+node@22.20.1_@vue+compiler-sfc@3.5.39_better-s_40442fbc4edcc6ec987e061f848287f4/node_modules/nuxt/dist/app/composables/manifest.js?v=ba77ccb8:16:6
+  14 |        /* webpackIgnore: true */
+  15 |        /* @vite-ignore */
+  16 |        "#app-manifest"
+     |        ^
+  17 |      );
+  18 |    } else { (x6)
+
+[nuxt] ℹ Compiled runtime.vue-devtools-client.8uPyajraAf4_Z9OTjXqAMRlIHwGYwnHGWrG7XvhhZw8.js in 777.83ms
+[nuxt] ℹ Compiled router.options.mjs in 949.75ms
+[nuxt] ℹ Compiled plugins.server.mjs in 7762.03ms
+[nuxt] ℹ Compiled plugins.client.mjs in 8540.89ms
+[nuxt] ℹ Compiled types/plugins.d.ts in 8632.55ms
+[nuxt] ℹ Compiled plugins.client.mjs in 678.99ms
+[nuxt] ℹ Compiled types/plugins.d.ts in 788.53ms
+[nitro] ✔ Nuxt Nitro server built in 12262ms
+ℹ Vite server warmed up in 1ms
+ℹ Vite client warmed up in 2ms
+Using secrets defined in .env
+✔ Vite server hmr 1 files in 6302.538ms
+ℹ page reload .wrangler/state/v3/d1/miniflare-D1DatabaseObject/7dd1b41610981a0afa292d3fd47ed130be73ce4428fd7cb60fc96b4c5f429aa0.sqlite-wal

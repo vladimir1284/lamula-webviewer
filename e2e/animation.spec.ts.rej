@@ -1,0 +1,7 @@
+--- animation.spec.ts
++++ animation.spec.ts
+@@ -30,3 +31,3 @@
+ test('animación: play arranca en el frame que se venía viendo, sin errores', async ({ page }) => {
+   const errors: string[] = []
+-  page.on("console", msg => console.log(msg.text()));
++  page.on("console", msg => fs.appendFileSync("browser.log", msg.text() + "\n"));

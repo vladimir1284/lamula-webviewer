@@ -26,7 +26,6 @@ const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 async function gotoAndWaitHydrated(page: import('@playwright/test').Page, url: string) {
   await page.goto(url)
   await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(500) // assure hydration listener attached
 }
 
 test('animación: play arranca en el frame que se venía viendo, sin errores', async ({ page }) => {

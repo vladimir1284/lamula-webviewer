@@ -1,0 +1,113 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: animation.spec.ts >> animación: play arranca en el frame que se venía viendo, sin errores
+- Location: e2e/animation.spec.ts:31:1
+
+# Error details
+
+```
+Error: expect(locator).toHaveText(expected) failed
+
+Locator: getByTestId('anim-frame-label')
+Expected: "2026-07-10 23:16:49 EDT"
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toHaveText" with timeout 5000ms
+  - waiting for getByTestId('anim-frame-label')
+
+```
+
+```yaml
+- heading "500" [level=1]
+- paragraph: Cannot access 'iA' before initialization
+```
+
+# Test source
+
+```ts
+  1  | // Puerta M3 (animación): ciclado sin errores + prefetch medido. Nota sobre
+  2  | // el fixture: solo el vol_time MÁS RECIENTE de cada (site, product) tiene
+  3  | // un COG golden commiteado (tests/fixtures/cogs/r2/); el resto 404 en este
+  4  | // entorno offline — degradación esperada (frameFailed, no crash), no una
+  5  | // limitación del código. La fluidez de 20 frames reales es la puerta
+  6  | // manual contra datos vivos (docs/validaciones.md); aquí se verifica que
+  7  | // la máquina nunca se cuelga y el ciclado/paginado es correcto.
+  8  | import { test, expect } from '@playwright/test'
+  9  | import * as fs from 'fs'
+  10 | import type { Locator, Page } from '@playwright/test'
+  11 | import { isoToPath } from '../shared/url/time-path'
+  12 | import { series } from '../tests/helpers/derive'
+  13 | import { formatFull } from '../utils/time-display'
+  14 | 
+  15 | // default de reloj = hora local (D28): tz fijada en playwright.config.ts
+  16 | const local = (t: string) => formatFull(t, 'local', 'America/New_York')
+  17 | 
+  18 | // La página es SSR con setup() async: justo tras el goto, la hidratación
+  19 | // puede seguir en curso y el 'change'/'click' nativo se pierde antes de
+  20 | // que Vue adjunte su listener (mismo hallazgo que en home.spec.ts). A
+  21 | // diferencia del <select> de home.spec.ts, aquí NO sirve reintentar el
+  22 | // click con toPass: cada click es un TOGGLE con efecto real (play/pause),
+  23 | // así que un reintento puede alcanzar al auto-play justo cuando dispara y
+  24 | // apagarlo de nuevo. Se espera 'networkidle' (hidratación completa) antes
+  25 | // del único click.
+  26 | async function gotoAndWaitHydrated(page: import('@playwright/test').Page, url: string) {
+  27 |   await page.goto(url)
+  28 |   await page.waitForLoadState('networkidle')
+  29 | }
+  30 | 
+  31 | test('animación: play arranca en el frame que se venía viendo, sin errores', async ({ page }) => {
+  32 |   const errors: string[] = []
+  33 |   page.on("console", msg => { fs.appendFileSync("browser.log", msg.text() + "\n"); });
+  34 |   page.on('pageerror', err => errors.push(err.message))
+  35 |   const golden = series.times.at(-1)! // único vol_time con COG golden real
+  36 |   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)
+  37 | 
+> 38 |   await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
+     |                                                      ^ Error: expect(locator).toHaveText(expected) failed
+  39 |   await page.getByTestId('anim-play').click()
+  40 | 
+  41 |   // arranca YA en el frame golden, no en el primero de la serie (regresión:
+  42 |   // SET_FRAMES reseteaba el índice a 0 y el buffer esperaba el frame
+  43 |   // equivocado hasta que el resto fallaba)
+  44 |   await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
+  45 |   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  46 | 
+  47 |   await page.waitForTimeout(2000)
+  48 |   expect(errors).toEqual([])
+  49 | })
+  50 | 
+  51 | test('animación: buffering no se cuelga aunque el frame inicial falle (404 real)', async ({ page }) => {
+  52 |   const errors: string[] = []
+  53 |   page.on('pageerror', err => errors.push(err.message))
+  54 |   // primer frame de la serie: sin COG golden en este entorno → falla
+  55 |   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(series.times[0])}`)
+  56 |   await page.getByTestId('anim-play').click()
+  57 | 
+  58 |   // el buffer se asienta (no queda colgado en 0/N para siempre) y el
+  59 |   // ícono llega a play/pausa con normalidad
+  60 |   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  61 |   await expect(page.getByTestId('anim-frame-label')).not.toHaveText('—')
+  62 |   expect(errors).toEqual([])
+  63 | })
+  64 | 
+  65 | test('animación: pausar sincroniza la URL con el frame que quedó visible', async ({ page }) => {
+  66 |   const golden = series.times.at(-1)!
+  67 |   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)
+  68 |   await page.getByTestId('anim-play').click()
+  69 |   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  70 | 
+  71 |   await page.getByTestId('anim-play').click() // pausa
+  72 |   await expect(page.getByTestId('anim-play')).toHaveText('▶')
+  73 |   // decisión F3: durante playback la URL no se toca; al pausar sí
+  74 |   await expect(page).toHaveURL(new RegExp(`${isoToPath(golden)}$`))
+  75 | })
+  76 | 
+```
