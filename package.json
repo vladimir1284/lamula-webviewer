@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nuxt dev",
     "dev:cogs": "node scripts/serve-cogs.mjs 8790",
-    "dev:fixture": "NUXT_DAL_ADAPTER=fixture NUXT_PUBLIC_R2_BASE_URL=http://127.0.0.1:8790 nuxt dev",
+    "dev:fixture": "NUXT_DAL_ADAPTER=fixture NUXT_PUBLIC_R2_BASE_URL=/cogs nuxt dev",
     "db:setup": "node scripts/seed-local-db.mjs",
     "build": "nuxt build",
     "preview": "wrangler pages dev",
