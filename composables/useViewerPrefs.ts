@@ -24,7 +24,7 @@ export const PREF_DEFAULTS = {
   units: 'imperial',
   clock: 'local',
   animationFrames: 12,
-  prefetch: true,
+  prefetch: false,
 } as const satisfies Omit<ViewerPrefs, 'v'>
 
 const KEY = 'lamula:prefs'

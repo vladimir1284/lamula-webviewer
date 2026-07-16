@@ -265,7 +265,7 @@ watch(
   { immediate: true }
 )
 
-const animFrames = computed(() => {
+const _rawAnimFrames = computed(() => {
   if (ctx.value.times.length === 0) return null
   if (!ctx.value.prefetch && !animationEngaged.value) return null
   
@@ -274,6 +274,30 @@ const animFrames = computed(() => {
   const startIdx = Math.max(0, anchor - maxFrames + 1)
   return ctx.value.times.slice(startIdx, startIdx + maxFrames)
 })
+
+const animFrames = ref<RasterMeta[] | null>(null)
+watch(_rawAnimFrames, (newFrames) => {
+  if (!newFrames) {
+    animFrames.value = null
+    return
+  }
+  const oldFrames = animFrames.value
+  let shouldUpdate = false
+  
+  if (!oldFrames) {
+    shouldUpdate = true
+  } else if (oldFrames.length !== newFrames.length) {
+    shouldUpdate = true
+  } else if (newFrames.some((f, i) => f.vol_time !== oldFrames[i].vol_time)) {
+    shouldUpdate = true
+  }
+  
+  if (shouldUpdate) {
+    animFrames.value = newFrames
+  }
+}, { immediate: true })
+
+const animPlaying = computed(() => animSnapshot.value.matches('playing'))
 
 const activeFrameIndex = computed(() => {
   const frames = animFrames.value
@@ -332,8 +356,6 @@ watch(() => ctx.value.time, () => {
   const idx = animFrames.value?.findIndex(r => r.vol_time === ctx.value.time) ?? 0
   animSend({ type: 'SEEK', index: Math.max(0, idx) })
 })
-
-const animPlaying = computed(() => animSnapshot.value.matches('playing'))
 
 const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.value]?.vol_time ?? ctx.value.time)
 const animBufferReady = computed(() =>

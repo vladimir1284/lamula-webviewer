@@ -60,6 +60,7 @@ export class FramePool {
   }
 
   private async fetchEntry(index: number) {
+    console.error("FETCH_ENTRY", index);
     const entry = this.entries[index]
     if (!entry || entry.state !== 'pending') return
     entry.state = 'fetching'
@@ -74,8 +75,8 @@ export class FramePool {
     }
     catch {
       if (abort.signal.aborted) return // serie reemplazada por setFrames: descartar
-      entry.state = 'error'
-      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
+      console.log("StateError", index); entry.state = "error"
+      console.log("FrameError", index); this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
       return
     }
@@ -91,14 +92,14 @@ export class FramePool {
     source.on('change', () => {
       if (source.getState() !== 'error') return
       if (entry.state === 'error') return
-      entry.state = 'error'
-      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
+      console.log("StateError", index); entry.state = "error"
+      console.log("FrameError", index); this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
     })
     const layer = new WebGLTileLayer({
       source,
       style: this.style,
-      opacity: 0,
+      opacity: index === this.activeIndex ? this.opacity : 0,
       visible: true,
       zIndex: 5,
     })
@@ -107,26 +108,39 @@ export class FramePool {
     entry.state = 'loading'
   }
 
-  /** hasta K entradas fetching/loading a la vez — prefetch acotado */
   private schedulePrefetch() {
     let active = this.entries.filter(e => e.state === 'fetching' || e.state === 'loading').length
-    if (active >= PREFETCH_CONCURRENCY) return
 
-    // Prioridad 1: el frame activo
+    // Prioridad 1: el frame activo (se dispara de inmediato, salta el límite)
+    let fetchedActive = false
     if (this.activeIndex >= 0 && this.activeIndex < this.entries.length) {
       if (this.entries[this.activeIndex]!.state === 'pending') {
         this.fetchEntry(this.activeIndex)
         active++
+        fetchedActive = true
       }
     }
 
-    // Prioridad 2: el resto de la serie
-    for (let i = 0; i < this.entries.length; i++) {
-      if (active >= PREFETCH_CONCURRENCY) break
-      if (this.entries[i]!.state === 'pending') {
-        this.fetchEntry(i)
-        active++
+    if (active >= PREFETCH_CONCURRENCY) return
+
+    // Prioridad 2: el resto de la serie (diferido para no ahogar el thread principal al inicio)
+    const fetchRest = () => {
+      // Recalcular 'active' porque pudo haber cambiado mientras esperábamos el idle
+      let currentActive = this.entries.filter(e => e.state === 'fetching' || e.state === 'loading').length
+      for (let i = 0; i < this.entries.length; i++) {
+        if (currentActive >= PREFETCH_CONCURRENCY) break
+        const index = (this.activeIndex + 1 + i) % this.entries.length
+        if (this.entries[index]?.state === 'pending') {
+          this.fetchEntry(index)
+          currentActive++
+        }
       }
+    }
+
+    if (fetchedActive) {
+      setTimeout(fetchRest, 50)
+    } else {
+      fetchRest()
     }
   }
 
@@ -137,7 +151,7 @@ export class FramePool {
       if (!entry.layer.getRenderer()?.renderComplete) return
       entry.state = 'ready'
       if (i !== this.activeIndex) entry.layer.setVisible(false) // liberado: sin costo de render
-      this.callbacks.onFrameReady(i)
+      console.log("FrameReady", i); this.callbacks.onFrameReady(i)
       advanced = true
     })
     if (advanced) this.schedulePrefetch()

@@ -5,7 +5,9 @@
 // limitación del código. La fluidez de 20 frames reales es la puerta
 // manual contra datos vivos (docs/validaciones.md); aquí se verifica que
 // la máquina nunca se cuelga y el ciclado/paginado es correcto.
-import { expect, test } from '@playwright/test'
+import { test, expect } from '@playwright/test'
+import * as fs from 'fs'
+import type { Locator, Page } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
 import { series } from '../tests/helpers/derive'
 import { formatFull } from '../utils/time-display'
@@ -28,6 +30,7 @@ async function gotoAndWaitHydrated(page: import('@playwright/test').Page, url: s
 
 test('animación: play arranca en el frame que se venía viendo, sin errores', async ({ page }) => {
   const errors: string[] = []
+  page.on("console", msg => { fs.appendFileSync("browser.log", msg.text() + "\n"); });
   page.on('pageerror', err => errors.push(err.message))
   const golden = series.times.at(-1)! // único vol_time con COG golden real
   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)

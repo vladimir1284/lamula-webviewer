@@ -100,6 +100,9 @@ export const animationMachine = setup({
           const index = Math.min(Math.max(event.startIndex ?? 0, 0), Math.max(event.count - 1, 0))
           return { frames, gen, index }
         }),
+        enqueueActions(({ context }) => {
+          context.frames.forEach(actor => actor.send({ type: 'INVALIDATE' }))
+        }),
       ],
     },
     FRAME_READY: {
@@ -126,16 +129,6 @@ export const animationMachine = setup({
   initial: 'idle',
   states: {
     idle: {},
-    // se sale en cuanto el frame que se va a mostrar (context.index, 0 tras
-    // SET_FRAMES) está listo — el resto sigue prefetcheando en segundo
-    // plano; MOVE_END reentra aquí, pero como el frame activo no se invalida
-    // (solo los demás, ver MOVE_END abajo) la salida es inmediata: sin
-    // parpadeo visible, el resto se re-bufferea callado.
-    // Si el frame objetivo falla (404 real, no hueco transitorio), no puede
-    // bloquear la UI para siempre: en cuanto TODOS los frames terminan de
-    // resolver (ready o failed), se sale igual, saltando a uno listo si hay
-    // alguno — y si ninguno lo está, se sale sin más (degradación visible
-    // vía rasterError, no un buffering infinito).
     buffering: {
       on: {
         SEEK: { actions: assign({ index: ({ context, event }) => clampIndex(context, event.index) }) },

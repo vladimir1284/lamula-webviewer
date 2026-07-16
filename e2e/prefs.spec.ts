@@ -65,6 +65,8 @@ test('prefs sembradas se aplican: unidades SI y reloj UTC (camino no-default)', 
     coverage: true,
     units: 'si',
     clock: 'utc',
+    animationFrames: 12,
+    prefetch: false,
   })
   await gotoHydrated(page, viewerUrl(mesoRaster, 'base=off&layers=cells&panel=cells'))
 
@@ -113,6 +115,8 @@ test('coverage off sembrado: el viewer arranca sin la máscara y el toggle la re
     coverage: false,
     units: 'imperial',
     clock: 'local',
+    animationFrames: 12,
+    prefetch: false,
   })
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
