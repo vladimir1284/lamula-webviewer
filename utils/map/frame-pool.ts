@@ -110,6 +110,17 @@ export class FramePool {
   /** hasta K entradas fetching/loading a la vez — prefetch acotado */
   private schedulePrefetch() {
     let active = this.entries.filter(e => e.state === 'fetching' || e.state === 'loading').length
+    if (active >= PREFETCH_CONCURRENCY) return
+
+    // Prioridad 1: el frame activo
+    if (this.activeIndex >= 0 && this.activeIndex < this.entries.length) {
+      if (this.entries[this.activeIndex]!.state === 'pending') {
+        this.fetchEntry(this.activeIndex)
+        active++
+      }
+    }
+
+    // Prioridad 2: el resto de la serie
     for (let i = 0; i < this.entries.length; i++) {
       if (active >= PREFETCH_CONCURRENCY) break
       if (this.entries[i]!.state === 'pending') {
@@ -138,6 +149,8 @@ export class FramePool {
     const prev = this.entries[this.activeIndex]
     if (prev?.state === 'ready') prev.layer?.setVisible(false)
     this.activeIndex = index
+    this.schedulePrefetch()
+    
     const next = this.entries[index]
     if (!next?.layer) return
     next.layer.setVisible(true)

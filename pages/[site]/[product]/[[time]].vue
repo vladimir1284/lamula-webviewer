@@ -178,6 +178,8 @@ onMounted(() => {
       coverage: prefs?.coverage ?? PREF_DEFAULTS.coverage,
       units: prefs?.units ?? PREF_DEFAULTS.units,
       clock: prefs?.clock ?? PREF_DEFAULTS.clock,
+      animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
+      prefetch: prefs?.prefetch ?? PREF_DEFAULTS.prefetch,
     },
   })
 })
@@ -236,15 +238,62 @@ const { snapshot: animSnapshot, send: animSend } = useActor(animationMachine, {
 const animationEngaged = ref(false)
 const pendingAutoPlay = ref(false)
 
-function currentTimesIndex(): number {
-  const idx = ctx.value.times.findIndex(r => r.vol_time === ctx.value.time)
-  return idx === -1 ? 0 : idx
-}
+const windowAnchorIdx = ref<number>(-1)
+const windowAnchorR2Key = ref<string | null>(null)
+
+watch(
+  () => [ctx.value.times, ctx.value.time, ctx.value.animationFrames] as const,
+  ([times, time, maxFrames]) => {
+    if (times.length === 0) {
+      windowAnchorIdx.value = -1
+      windowAnchorR2Key.value = null
+      return
+    }
+    const currentIdx = times.findIndex(r => r.vol_time === time)
+    if (currentIdx === -1) return
+    
+    const anchor = windowAnchorIdx.value
+    const startIdx = Math.max(0, anchor - maxFrames + 1)
+    
+    const sameFrame = anchor >= 0 && anchor < times.length && times[anchor].r2_key === windowAnchorR2Key.value
+    
+    if (!sameFrame || currentIdx < startIdx || currentIdx > anchor) {
+      windowAnchorIdx.value = currentIdx
+      windowAnchorR2Key.value = times[currentIdx].r2_key
+    }
+  },
+  { immediate: true }
+)
+
+const animFrames = computed(() => {
+  if (ctx.value.times.length === 0) return null
+  if (!ctx.value.prefetch && !animationEngaged.value) return null
+  
+  const maxFrames = ctx.value.animationFrames
+  const anchor = windowAnchorIdx.value === -1 ? 0 : windowAnchorIdx.value
+  const startIdx = Math.max(0, anchor - maxFrames + 1)
+  return ctx.value.times.slice(startIdx, startIdx + maxFrames)
+})
+
+const activeFrameIndex = computed(() => {
+  const frames = animFrames.value
+  if (!frames || frames.length === 0) return 0
+  
+  if (animPlaying.value) {
+    return animSnapshot.value.context.index
+  }
+  
+  const idx = frames.findIndex(r => r.vol_time === ctx.value.time)
+  return Math.max(0, idx)
+})
 
 function engageAnimation() {
   animationEngaged.value = true
-  pendingAutoPlay.value = true
-  animSend({ type: 'SET_FRAMES', count: ctx.value.times.length, startIndex: currentTimesIndex() })
+  if (animSnapshot.value.matches('paused')) {
+    animSend({ type: 'PLAY' })
+  } else {
+    pendingAutoPlay.value = true
+  }
 }
 
 function onToggleAnimation() {
@@ -257,7 +306,7 @@ function onToggleAnimation() {
   if (wasPlaying) {
     // decisión F3: durante playback la URL no se toca; al pausar, replace
     // con el frame que quedó visible
-    const t = ctx.value.times[animSnapshot.value.context.index]?.vol_time
+    const t = animFrames.value?.[animSnapshot.value.context.index]?.vol_time
     if (t) send({ type: 'SELECT_TIME', time: t })
   }
 }
@@ -271,27 +320,22 @@ watch(() => animSnapshot.value.value, (state) => {
   }
 })
 
-// cambiar de día con la animación ya activa: reconstruye el pool para el
-// nuevo día (pausa implícita — buffering exige el nuevo frame 0)
-watch(() => ctx.value.day, () => {
-  if (!animationEngaged.value) return
-  animSend({ type: 'SET_FRAMES', count: ctx.value.times.length, startIndex: currentTimesIndex() })
-})
+// reconstruye el pool si los frames seleccionados cambian 
+watch(() => animFrames.value, (frames) => {
+  animSend({ type: 'SET_FRAMES', count: frames?.length ?? 0, startIndex: activeFrameIndex.value })
+}, { immediate: true })
 
 // stepping/select manuales mientras la animación está pausada: mantener el
 // índice de animación sincronizado para que "play" retome desde ahí
 watch(() => ctx.value.time, () => {
   if (!animationEngaged.value || animSnapshot.value.matches('playing')) return
-  animSend({ type: 'SEEK', index: currentTimesIndex() })
+  const idx = animFrames.value?.findIndex(r => r.vol_time === ctx.value.time) ?? 0
+  animSend({ type: 'SEEK', index: Math.max(0, idx) })
 })
 
 const animPlaying = computed(() => animSnapshot.value.matches('playing'))
-const animFrames = computed(() => (animationEngaged.value && ctx.value.times.length > 0 ? ctx.value.times : null))
-const activeFrameIndex = computed(() => {
-  if (ctx.value.times.length === 0) return 0
-  return animPlaying.value ? animSnapshot.value.context.index : currentTimesIndex()
-})
-const animCurrentVolTime = computed(() => ctx.value.times[activeFrameIndex.value]?.vol_time ?? null)
+
+const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.value]?.vol_time ?? ctx.value.time)
 const animBufferReady = computed(() =>
   animSnapshot.value.context.frames.filter(f => f.getSnapshot().matches('ready')).length,
 )
@@ -443,6 +487,8 @@ function onOpacityInput(event: Event) {
       :coverage="ctx.coverage"
       :units="ctx.units"
       :clock="ctx.clock"
+      :animation-frames="ctx.animationFrames"
+      :prefetch="ctx.prefetch"
       @set-pref="send({ type: 'SET_PREF', patch: $event })"
     />
 

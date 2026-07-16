@@ -6,7 +6,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import PrefsDialog from '~/components/PrefsDialog.vue'
 
-function mountOpen(props: { coverage: boolean, units: 'imperial' | 'si', clock: 'utc' | 'local' }) {
+function mountOpen(props: { coverage: boolean, units: 'imperial' | 'si', clock: 'utc' | 'local', animationFrames: number, prefetch: boolean }) {
   const wrapper = mount(PrefsDialog, { props })
   wrapper.get('dialog').element.setAttribute('open', '')
   return wrapper
@@ -14,7 +14,14 @@ function mountOpen(props: { coverage: boolean, units: 'imperial' | 'si', clock: 
 
 describe('prefsDialog', () => {
   it('renderiza el estado de las props', () => {
-    const w = mountOpen({ coverage: false, units: 'si', clock: 'utc' })
+    const props = {
+      coverage: false,
+      units: 'si' as const,
+      clock: 'utc' as const,
+      animationFrames: 12,
+      prefetch: true,
+    }
+    const w = mountOpen(props)
     expect((w.get('[data-testid=pref-coverage]').element as HTMLInputElement).checked).toBe(false)
     expect((w.get('[data-testid=pref-units-si]').element as HTMLInputElement).checked).toBe(true)
     expect((w.get('[data-testid=pref-units-imperial]').element as HTMLInputElement).checked).toBe(false)
@@ -22,20 +29,20 @@ describe('prefsDialog', () => {
   })
 
   it('el checkbox de cobertura emite el patch con el nuevo valor', async () => {
-    const w = mountOpen({ coverage: true, units: 'imperial', clock: 'local' })
+    const w = mountOpen({ coverage: true, units: 'imperial', clock: 'local', animationFrames: 12, prefetch: true })
     await w.get('[data-testid=pref-coverage]').setValue(false)
     expect(w.emitted('setPref')).toEqual([[{ coverage: false }]])
   })
 
   it('cada radio emite exactamente su patch', async () => {
-    const w = mountOpen({ coverage: true, units: 'imperial', clock: 'local' })
+    const w = mountOpen({ coverage: true, units: 'imperial', clock: 'local', animationFrames: 12, prefetch: true })
     await w.get('[data-testid=pref-units-si]').setValue(true)
     await w.get('[data-testid=pref-clock-utc]').setValue(true)
     expect(w.emitted('setPref')).toEqual([[{ units: 'si' }], [{ clock: 'utc' }]])
   })
 
   it('expone open() sobre el <dialog> nativo', () => {
-    const w = mount(PrefsDialog, { props: { coverage: true, units: 'imperial', clock: 'local' } })
+    const w = mount(PrefsDialog, { props: { coverage: true, units: 'imperial', clock: 'local', animationFrames: 12, prefetch: true } })
     expect(typeof (w.vm as { open?: unknown }).open).toBe('function')
   })
 })

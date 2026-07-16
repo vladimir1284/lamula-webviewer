@@ -10,6 +10,8 @@ defineProps<{
   coverage: boolean
   units: 'imperial' | 'si'
   clock: 'utc' | 'local'
+  animationFrames: number
+  prefetch: boolean
 }>()
 
 const emit = defineEmits<{
@@ -102,6 +104,33 @@ defineExpose({
           <p class="mt-2 text-xs text-slate-400">
             Los días de la timeline siguen siendo UTC.
           </p>
+        </fieldset>
+
+        <fieldset class="rounded bg-slate-900/60 p-3">
+          <legend class="px-1 text-slate-400">Animación</legend>
+          <label class="flex items-center gap-2">
+            <span class="w-32">Observaciones:</span>
+            <select
+              data-testid="pref-animation-frames"
+              class="rounded border border-slate-600 bg-slate-800 px-2 py-1 flex-1"
+              :value="String(animationFrames)"
+              @change="emit('setPref', { animationFrames: Number(($event.target as HTMLSelectElement).value) })"
+            >
+              <option value="6">6</option>
+              <option value="12">12</option>
+              <option value="24">24</option>
+              <option value="48">48</option>
+            </select>
+          </label>
+          <label class="mt-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="pref-prefetch"
+              :checked="prefetch"
+              @change="emit('setPref', { prefetch: ($event.target as HTMLInputElement).checked })"
+            >
+            <span>Precarga en segundo plano</span>
+          </label>
         </fieldset>
       </div>
     </form>
