@@ -64,6 +64,7 @@ let map: Map | undefined
 let baseLayer: TileLayer<OSM> | undefined
 let coverageLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
+let rasterLoadAbort: AbortController | undefined
 let pool: FramePool | undefined // modo animación
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
@@ -119,6 +120,7 @@ function updatePhenomena() {
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
 
 function updateRasterLayer() {
+  rasterLoadAbort?.abort()
   if (rasterLayer) {
     map?.removeLayer(rasterLayer)
     rasterLayer.dispose()
@@ -132,30 +134,47 @@ function updateRasterLayer() {
   rasterLoaded.value = 'false'
 
   const projCode = registerRadarProjection(radar.site_id, radar.proj4)
-  const source = new GeoTIFF({
-    sources: [{ url: raster.cog_url }],
-    normalize: false,
-    interpolate: false,
-    projection: projCode,
-    // sin fade de tiles: render determinista (goldens) y frames nítidos
-    transition: 0,
-  })
-  source.on('change', () => {
-    if (source.getState() === 'error') {
-      emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
-    }
-  })
+  const abort = new AbortController()
+  rasterLoadAbort = abort
 
-  rasterLayer = new WebGLTileLayer({
-    source,
-    style: rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level),
-    opacity: props.opacity,
-    zIndex: 5,
-  })
-  map.addLayer(rasterLayer)
-  map.once('rendercomplete', () => {
-    rasterLoaded.value = 'true'
-  })
+  // COG <2MB (single-site/product): un solo fetch como blob en vez de dejar
+  // que geotiff.js emita range requests por tile/overview bajo `url`.
+  fetch(raster.cog_url, { signal: abort.signal })
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.blob()
+    })
+    .then((blob) => {
+      if (abort.signal.aborted || !map) return
+      const source = new GeoTIFF({
+        sources: [{ blob }],
+        normalize: false,
+        interpolate: false,
+        projection: projCode,
+        // sin fade de tiles: render determinista (goldens) y frames nítidos
+        transition: 0,
+      })
+      source.on('change', () => {
+        if (source.getState() === 'error') {
+          emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
+        }
+      })
+
+      rasterLayer = new WebGLTileLayer({
+        source,
+        style: rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level),
+        opacity: props.opacity,
+        zIndex: 5,
+      })
+      map.addLayer(rasterLayer)
+      map.once('rendercomplete', () => {
+        rasterLoaded.value = 'true'
+      })
+    })
+    .catch(() => {
+      if (abort.signal.aborted) return
+      emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
+    })
 }
 
 // ── Modo animación (F3 paso 6) ───────────────────────────────────────────
@@ -303,6 +322,7 @@ watch(() => props.showBase, v => baseLayer?.setVisible(v))
 watch(() => props.showCoverage, v => coverageLayer?.setVisible(v))
 
 onBeforeUnmount(() => {
+  rasterLoadAbort?.abort()
   teardownPool()
   map?.setTarget(undefined)
   map = undefined

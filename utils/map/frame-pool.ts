@@ -8,6 +8,11 @@
 //  - "frame listo" = layer.getRenderer().renderComplete, muestreado en el
 //    postrender del mapa (propiedad semi-pública del renderer; ver
 //    docs/maquinas-estado.md § riesgos).
+//
+// Fetch único por frame: los COGs (<2MB, single-site/product) se traen
+// enteros con fetch() propio y se pasan como `blob` a GeoTIFF en vez de
+// `url` — evita las ~50 range requests que geotiff.js emite por tile/overview
+// bajo `url`. Con el blob ya en memoria, pan/zoom no dispara red de nuevo.
 import type Map from 'ol/Map'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
 import type { Style as WebGLStyle } from 'ol/layer/WebGLTile'
@@ -19,9 +24,10 @@ const PREFETCH_CONCURRENCY = 3
 const MAX_POOL = 24
 
 interface PoolEntry {
-  layer: WebGLTileLayer
-  source: GeoTIFF
-  state: 'loading' | 'ready' | 'error'
+  frame: RasterMeta
+  layer?: WebGLTileLayer
+  state: 'pending' | 'fetching' | 'loading' | 'ready' | 'error'
+  abort?: AbortController
 }
 
 export interface FramePoolCallbacks {
@@ -49,13 +55,34 @@ export class FramePool {
   setFrames(frames: RasterMeta[]) {
     this.disposeEntries()
     this.activeIndex = -1
-    this.entries = frames.slice(0, MAX_POOL).map((frame, i) => this.createEntry(frame, i))
+    this.entries = frames.slice(0, MAX_POOL).map(frame => ({ frame, state: 'pending' as const }))
     this.schedulePrefetch()
   }
 
-  private createEntry(frame: RasterMeta, index: number): PoolEntry {
+  private async fetchEntry(index: number) {
+    const entry = this.entries[index]
+    if (!entry || entry.state !== 'pending') return
+    entry.state = 'fetching'
+    const abort = new AbortController()
+    entry.abort = abort
+
+    let blob: Blob
+    try {
+      const res = await fetch(entry.frame.cog_url!, { signal: abort.signal })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      blob = await res.blob()
+    }
+    catch {
+      if (abort.signal.aborted) return // serie reemplazada por setFrames: descartar
+      entry.state = 'error'
+      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
+      this.schedulePrefetch()
+      return
+    }
+    if (this.entries[index] !== entry) return // stale
+
     const source = new GeoTIFF({
-      sources: [{ url: frame.cog_url! }],
+      sources: [{ blob }],
       normalize: false,
       interpolate: false,
       projection: this.projCode,
@@ -63,31 +90,31 @@ export class FramePool {
     })
     source.on('change', () => {
       if (source.getState() !== 'error') return
-      const entry = this.entries[index]
-      if (!entry || entry.state === 'error') return
+      if (entry.state === 'error') return
       entry.state = 'error'
-      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${frame.r2_key})`)
+      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
     })
     const layer = new WebGLTileLayer({
       source,
       style: this.style,
       opacity: 0,
-      visible: false,
+      visible: true,
       zIndex: 5,
     })
     this.map.addLayer(layer)
-    return { layer, source, state: 'loading' }
+    entry.layer = layer
+    entry.state = 'loading'
   }
 
-  /** hasta K entradas 'loading' visibles (opacity 0) a la vez — prefetch acotado */
+  /** hasta K entradas fetching/loading a la vez — prefetch acotado */
   private schedulePrefetch() {
-    let loading = this.entries.filter(e => e.state === 'loading' && e.layer.getVisible()).length
-    for (const entry of this.entries) {
-      if (loading >= PREFETCH_CONCURRENCY) break
-      if (entry.state === 'loading' && !entry.layer.getVisible()) {
-        entry.layer.setVisible(true)
-        loading++
+    let active = this.entries.filter(e => e.state === 'fetching' || e.state === 'loading').length
+    for (let i = 0; i < this.entries.length; i++) {
+      if (active >= PREFETCH_CONCURRENCY) break
+      if (this.entries[i]!.state === 'pending') {
+        this.fetchEntry(i)
+        active++
       }
     }
   }
@@ -95,7 +122,7 @@ export class FramePool {
   private checkReady = () => {
     let advanced = false
     this.entries.forEach((entry, i) => {
-      if (entry.state !== 'loading' || !entry.layer.getVisible()) return
+      if (entry.state !== 'loading' || !entry.layer) return
       if (!entry.layer.getRenderer()?.renderComplete) return
       entry.state = 'ready'
       if (i !== this.activeIndex) entry.layer.setVisible(false) // liberado: sin costo de render
@@ -109,10 +136,10 @@ export class FramePool {
   activate(index: number) {
     if (index === this.activeIndex) return
     const prev = this.entries[this.activeIndex]
-    if (prev && prev.state === 'ready') prev.layer.setVisible(false)
+    if (prev?.state === 'ready') prev.layer?.setVisible(false)
     this.activeIndex = index
     const next = this.entries[index]
-    if (!next) return
+    if (!next?.layer) return
     next.layer.setVisible(true)
     next.layer.setOpacity(this.opacity)
   }
@@ -120,7 +147,7 @@ export class FramePool {
   setOpacity(opacity: number) {
     this.opacity = opacity
     const active = this.entries[this.activeIndex]
-    active?.layer.setOpacity(opacity)
+    active?.layer?.setOpacity(opacity)
   }
 
   /** Capa activa, para el muestreo de valor bajo cursor (getData). */
@@ -133,23 +160,24 @@ export class FramePool {
   }
 
   /**
-   * pan/zoom: el extent cambió — los tiles cacheados de los frames inactivos
-   * ya no sirven. El activo se conserva tal cual (sigue siendo válido, sin
-   * corte visual); el resto vuelve a 'loading' y se re-prioriza el prefetch.
+   * pan/zoom: el blob de cada frame ya está completo en memoria (no hay
+   * tiles parciales que revalidar), así que no hace falta volver a 'loading'
+   * ni re-fetch — solo ocultar lo inactivo para no pagar su costo de render.
    */
   invalidateInactive() {
     this.entries.forEach((entry, i) => {
       if (i === this.activeIndex) return
-      entry.layer.setVisible(false)
-      entry.state = 'loading'
+      entry.layer?.setVisible(false)
     })
-    this.schedulePrefetch()
   }
 
   private disposeEntries() {
     for (const entry of this.entries) {
-      this.map.removeLayer(entry.layer)
-      entry.layer.dispose()
+      entry.abort?.abort()
+      if (entry.layer) {
+        this.map.removeLayer(entry.layer)
+        entry.layer.dispose()
+      }
     }
     this.entries = []
   }

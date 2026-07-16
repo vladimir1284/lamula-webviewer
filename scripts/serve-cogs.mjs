@@ -39,6 +39,9 @@ const server = createServer((req, res) => {
     'accept-ranges': 'bytes',
     'access-control-allow-origin': '*',
     'access-control-expose-headers': 'content-range,content-length,etag,accept-ranges',
+    // goldens son commits inmutables (r2_key único por vol_time): cachear fuerte
+    // evita refetch en re-runs de Playwright sobre el mismo fixture.
+    'cache-control': 'public, max-age=31536000, immutable',
   }
 
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '')
