@@ -37,6 +37,7 @@ definePageMeta({
 
 const route = useRoute()
 const prefsDialog = ref<{ open: () => void }>()
+const timelineMenu = ref<{ open: () => void }>()
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -544,8 +545,15 @@ function onSatOpacityInput(event: Event) {
       :coverage="ctx.coverage"
       :units="ctx.units"
       :clock="ctx.clock"
-      :animation-frames="ctx.animationFrames"
       @set-pref="send({ type: 'SET_PREF', patch: $event })"
+    />
+
+    <TimelineMenu
+      ref="timelineMenu"
+      :animation-frames="ctx.animationFrames"
+      :speed="animSpeed"
+      @set-pref="send({ type: 'SET_PREF', patch: $event })"
+      @speed="onSpeedChange"
     />
 
     <div class="flex min-h-0 flex-1">
@@ -824,7 +832,7 @@ function onSatOpacityInput(event: Event) {
               @toggle="onToggleAnimation"
               @speed="onSpeedChange"
               @refresh="send({ type: 'REFRESH_TIMELINE' })"
-              @menu="prefsDialog?.open()"
+              @menu="timelineMenu?.open()"
             />
           </div>
         </div>

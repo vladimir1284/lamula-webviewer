@@ -43,7 +43,7 @@ test('animación: play arranca en el frame que se venía viendo, sin errores', a
   // SET_FRAMES reseteaba el índice a 0 y el buffer esperaba el frame
   // equivocado hasta que el resto fallaba)
   await expect(page.getByTestId('timeline-slider')).toHaveAttribute('aria-valuetext', local(golden))
-  await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  await expect(page.getByTestId('anim-play')).toHaveAttribute('aria-label', 'Pausar', { timeout: 5000 })
 
   await page.waitForTimeout(2000)
   expect(errors).toEqual([])
@@ -58,7 +58,7 @@ test('animación: buffering no se cuelga aunque el frame inicial falle (404 real
 
   // el buffer se asienta (no queda colgado en 0/N para siempre) y el
   // ícono llega a play/pausa con normalidad
-  await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  await expect(page.getByTestId('anim-play')).toHaveAttribute('aria-label', 'Pausar', { timeout: 5000 })
   await expect(page.getByTestId('timeline-slider')).toHaveAttribute('aria-valuetext', /.+/)
   expect(errors).toEqual([])
 })
@@ -67,10 +67,10 @@ test('animación: pausar sincroniza la URL con el frame que quedó visible', asy
   const golden = series.times.at(-1)!
   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)
   await page.getByTestId('anim-play').click()
-  await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
+  await expect(page.getByTestId('anim-play')).toHaveAttribute('aria-label', 'Pausar', { timeout: 5000 })
 
   await page.getByTestId('anim-play').click() // pausa
-  await expect(page.getByTestId('anim-play')).toHaveText('▶')
+  await expect(page.getByTestId('anim-play')).toHaveAttribute('aria-label', 'Reproducir')
   // decisión F3: durante playback la URL no se toca; al pausar sí
   await expect(page).toHaveURL(new RegExp(`${isoToPath(golden)}$`))
 })

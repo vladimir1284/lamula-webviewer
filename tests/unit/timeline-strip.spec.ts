@@ -63,12 +63,12 @@ describe('TimelineStrip', () => {
 
   it('muestra el ícono de play/pausa según playing y emite toggle', async () => {
     const wrapper = mount(TimelineStrip, { props: BASE_PROPS })
-    expect(wrapper.get('[data-testid="anim-play"]').text()).toBe('▶')
+    expect(wrapper.get('[data-testid="anim-play"]').attributes('aria-label')).toBe('Reproducir')
     await wrapper.get('[data-testid="anim-play"]').trigger('click')
     expect(wrapper.emitted('toggle')).toHaveLength(1)
 
     await wrapper.setProps({ playing: true })
-    expect(wrapper.get('[data-testid="anim-play"]').text()).toBe('⏸')
+    expect(wrapper.get('[data-testid="anim-play"]').attributes('aria-label')).toBe('Pausar')
   })
 
   it('emite refresh y menu al clickear sus botones', async () => {
