@@ -732,6 +732,26 @@ function onSatOpacityInput(event: Event) {
             >
             <span>Celdas de tormenta</span>
           </label>
+          <template v-if="ctx.layers.includes('cells')">
+            <label class="mt-1 flex items-center gap-2 pl-4">
+              <input
+                type="checkbox"
+                data-testid="layer-toggle-track-past"
+                :checked="ctx.layers.includes('trackPast')"
+                @change="onToggleLayer('trackPast')"
+              >
+              <span>Trayectoria pasada (todas)</span>
+            </label>
+            <label class="mt-1 flex items-center gap-2 pl-4">
+              <input
+                type="checkbox"
+                data-testid="layer-toggle-track-future"
+                :checked="ctx.layers.includes('trackFuture')"
+                @change="onToggleLayer('trackFuture')"
+              >
+              <span>Trayectoria futura (todas)</span>
+            </label>
+          </template>
           <label class="mt-1 flex items-center gap-2">
             <input
               type="checkbox"
@@ -740,24 +760,6 @@ function onSatOpacityInput(event: Event) {
               @change="onToggleLayer('meso')"
             >
             <span>Mesociclones / TVS</span>
-          </label>
-          <label class="mt-1 flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-track-past"
-              :checked="ctx.layers.includes('trackPast')"
-              @change="onToggleLayer('trackPast')"
-            >
-            <span>Trayectoria pasada (todas)</span>
-          </label>
-          <label class="mt-1 flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-track-future"
-              :checked="ctx.layers.includes('trackFuture')"
-              @change="onToggleLayer('trackFuture')"
-            >
-            <span>Trayectoria futura (todas)</span>
           </label>
           <p
             v-if="overlayJoinInfo"
