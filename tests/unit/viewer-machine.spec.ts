@@ -39,6 +39,9 @@ const routeAt = (patch: Partial<ViewerRouteState> = {}): ViewerRouteState => ({
   layers: [],
   panel: null,
   cell: null,
+  sat: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
   ...patch,
 })
 
@@ -377,7 +380,52 @@ describe('viewerMachine — eventos de UI', () => {
       opacity: 0.4,
       base: 'osm',
     })
-    expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.4, base: 'osm' })
+    expect(syncQuery).toHaveBeenCalledWith({
+      opacity: 0.4,
+      base: 'osm',
+      sat: false,
+      satVariant: 'ir',
+      satOpacity: 0.6,
+    })
+  })
+
+  it('TOGGLE_SATELLITE / SELECT_SAT_VARIANT / SET_SAT_OPACITY actualizan contexto y sincronizan la query (nunca el time, nunca persistPrefs)', () => {
+    const { actor, persistPrefs, syncQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_SATELLITE' })
+    expect(actor.getSnapshot().context.sat).toBe(true)
+    expect(syncQuery).toHaveBeenLastCalledWith({
+      opacity: 0.8,
+      base: 'osm',
+      sat: true,
+      satVariant: 'ir',
+      satOpacity: 0.6,
+    })
+
+    actor.send({ type: 'SELECT_SAT_VARIANT', variant: 'vis' })
+    expect(actor.getSnapshot().context.satVariant).toBe('vis')
+    expect(syncQuery).toHaveBeenLastCalledWith({
+      opacity: 0.8,
+      base: 'osm',
+      sat: true,
+      satVariant: 'vis',
+      satOpacity: 0.6,
+    })
+
+    actor.send({ type: 'SET_SAT_OPACITY', value: 0.3 })
+    expect(actor.getSnapshot().context.satOpacity).toBe(0.3)
+    expect(syncQuery).toHaveBeenLastCalledWith({
+      opacity: 0.8,
+      base: 'osm',
+      sat: true,
+      satVariant: 'vis',
+      satOpacity: 0.3,
+    })
+
+    actor.send({ type: 'TOGGLE_SATELLITE' })
+    expect(actor.getSnapshot().context.sat).toBe(false)
+
+    expect(actor.getSnapshot().context.time).toBe(T0)
+    expect(persistPrefs).not.toHaveBeenCalled()
   })
 })
 

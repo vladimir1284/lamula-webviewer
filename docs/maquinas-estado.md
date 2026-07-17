@@ -4,7 +4,7 @@ Todo el estado de la UI se modela con **XState v5** ([decisión 18](decisiones.m
 
 Principios:
 
-- **La URL manda.** La ruta (`/{site}/{product}/{time}` + `?opacity&base`) es la fuente de verdad de lo compartible. Los cambios de ruta —incluido back/forward del navegador— entran a la máquina como evento `ROUTE_CHANGED`; las transiciones que cambian la selección navegan como efecto (`push`/`replace`). La máquina nunca contradice la barra de direcciones.
+- **La URL manda.** La ruta (`/{site}/{product}/{time}` + `?opacity&base&sat&satVar&satOp`) es la fuente de verdad de lo compartible. Los cambios de ruta —incluido back/forward del navegador— entran a la máquina como evento `ROUTE_CHANGED`; las transiciones que cambian la selección navegan como efecto (`push`/`replace`). La máquina nunca contradice la barra de direcciones.
 - **Máquinas puras.** Viven en `machines/`, sin tocar DOM ni router: los efectos (navegación, localStorage, fetch) se inyectan como input/actores, así los unit tests corren con `createActor` sin montar nada.
 - **Estado efímero también aquí.** Opacidad, cursor o progreso de buffer no viajan en la URL, pero sí viven en el contexto de la máquina (eventos `SET_OPACITY`, `CURSOR_MOVE`, …).
 
@@ -75,7 +75,7 @@ stateDiagram-v2
     }
 ```
 
-**Contexto:** `radars`, `products`, `site`, `product`, `time` (ISO naive; `null` = vista live), `nowT` (instante SSR), `raster`, `rasterError`, `day` (YYYY-MM-DD que la región `timeline` tiene cargado/objetivo), `times`, `timelineError`, `atStart`/`atEnd` (404 ya confirmado en esa dirección — deshabilita el botón), `opacity`, `base`, `cursor`, `cogError`, y las preferencias de display `coverage`/`units`/`clock` (los iniciales son placeholders SSR deterministas — `clock:'utc'` aunque el default real de la pref sea `'local'`, porque el server no conoce la zona del navegador; los valores reales entran por `PREFS_LOADED` tras montar).
+**Contexto:** `radars`, `products`, `site`, `product`, `time` (ISO naive; `null` = vista live), `nowT` (instante SSR), `raster`, `rasterError`, `day` (YYYY-MM-DD que la región `timeline` tiene cargado/objetivo), `times`, `timelineError`, `atStart`/`atEnd` (404 ya confirmado en esa dirección — deshabilita el botón), `opacity`, `base`, `sat`/`satVariant`/`satOpacity` (capa de fondo GOES — NOAA nowcoast WMS, `?sat&satVar&satOp`; shareable como `layers`/`panel`/`cell` pero **nunca** persistida en `lamula:prefs`, a diferencia de `opacity`/`base`), `cursor`, `cogError`, y las preferencias de display `coverage`/`units`/`clock` (los iniciales son placeholders SSR deterministas — `clock:'utc'` aunque el default real de la pref sea `'local'`, porque el server no conoce la zona del navegador; los valores reales entran por `PREFS_LOADED` tras montar).
 
 | Evento | Región | Efecto |
 |---|---|---|
@@ -87,6 +87,7 @@ stateDiagram-v2
 | `MOUNTED` | — | guard (time `null` + raster resuelto) → efecto `navigate` replace al `vol_time` (la URL siempre contiene el frame exacto) |
 | `SELECT_SITE` / `SELECT_PRODUCT` | — | efecto `navigate` push — la máquina **no** refetchea aquí; el refetch llega por `ROUTE_CHANGED` en cada región (URL manda) |
 | `SET_OPACITY` | — | asigna contexto + `persistPrefs` + `syncQuery` (query `?opacity` con replace debounced 300 ms, omitida si es el default 0.8) |
+| `TOGGLE_SATELLITE` / `SELECT_SAT_VARIANT` / `SET_SAT_OPACITY` | — | asignan `sat`/`satVariant`/`satOpacity` + `syncQuery` (mismo replace debounced 300 ms que `opacity`/`base`, ahora con `?sat&satVar&satOp` — **sin** `persistPrefs`: la capa de satélite es estado compartible, no una pref personal). `RadarMap.vue` oculta la capa mientras el pool de animación está activo (incl. en pausa) independientemente de `sat` |
 | `CURSOR_MOVE` / `COG_ERROR` | — | asignan contexto |
 | `TOGGLE_LAYER(layer)` | — | añade/quita la capa en `context.layers` + `syncOverlayQuery` (replace inmediato de `?layers` — D23; sin debounce, es acción discreta). El cambio solo-query reentra por `ROUTE_CHANGED` y cae en `sameFrame`: el raster no reparpadea |
 | `SELECT_PANEL(panel\|null)` | — | asigna `context.panel` + `syncOverlayQuery` (`?panel`) |
@@ -100,7 +101,7 @@ stateDiagram-v2
 
 **Prefs (`lamula:prefs` en localStorage, nunca el `time` ni el `day`):** toda navegación (`ROUTE_CHANGED`) y todo cambio de opacidad disparan `persistPrefs` con `{site, product, opacity, base}` — así `/` siempre redirige a la última selección real, no a un valor mudo. Desde v2 el shape suma las preferencias de display `coverage`/`units`/`clock`, `persistPrefs` acepta patches parciales (`savePrefs` mergea sobre lo guardado con `PREF_DEFAULTS` de fallback) y un v1 válido migra en memoria al leer (se materializa como v2 en el primer write). `composables/useViewerPrefs.ts` sigue validando versión/shape (corrupto o `v` desconocida → `null`, no rompe la redirección). Las prefs de display viven en el contexto de `viewerMachine` con eventos raíz — sin máquina aparte (no tienen ciclo de vida propio; el criterio D27 no aplica) — y **jamás** en la URL (D28).
 
-**Dependencias inyectadas** (`.provide()` en la página; mocks en tests): actores `fetchClosest` (`$fetch` a `/api/rasters/closest`, 404 → `null`), `fetchDay` (`$fetch` a `/api/rasters/day`) y `fetchStep` (`$fetch` a `/api/rasters/{next,prev}`, 404 → `null` — solo se llama al agotar los vecinos locales de `context.times`, es decir al cruzar el día); acciones `navigate` (router push/replace conservando query, `composables/useViewerRoute.ts`), `persistPrefs` (`savePrefs`) y `syncQuery` (replace debounced de `?opacity&base`, ambas en la página).
+**Dependencias inyectadas** (`.provide()` en la página; mocks en tests): actores `fetchClosest` (`$fetch` a `/api/rasters/closest`, 404 → `null`), `fetchDay` (`$fetch` a `/api/rasters/day`) y `fetchStep` (`$fetch` a `/api/rasters/{next,prev}`, 404 → `null` — solo se llama al agotar los vecinos locales de `context.times`, es decir al cruzar el día); acciones `navigate` (router push/replace conservando query, `composables/useViewerRoute.ts`), `persistPrefs` (`savePrefs`) y `syncQuery` (replace debounced de `?opacity&base&sat&satVar&satOp`, ambas en la página).
 
 **Day picker (`components/DayPicker.vue`):** botones de día UTC sobre la ventana de 72h anclada a `radar.last_seen_at` (`utils/time-window.ts::dayWindow72h`, decisión 11) — no wall-clock, así un radar muerto sigue mostrando sus días con datos y las fixtures no se pudren. Click → evento `SELECT_DAY`.
 

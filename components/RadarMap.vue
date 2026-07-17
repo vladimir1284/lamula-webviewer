@@ -31,6 +31,9 @@ import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
+import { createSatelliteLayer, refreshSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
+
+const SAT_TIME_REFRESH_MS = 5 * 60_000 // GOES imagery se actualiza cada ~5 min
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -47,7 +50,21 @@ const props = withDefaults(defineProps<{
   /** overlay de fenómenos del frame mostrado, ya filtrado por capas activas (F4) */
   phenomena?: Phenomenon[] | null
   selectedCell?: string | null
-}>(), { showBase: true, showCoverage: true, frames: null, activeFrame: 0, phenomena: null, selectedCell: null })
+  /** capa de fondo GOES (NOAA WMS) — oculta en modo animación aunque esté activada */
+  satEnabled?: boolean
+  satVariant?: SatVariant
+  satOpacity?: number
+}>(), {
+  showBase: true,
+  showCoverage: true,
+  frames: null,
+  activeFrame: 0,
+  phenomena: null,
+  selectedCell: null,
+  satEnabled: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
+})
 
 const emit = defineEmits<{
   cursor: [sample: CursorSample | null]
@@ -66,6 +83,8 @@ let coverageLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
 let rasterLoadAbort: AbortController | undefined
 let pool: FramePool | undefined // modo animación
+let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
+let satTimeRefreshTimer: ReturnType<typeof setInterval> | undefined
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
@@ -81,6 +100,13 @@ const rasterLoaded = ref('none')
 function coverageRadiusM(): number {
   const meta = animationMode() ? props.frames![props.activeFrame] : props.raster
   return meta ? (meta.width / 2) * meta.cell_m : 460_000
+}
+
+// ── Capa de fondo GOES (WMS) ─────────────────────────────────────────────
+// Siempre bajo el raster (zIndex 3 < 5); oculta durante animación aunque
+// satEnabled esté en true — animationMode() ya cubre "pool activo, incl. pausa".
+function updateSatelliteVisibility() {
+  satelliteLayer?.setVisible(props.satEnabled && !animationMode())
 }
 
 function updateCoverage() {
@@ -213,10 +239,19 @@ function initOrUpdatePool() {
 
 onMounted(() => {
   baseLayer = new TileLayer({ source: new OSM(), zIndex: 0, visible: props.showBase })
+  satelliteLayer = createSatelliteLayer(props.satVariant, props.satOpacity)
+  satelliteLayer.setZIndex(3)
+  satelliteLayer.setVisible(props.satEnabled && !animationMode())
+  // capa invisible no pide tiles (OL), así que refrescar siempre (incl.
+  // apagada) es inofensivo y evita perder el refresco al reactivarla
+  satTimeRefreshTimer = setInterval(() => {
+    if (satelliteLayer) refreshSatelliteTime(satelliteLayer)
+  }, SAT_TIME_REFRESH_MS)
   map = new Map({
     target: container.value,
     layers: [
       baseLayer,
+      satelliteLayer,
       (coverageLayer = new VectorLayer({
         source: coverageSource,
         zIndex: 10,
@@ -321,9 +356,18 @@ watch(() => props.opacity, (o) => {
 watch(() => props.showBase, v => baseLayer?.setVisible(v))
 watch(() => props.showCoverage, v => coverageLayer?.setVisible(v))
 
+watch(() => [props.satEnabled, props.frames], updateSatelliteVisibility)
+watch(() => props.satOpacity, o => satelliteLayer?.setOpacity(o))
+watch(() => props.satVariant, (v) => {
+  if (satelliteLayer) setSatelliteVariant(satelliteLayer, v)
+})
+
 onBeforeUnmount(() => {
   rasterLoadAbort?.abort()
   teardownPool()
+  clearInterval(satTimeRefreshTimer)
+  satelliteLayer?.dispose()
+  satelliteLayer = undefined
   map?.setTarget(undefined)
   map = undefined
 })

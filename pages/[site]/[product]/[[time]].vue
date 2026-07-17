@@ -8,7 +8,7 @@ import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useVie
 import { animationMachine } from '../../../machines/animation'
 import { overlayMachine } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
-import type { NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
+import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 import { formatFull } from '../../../utils/time-display'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
@@ -16,6 +16,9 @@ import { convertRasterValue } from '../../../utils/units'
 
 const DEFAULT_OPACITY = 0.8
 const DEFAULT_BASE = 'osm' as const
+const DEFAULT_SAT = false
+const DEFAULT_SAT_VARIANT = 'ir' as const
+const DEFAULT_SAT_OPACITY = 0.6
 const QUERY_SYNC_DEBOUNCE_MS = 300
 
 definePageMeta({
@@ -73,10 +76,10 @@ const { data: initialTimes, error: initialTimesError } = await useFetch<RasterMe
 const navigate = useViewerNavigate()
 const router = useRouter()
 
-// query modifiers (opacity/base) con replace debounced — solo si difieren
-// del default, para no ensuciar la URL con el estado inicial
+// query modifiers (opacity/base/satélite) con replace debounced — solo si
+// difieren del default, para no ensuciar la URL con el estado inicial
 let queryTimer: ReturnType<typeof setTimeout> | undefined
-function syncQuery(params: { opacity: number, base: 'osm' | 'off' }) {
+function syncQuery(params: DisplayQueryParams) {
   clearTimeout(queryTimer)
   queryTimer = setTimeout(() => {
     const query = { ...route.query }
@@ -84,6 +87,12 @@ function syncQuery(params: { opacity: number, base: 'osm' | 'off' }) {
     else query.opacity = String(params.opacity)
     if (params.base === DEFAULT_BASE) delete query.base
     else query.base = params.base
+    if (params.sat === DEFAULT_SAT) delete query.sat
+    else query.sat = params.sat ? '1' : '0'
+    if (params.satVariant === DEFAULT_SAT_VARIANT) delete query.satVar
+    else query.satVar = params.satVariant
+    if (params.satOpacity === DEFAULT_SAT_OPACITY) delete query.satOp
+    else query.satOp = String(params.satOpacity)
     router.replace({ query })
   }, QUERY_SYNC_DEBOUNCE_MS)
 }
@@ -134,7 +143,7 @@ const machine = viewerMachine.provide({
   actions: {
     navigate: (_, params: NavigateParams) => navigate(params.patch, params.mode),
     persistPrefs: (_, params: PrefsParams) => savePrefs(params),
-    syncQuery: (_, params: { opacity: number, base: 'osm' | 'off' }) => syncQuery(params),
+    syncQuery: (_, params: DisplayQueryParams) => syncQuery(params),
     syncOverlayQuery: (_, params: OverlayQueryParams) => syncOverlayQuery(params),
   },
 })
@@ -481,6 +490,15 @@ function onSelectProduct(event: Event) {
 function onOpacityInput(event: Event) {
   send({ type: 'SET_OPACITY', value: Number((event.target as HTMLInputElement).value) })
 }
+function onToggleSatellite() {
+  send({ type: 'TOGGLE_SATELLITE' })
+}
+function onSelectSatVariant(event: Event) {
+  send({ type: 'SELECT_SAT_VARIANT', variant: (event.target as HTMLSelectElement).value as 'vis' | 'ir' })
+}
+function onSatOpacityInput(event: Event) {
+  send({ type: 'SET_SAT_OPACITY', value: Number((event.target as HTMLInputElement).value) })
+}
 </script>
 
 <template>
@@ -626,6 +644,49 @@ function onOpacityInput(event: Event) {
         </p>
 
         <fieldset class="rounded bg-slate-800 p-3 text-sm">
+          <legend class="px-1 text-slate-400">Satélite</legend>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="sat-toggle"
+              :checked="ctx.sat"
+              @change="onToggleSatellite"
+            >
+            <span>Mostrar capa GOES</span>
+          </label>
+          <template v-if="ctx.sat">
+            <label class="mt-2 block">
+              <span class="mb-1 block text-slate-400">Variante</span>
+              <select
+                :value="ctx.satVariant"
+                data-testid="sat-variant-select"
+                class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+                @change="onSelectSatVariant"
+              >
+                <option value="ir">Infrarrojo</option>
+                <option value="vis">Visible</option>
+              </select>
+            </label>
+            <label class="mt-2 block">
+              <span class="mb-1 block text-slate-400">Opacidad</span>
+              <input
+                :value="ctx.satOpacity"
+                data-testid="sat-opacity-slider"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                class="w-full"
+                @input="onSatOpacityInput"
+              >
+            </label>
+            <p class="mt-1 text-xs text-slate-400">
+              No se muestra durante la animación.
+            </p>
+          </template>
+        </fieldset>
+
+        <fieldset class="rounded bg-slate-800 p-3 text-sm">
           <legend class="px-1 text-slate-400">Fenómenos</legend>
           <label class="flex items-center gap-2">
             <input
@@ -710,6 +771,9 @@ function onOpacityInput(event: Event) {
             :show-coverage="ctx.coverage"
             :phenomena="overlayPhenomena"
             :selected-cell="ctx.cell"
+            :sat-enabled="ctx.sat"
+            :sat-variant="ctx.satVariant"
+            :sat-opacity="ctx.satOpacity"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"

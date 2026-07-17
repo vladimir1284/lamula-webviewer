@@ -11,6 +11,8 @@ export const SITE_RE = /^[A-Z0-9]{3}$/
 export const PRODUCT_RE = /^\d+$/
 export const DEFAULT_OPACITY = 0.8
 export const CELL_ID_RE = /^[A-Z0-9]{1,8}$/
+export const DEFAULT_SAT_VARIANT = 'ir' as const
+export const DEFAULT_SAT_OPACITY = 0.6
 
 /** null si la ruta actual no es una ruta del viewer o trae params inválidos */
 export function parseViewerRoute(
@@ -44,6 +46,14 @@ export function parseViewerRoute(
   const rawCell = route.query.cell
   const cell = typeof rawCell === 'string' && CELL_ID_RE.test(rawCell) ? rawCell : null
 
+  // capa de fondo GOES (shareable, no persistida — ver machines/viewer.ts DisplayQueryParams)
+  const sat = route.query.sat === '1'
+  const satVariant = route.query.satVar === 'vis' ? 'vis' : DEFAULT_SAT_VARIANT
+  const rawSatOpacity = Number.parseFloat(String(route.query.satOp ?? ''))
+  const satOpacity = Number.isFinite(rawSatOpacity)
+    ? Math.min(1, Math.max(0, rawSatOpacity))
+    : DEFAULT_SAT_OPACITY
+
   return {
     site,
     product: Number(product),
@@ -53,6 +63,9 @@ export function parseViewerRoute(
     layers,
     panel,
     cell,
+    sat,
+    satVariant,
+    satOpacity,
   }
 }
 

@@ -24,6 +24,10 @@ export interface ViewerRouteState {
   panel: PanelId | null
   /** celda seleccionada (?cell=D4) */
   cell: string | null
+  /** capa de fondo GOES (NOAA WMS) — ?sat=1&satVar=vis|ir&satOp=0..1, shareable como layers/panel/cell */
+  sat: boolean
+  satVariant: 'vis' | 'ir'
+  satOpacity: number
 }
 
 export interface NavigatePatch {
@@ -73,6 +77,9 @@ export type ViewerEvent =
   | { type: 'SELECT_CELL', cellId: string | null }
   | { type: 'PREFS_LOADED', prefs: UserPrefsSlice }
   | { type: 'SET_PREF', patch: Partial<UserPrefsSlice> }
+  | { type: 'TOGGLE_SATELLITE' }
+  | { type: 'SELECT_SAT_VARIANT', variant: 'vis' | 'ir' }
+  | { type: 'SET_SAT_OPACITY', value: number }
 
 interface ViewerContext {
   radars: Radar[]
@@ -95,6 +102,9 @@ interface ViewerContext {
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
+  sat: boolean
+  satVariant: 'vis' | 'ir'
+  satOpacity: number
   cursor: CursorSample | null
   cogError: string
   /** preferencias de display; los iniciales son placeholders SSR deterministas
@@ -104,6 +114,15 @@ interface ViewerContext {
   units: 'imperial' | 'si'
   clock: 'utc' | 'local'
   animationFrames: number
+}
+
+/** query params de configuración de display (opacity/base/satélite) — un solo syncQuery debounced */
+export interface DisplayQueryParams {
+  opacity: number
+  base: 'osm' | 'off'
+  sat: boolean
+  satVariant: 'vis' | 'ir'
+  satOpacity: number
 }
 
 /** slice de la query que refleja el estado de overlays (D23) */
@@ -127,6 +146,9 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
       layers: route.layers,
       panel: route.panel,
       cell: route.cell,
+      sat: route.sat,
+      satVariant: route.satVariant,
+      satOpacity: route.satOpacity,
     }
   },
 )
@@ -180,7 +202,7 @@ export const viewerMachine = setup({
     // efectos opcionales (noop por defecto; la página los provee):
     // persistir prefs en localStorage y reflejar opacity/base en la query
     persistPrefs: (_args, _params: PrefsParams) => {},
-    syncQuery: (_args, _params: { opacity: number, base: 'osm' | 'off' }) => {},
+    syncQuery: (_args, _params: DisplayQueryParams) => {},
     // reflejar toggles de overlays en la query (replace inmediato — D23)
     syncOverlayQuery: (_args, _params: OverlayQueryParams) => {},
   },
@@ -223,6 +245,9 @@ export const viewerMachine = setup({
     layers: input.route.layers,
     panel: input.route.panel,
     cell: input.route.cell,
+    sat: input.route.sat,
+    satVariant: input.route.satVariant,
+    satOpacity: input.route.satOpacity,
     cursor: null,
     cogError: '',
     coverage: true,
@@ -246,7 +271,62 @@ export const viewerMachine = setup({
         },
         {
           type: 'syncQuery',
-          params: ({ context, event }) => ({ opacity: event.value, base: context.base }),
+          params: ({ context, event }) => ({
+            opacity: event.value,
+            base: context.base,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          }),
+        },
+      ],
+    },
+    // capa de fondo GOES (D23-adyacente): shareable en la URL como layers/panel/cell,
+    // pero NUNCA en localStorage (no es una pref personal) — de ahí que reuse
+    // syncQuery (opacity/base) en vez de persistPrefs.
+    TOGGLE_SATELLITE: {
+      actions: enqueueActions(({ context, enqueue }) => {
+        const sat = !context.sat
+        enqueue.assign({ sat })
+        enqueue({
+          type: 'syncQuery',
+          params: {
+            opacity: context.opacity,
+            base: context.base,
+            sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          },
+        })
+      }),
+    },
+    SELECT_SAT_VARIANT: {
+      actions: [
+        assign({ satVariant: ({ event }) => event.variant }),
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: context.base,
+            sat: context.sat,
+            satVariant: event.variant,
+            satOpacity: context.satOpacity,
+          }),
+        },
+      ],
+    },
+    SET_SAT_OPACITY: {
+      actions: [
+        assign({ satOpacity: ({ event }) => event.value }),
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: context.base,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: event.value,
+          }),
         },
       ],
     },
