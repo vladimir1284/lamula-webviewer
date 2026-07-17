@@ -94,9 +94,10 @@ stateDiagram-v2
 | `SET_OPACITY` | — | asigna contexto + `persistPrefs` + `syncQuery` (query `?opacity` con replace debounced 300 ms, omitida si es el default 0.8) |
 | `TOGGLE_SATELLITE` / `SELECT_SAT_VARIANT` / `SET_SAT_OPACITY` | — | asignan `sat`/`satVariant`/`satOpacity` + `syncQuery` (mismo replace debounced 300 ms que `opacity`/`base`, ahora con `?sat&satVar&satOp` — **sin** `persistPrefs`: la capa de satélite es estado compartible, no una pref personal). `RadarMap.vue` oculta la capa mientras el pool de animación está activo (incl. en pausa) independientemente de `sat` |
 | `CURSOR_MOVE` / `COG_ERROR` | — | asignan contexto |
-| `TOGGLE_LAYER(layer)` | — | añade/quita la capa en `context.layers` + `syncOverlayQuery` (replace inmediato de `?layers` — D23; sin debounce, es acción discreta). El cambio solo-query reentra por `ROUTE_CHANGED` y cae en `sameFrame`: el raster no reparpadea |
+| `TOGGLE_LAYER(layer)` | — | añade/quita la capa en `context.layers` + `syncOverlayQuery` (replace inmediato de `?layers` — D23; sin debounce, es acción discreta). Incluye los toggles de grupo `trackPast`/`trackFuture` (trayectorias pasada/futura de TODAS las celdas, default-off como `cells`/`meso`). El cambio solo-query reentra por `ROUTE_CHANGED` y cae en `sameFrame`: el raster no reparpadea |
 | `SELECT_PANEL(panel\|null)` | — | asigna `context.panel` + `syncOverlayQuery` (`?panel`) |
-| `SELECT_CELL(cellId\|null)` | — | asigna `context.cell` (+ si el panel está cerrado, lo abre en `trend` — el gesto pide ver esa celda) + `syncOverlayQuery` (`?cell`) |
+| `SELECT_CELL(cellId\|null)` | — | asigna `context.cell` (+ si el panel está cerrado, lo abre en `trend` — el gesto pide ver esa celda) + `syncOverlayQuery` (`?cell`). `RadarMap.vue` centra la vista (`view.animate`, sin cambio de zoom) sobre el marker de la celda seleccionada |
+| `TOGGLE_CELL_TRACK(cellId, kind: 'past'\|'future')` | — | override individual de trayectoria: añade/quita `cellId` en `context.pastCells`/`futureCells` (independiente del toggle de grupo) + `syncOverlayQuery` (`?pastCells`/`?futureCells`, CSV de cell ids). Visibilidad efectiva en `phenomena-layer.ts` = toggle de grupo OR override individual — checkbox por fila en `CellTable.vue`, deshabilitado si la celda no tiene puntos de esa trayectoria |
 | `PREFS_LOADED(prefs)` | — | asigna `coverage`/`units`/`clock` leídos de localStorage (post-mount). **Nunca** persiste — sería write-on-read |
 | `SET_PREF(patch)` | — | asigna el patch + `persistPrefs(patch)` (diálogo de preferencias; efecto en vivo, sin Guardar/Cancelar) |
 

@@ -24,6 +24,10 @@ export interface ViewerRouteState {
   panel: PanelId | null
   /** celda seleccionada (?cell=D4) */
   cell: string | null
+  /** overrides individuales de trayectoria, independientes del toggle de grupo trackPast/trackFuture (?pastCells=D4,D7) */
+  pastCells: string[]
+  /** (?futureCells=D4,D7) */
+  futureCells: string[]
   /** capa de fondo GOES (NOAA WMS) — ?sat=1&satVar=vis|ir&satOp=0..1, shareable como layers/panel/cell */
   sat: boolean
   satVariant: 'vis' | 'ir'
@@ -77,6 +81,7 @@ export type ViewerEvent =
   | { type: 'TOGGLE_LAYER', layer: OverlayLayerId }
   | { type: 'SELECT_PANEL', panel: PanelId | null }
   | { type: 'SELECT_CELL', cellId: string | null }
+  | { type: 'TOGGLE_CELL_TRACK', cellId: string, kind: 'past' | 'future' }
   | { type: 'PREFS_LOADED', prefs: UserPrefsSlice }
   | { type: 'SET_PREF', patch: Partial<UserPrefsSlice> }
   | { type: 'TOGGLE_SATELLITE' }
@@ -104,6 +109,8 @@ interface ViewerContext {
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
+  pastCells: string[]
+  futureCells: string[]
   sat: boolean
   satVariant: 'vis' | 'ir'
   satOpacity: number
@@ -132,6 +139,8 @@ export interface OverlayQueryParams {
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
+  pastCells: string[]
+  futureCells: string[]
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10)
@@ -148,6 +157,8 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
       layers: route.layers,
       panel: route.panel,
       cell: route.cell,
+      pastCells: route.pastCells,
+      futureCells: route.futureCells,
       sat: route.sat,
       satVariant: route.satVariant,
       satOpacity: route.satOpacity,
@@ -247,6 +258,8 @@ export const viewerMachine = setup({
     layers: input.route.layers,
     panel: input.route.panel,
     cell: input.route.cell,
+    pastCells: input.route.pastCells,
+    futureCells: input.route.futureCells,
     sat: input.route.sat,
     satVariant: input.route.satVariant,
     satOpacity: input.route.satOpacity,
@@ -356,7 +369,13 @@ export const viewerMachine = setup({
         enqueue.assign({ layers })
         enqueue({
           type: 'syncOverlayQuery',
-          params: { layers, panel: context.panel, cell: context.cell },
+          params: {
+            layers,
+            panel: context.panel,
+            cell: context.cell,
+            pastCells: context.pastCells,
+            futureCells: context.futureCells,
+          },
         })
       }),
     },
@@ -365,7 +384,13 @@ export const viewerMachine = setup({
         enqueue.assign({ panel: event.panel })
         enqueue({
           type: 'syncOverlayQuery',
-          params: { layers: context.layers, panel: event.panel, cell: context.cell },
+          params: {
+            layers: context.layers,
+            panel: event.panel,
+            cell: context.cell,
+            pastCells: context.pastCells,
+            futureCells: context.futureCells,
+          },
         })
       }),
     },
@@ -377,7 +402,35 @@ export const viewerMachine = setup({
         enqueue.assign({ cell: event.cellId, panel })
         enqueue({
           type: 'syncOverlayQuery',
-          params: { layers: context.layers, panel, cell: event.cellId },
+          params: {
+            layers: context.layers,
+            panel,
+            cell: event.cellId,
+            pastCells: context.pastCells,
+            futureCells: context.futureCells,
+          },
+        })
+      }),
+    },
+    // checkbox individual de trayectoria en la tabla de celdas: independiente
+    // del toggle de grupo trackPast/trackFuture (visibilidad efectiva = OR)
+    TOGGLE_CELL_TRACK: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        const key = event.kind === 'past' ? 'pastCells' : 'futureCells'
+        const current = context[key]
+        const next = current.includes(event.cellId)
+          ? current.filter(id => id !== event.cellId)
+          : [...current, event.cellId]
+        enqueue.assign({ [key]: next })
+        enqueue({
+          type: 'syncOverlayQuery',
+          params: {
+            layers: context.layers,
+            panel: context.panel,
+            cell: context.cell,
+            pastCells: key === 'pastCells' ? next : context.pastCells,
+            futureCells: key === 'futureCells' ? next : context.futureCells,
+          },
         })
       }),
     },

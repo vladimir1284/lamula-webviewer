@@ -46,6 +46,14 @@ export function parseViewerRoute(
   const rawCell = route.query.cell
   const cell = typeof rawCell === 'string' && CELL_ID_RE.test(rawCell) ? rawCell : null
 
+  // overrides individuales de trayectoria, independientes de trackPast/trackFuture en `layers`
+  const pastCells = [...new Set(
+    String(route.query.pastCells ?? '').split(',').filter(id => CELL_ID_RE.test(id)),
+  )]
+  const futureCells = [...new Set(
+    String(route.query.futureCells ?? '').split(',').filter(id => CELL_ID_RE.test(id)),
+  )]
+
   // capa de fondo GOES (shareable, no persistida — ver machines/viewer.ts DisplayQueryParams)
   const sat = route.query.sat === '1'
   const satVariant = route.query.satVar === 'vis' ? 'vis' : DEFAULT_SAT_VARIANT
@@ -63,6 +71,8 @@ export function parseViewerRoute(
     layers,
     panel,
     cell,
+    pastCells,
+    futureCells,
     sat,
     satVariant,
     satOpacity,
@@ -75,6 +85,8 @@ export function overlayQueryPatch(params: OverlayQueryParams): Record<string, st
     layers: params.layers.length > 0 ? params.layers.join(',') : undefined,
     panel: params.panel ?? undefined,
     cell: params.cell ?? undefined,
+    pastCells: params.pastCells.length > 0 ? params.pastCells.join(',') : undefined,
+    futureCells: params.futureCells.length > 0 ? params.futureCells.join(',') : undefined,
   }
 }
 

@@ -13,6 +13,7 @@ import Feature from 'ol/Feature'
 import { LineString, MultiPoint, Point } from 'ol/geom'
 import { circular } from 'ol/geom/Polygon'
 import { fromLonLat, transform } from 'ol/proj'
+import CircleStyle from 'ol/style/Circle'
 import Fill from 'ol/style/Fill'
 import RegularShape from 'ol/style/RegularShape'
 import Stroke from 'ol/style/Stroke'
@@ -30,12 +31,36 @@ export type OverlayFeatureKind =
   | 'meso'
   | 'tvs'
 
-const CELL_COLOR = '#e2e8f0' // slate-200
 const CELL_SELECTED = '#facc15' // yellow-400
 const MESO_COLOR = '#f59e0b' // amber-500
 const SEVERE_COLOR = '#ef4444' // red-500
 /** mesociclón con strength_rank ≥ 5: convención NWS de "fuerte" */
 const MESO_SEVERE_RANK = 5
+
+// Combo marca+halo compartido con las etiquetas de TimelineStrip.vue
+// (TICK_NAVY) — si uno cambia, el otro debe cambiar a mano.
+const TRACK_NAVY = '#0C447C'
+const HALO_WHITE = '#ffffff'
+
+/** rango dBZ estándar NWS → radio del marker de celda, en px, clamp fuera de rango */
+const DBZ_MIN = 5
+const DBZ_MAX = 75
+const RADIUS_MIN = 5
+const RADIUS_MAX = 14
+const RADIUS_FALLBACK = 7 // sin dbz_max: tamaño previo por defecto
+
+function dbzToRadius(dbzMax: number | null | undefined): number {
+  if (dbzMax === null || dbzMax === undefined || Number.isNaN(dbzMax)) return RADIUS_FALLBACK
+  const clamped = Math.min(DBZ_MAX, Math.max(DBZ_MIN, dbzMax))
+  const t = (clamped - DBZ_MIN) / (DBZ_MAX - DBZ_MIN)
+  return RADIUS_MIN + t * (RADIUS_MAX - RADIUS_MIN)
+}
+
+/** trayectorias pasado/futuro: visibles solo si el caller las habilita (default oculto) */
+export interface TrackVisibility {
+  pastVisible: (cellId: string | null) => boolean
+  futureVisible: (cellId: string | null) => boolean
+}
 
 /**
  * Features de un volumen de fenómenos, ya filtrado por capas activas.
@@ -45,6 +70,7 @@ export function buildPhenomenaFeatures(
   phenomena: Phenomenon[],
   selectedCell: string | null,
   projCode: string,
+  trackVis: TrackVisibility,
 ): Feature[] {
   const features: Feature[] = []
 
@@ -59,12 +85,13 @@ export function buildPhenomenaFeatures(
         f4: 'cell' satisfies OverlayFeatureKind,
         cellId: row.cell_id,
         selected,
+        dbzMax: attrs.dbz_max ?? null,
       })
       features.push(marker)
 
       const chain = trackChain(attrs)
       const toMap = ([x, y]: [number, number]) => transform([x, y], projCode, 'EPSG:3857')
-      if (chain.past.length > 0) {
+      if (chain.past.length > 0 && trackVis.pastVisible(row.cell_id)) {
         const pts = chain.past.map(toMap)
         const line = new Feature(new LineString([...pts, pos]))
         line.set('f4', 'past' satisfies OverlayFeatureKind)
@@ -72,7 +99,7 @@ export function buildPhenomenaFeatures(
         dots.set('f4', 'pastDot' satisfies OverlayFeatureKind)
         features.push(line, dots)
       }
-      if (chain.forecast.length > 0) {
+      if (chain.forecast.length > 0 && trackVis.futureVisible(row.cell_id)) {
         const pts = chain.forecast.map(toMap)
         const line = new Feature(new LineString([pos, ...pts]))
         line.set('f4', 'forecast' satisfies OverlayFeatureKind)
@@ -105,6 +132,7 @@ export function buildPhenomenaFeatures(
 }
 
 const styleCache = new Map<string, Style>()
+const styleArrCache = new Map<string, Style[]>()
 
 function cached(key: string, make: () => Style): Style {
   let style = styleCache.get(key)
@@ -115,60 +143,94 @@ function cached(key: string, make: () => Style): Style {
   return style
 }
 
-function cellStyle(cellId: string | null, selected: boolean): Style {
-  const color = selected ? CELL_SELECTED : CELL_COLOR
-  return cached(`cell|${cellId ?? ''}|${selected}`, () =>
+function cachedArr(key: string, make: () => Style[]): Style[] {
+  let styles = styleArrCache.get(key)
+  if (!styles) {
+    styles = make()
+    styleArrCache.set(key, styles)
+  }
+  return styles
+}
+
+function cellStyle(cellId: string | null, selected: boolean, dbzMax: number | null): Style {
+  const color = selected ? CELL_SELECTED : TRACK_NAVY
+  const radius = dbzToRadius(dbzMax)
+  const radiusKey = Math.round(radius)
+  return cached(`cell|${cellId ?? ''}|${selected}|${radiusKey}`, () =>
     new Style({
-      image: new RegularShape({
-        points: 3,
-        radius: selected ? 9 : 7,
-        stroke: new Stroke({ color, width: 2 }),
-        fill: new Fill({ color: selected ? 'rgba(250,204,21,0.25)' : 'rgba(226,232,240,0.15)' }),
+      // el marker de la celda SIEMPRE gana el declutter frente a los puntos
+      // de su propia trayectoria (pastDot/forecastDot caen justo al lado —
+      // sin zIndex, declutter elegía cuál de los dos pintar según el orden
+      // del índice espacial, y a veces tapaba la celda misma)
+      zIndex: 10,
+      image: new CircleStyle({
+        radius,
+        fill: new Fill({ color }),
       }),
       text: new Text({
         text: cellId ?? '',
         font: 'bold 11px ui-monospace, monospace',
-        fill: new Fill({ color }),
-        stroke: new Stroke({ color: 'rgba(15,23,42,0.9)', width: 3 }),
+        fill: new Fill({ color: TRACK_NAVY }),
+        stroke: new Stroke({ color: HALO_WHITE, width: 3 }),
         offsetY: -14,
       }),
     }))
 }
 
 /** styleFunction de la VectorLayer del overlay */
-export function overlayStyle(feature: { get(key: string): unknown }): Style {
+export function overlayStyle(feature: { get(key: string): unknown }): Style | Style[] {
   const kind = feature.get('f4') as OverlayFeatureKind
   switch (kind) {
     case 'cell':
-      return cellStyle(feature.get('cellId') as string | null, feature.get('selected') === true)
+      return cellStyle(
+        feature.get('cellId') as string | null,
+        feature.get('selected') === true,
+        feature.get('dbzMax') as number | null,
+      )
     case 'past':
-      return cached('past', () =>
+      return cachedArr('past', () => [
         new Style({
-          stroke: new Stroke({ color: 'rgba(226,232,240,0.75)', width: 1.5, lineDash: [3, 6] }),
-        }))
+          stroke: new Stroke({ color: HALO_WHITE, width: 6, lineDash: [3, 6] }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: TRACK_NAVY, width: 2.5, lineDash: [3, 6] }),
+        }),
+      ])
     case 'pastDot':
+      // un solo Style (mismo motivo que cellStyle: declutter descarta el 2º
+      // Style con imagen en el mismo punto)
       return cached('pastDot', () =>
         new Style({
-          image: new RegularShape({
-            points: 12,
-            radius: 2.5,
-            fill: new Fill({ color: 'rgba(226,232,240,0.75)' }),
+          zIndex: 1, // cede el declutter al marker de la celda (ver cellStyle)
+          image: new CircleStyle({
+            radius: 4.5,
+            fill: new Fill({ color: '#000000' }),
+            stroke: new Stroke({ color: HALO_WHITE, width: 2 }),
           }),
         }))
     case 'forecast':
-      return cached('forecast', () =>
+      return cachedArr('forecast', () => [
         new Style({
-          stroke: new Stroke({ color: CELL_COLOR, width: 1.5 }),
-        }))
+          stroke: new Stroke({ color: HALO_WHITE, width: 6 }),
+        }),
+        new Style({
+          stroke: new Stroke({ color: TRACK_NAVY, width: 2.5 }),
+        }),
+      ])
     case 'forecastDot':
+      // radius2:0 colapsa el relleno a área cero (4 puntas degeneradas) —
+      // lo único que pinta píxeles es el stroke, así que el color visible
+      // de la cruz es el stroke, no el fill (confirmado: con fill negro +
+      // stroke blanco la cruz se veía blanca, no negra)
       return cached('forecastDot', () =>
         new Style({
+          zIndex: 1, // cede el declutter al marker de la celda (ver cellStyle)
           image: new RegularShape({
             points: 4,
-            radius: 5,
+            radius: 8,
             radius2: 0,
             angle: Math.PI / 4,
-            stroke: new Stroke({ color: CELL_COLOR, width: 1.5 }),
+            stroke: new Stroke({ color: '#000000', width: 3 }),
           }),
         }))
     case 'meso': {

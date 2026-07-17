@@ -26,7 +26,7 @@ import type { Phenomenon, VwpLevel } from '#shared/contract'
 import { assign, fromPromise, raise, setup } from 'xstate'
 import { nearestWithin } from '../utils/overlay/join'
 
-export const OVERLAY_LAYERS = ['cells', 'meso'] as const
+export const OVERLAY_LAYERS = ['cells', 'meso', 'trackPast', 'trackFuture'] as const
 export type OverlayLayerId = (typeof OVERLAY_LAYERS)[number]
 
 export const PANELS = ['cells', 'trend', 'vwp'] as const

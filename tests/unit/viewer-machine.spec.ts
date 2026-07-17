@@ -40,6 +40,8 @@ const routeAt = (patch: Partial<ViewerRouteState> = {}): ViewerRouteState => ({
   layers: [],
   panel: null,
   cell: null,
+  pastCells: [],
+  futureCells: [],
   sat: false,
   satVariant: 'ir',
   satOpacity: 0.6,
@@ -479,12 +481,12 @@ describe('viewerMachine — overlays (D23)', () => {
     const { actor, syncOverlayQuery } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
     expect(actor.getSnapshot().context.layers).toEqual(['cells'])
-    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['cells'], panel: null, cell: null })
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['cells'], panel: null, cell: null, pastCells: [], futureCells: [] })
     actor.send({ type: 'TOGGLE_LAYER', layer: 'meso' })
     expect(actor.getSnapshot().context.layers).toEqual(['cells', 'meso'])
     actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
     expect(actor.getSnapshot().context.layers).toEqual(['meso'])
-    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['meso'], panel: null, cell: null })
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: ['meso'], panel: null, cell: null, pastCells: [], futureCells: [] })
   })
 
   it('SELECT_PANEL abre y cierra el panel', () => {
@@ -493,7 +495,7 @@ describe('viewerMachine — overlays (D23)', () => {
     expect(actor.getSnapshot().context.panel).toBe('vwp')
     actor.send({ type: 'SELECT_PANEL', panel: null })
     expect(actor.getSnapshot().context.panel).toBeNull()
-    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: null, cell: null })
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: null, cell: null, pastCells: [], futureCells: [] })
   })
 
   it('SELECT_CELL con panel cerrado abre la tendencia; con panel abierto lo respeta', () => {
@@ -501,7 +503,7 @@ describe('viewerMachine — overlays (D23)', () => {
     actor.send({ type: 'SELECT_CELL', cellId: 'D4' })
     expect(actor.getSnapshot().context.cell).toBe('D4')
     expect(actor.getSnapshot().context.panel).toBe('trend')
-    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: 'trend', cell: 'D4' })
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: 'trend', cell: 'D4', pastCells: [], futureCells: [] })
 
     actor.send({ type: 'SELECT_PANEL', panel: 'cells' })
     actor.send({ type: 'SELECT_CELL', cellId: 'A1' })
@@ -509,6 +511,22 @@ describe('viewerMachine — overlays (D23)', () => {
     actor.send({ type: 'SELECT_CELL', cellId: null })
     expect(actor.getSnapshot().context.cell).toBeNull()
     expect(actor.getSnapshot().context.panel).toBe('cells')
+  })
+
+  it('TOGGLE_CELL_TRACK añade/quita el override individual, independiente del grupo', () => {
+    const { actor, syncOverlayQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_CELL_TRACK', cellId: 'D4', kind: 'past' })
+    expect(actor.getSnapshot().context.pastCells).toEqual(['D4'])
+    expect(actor.getSnapshot().context.futureCells).toEqual([])
+    expect(syncOverlayQuery).toHaveBeenLastCalledWith({ layers: [], panel: null, cell: null, pastCells: ['D4'], futureCells: [] })
+
+    actor.send({ type: 'TOGGLE_CELL_TRACK', cellId: 'A1', kind: 'future' })
+    expect(actor.getSnapshot().context.futureCells).toEqual(['A1'])
+    expect(actor.getSnapshot().context.pastCells).toEqual(['D4'])
+
+    actor.send({ type: 'TOGGLE_CELL_TRACK', cellId: 'D4', kind: 'past' })
+    expect(actor.getSnapshot().context.pastCells).toEqual([])
+    expect(actor.getSnapshot().context.futureCells).toEqual(['A1'])
   })
 
   it('el raster no reparpadea al cambiar solo la query de overlays (sameFrame)', () => {

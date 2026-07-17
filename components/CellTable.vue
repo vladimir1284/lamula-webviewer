@@ -8,6 +8,7 @@ import type { Phenomenon } from '#shared/contract'
 import { mesoAttrs, stormCellAttrs } from '#shared/contract'
 import type { UnitsPref } from '../utils/units'
 import { formatHeightKft, formatSpeedKt, heightUnit, speedUnit } from '../utils/units'
+import { trackChain } from '../utils/overlay/tracks'
 
 const props = withDefaults(defineProps<{
   /** filas completas del volumen casado (todas las kinds), o null */
@@ -15,11 +16,16 @@ const props = withDefaults(defineProps<{
   /** null = nada dentro de tolerancia (mensaje distinto a volumen sin celdas) */
   joined: string | null
   selectedCell: string | null
+  /** overrides individuales de trayectoria (checkbox por fila) */
+  pastCellIds?: string[]
+  futureCellIds?: string[]
   units?: UnitsPref
-}>(), { units: 'imperial' })
+}>(), { units: 'imperial', pastCellIds: () => [], futureCellIds: () => [] })
 
 const emit = defineEmits<{
   select: [cellId: string | null]
+  'toggle-past-track': [cellId: string]
+  'toggle-future-track': [cellId: string]
 }>()
 
 interface CellRow {
@@ -31,6 +37,8 @@ interface CellRow {
   isNew: boolean
   hasMeso: boolean
   hasTvs: boolean
+  hasPast: boolean
+  hasForecast: boolean
 }
 
 const rows = computed<CellRow[]>(() => {
@@ -49,6 +57,7 @@ const rows = computed<CellRow[]>(() => {
     .map((p) => {
       const a = stormCellAttrs(p.attrs)
       const meso = mesoByStorm.get(p.cell_id!)
+      const chain = trackChain(a)
       return {
         cellId: p.cell_id!,
         dbzMax: a.dbz_max ?? null,
@@ -58,6 +67,8 @@ const rows = computed<CellRow[]>(() => {
         isNew: a.new === true,
         hasMeso: meso !== undefined,
         hasTvs: meso?.tvs === true,
+        hasPast: chain.past.length > 0,
+        hasForecast: chain.forecast.length > 0,
       }
     })
     .sort((a, b) => (b.dbzMax ?? -Infinity) - (a.dbzMax ?? -Infinity))
@@ -95,6 +106,8 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
           <th class="py-1 pr-2 text-right">Alt ({{ heightUnit(units, 'kft') }})</th>
           <th class="py-1 pr-2 text-right">Mov</th>
           <th class="py-1">Flags</th>
+          <th class="py-1 pr-1 text-center" title="Trayectoria pasada">Pas.</th>
+          <th class="py-1 text-center" title="Trayectoria futura">Fut.</th>
         </tr>
       </thead>
       <tbody>
@@ -116,6 +129,26 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
             <span v-if="row.isNew" class="mr-1 rounded bg-sky-900 px-1 text-sky-200">Nueva</span>
             <span v-if="row.hasMeso" class="mr-1 rounded bg-amber-900 px-1 text-amber-200">MESO</span>
             <span v-if="row.hasTvs" class="rounded bg-red-900 px-1 text-red-200">TVS</span>
+          </td>
+          <td class="py-1 pr-1 text-center">
+            <input
+              type="checkbox"
+              :data-testid="`cell-past-${row.cellId}`"
+              :disabled="!row.hasPast"
+              :checked="pastCellIds.includes(row.cellId)"
+              @click.stop
+              @change="emit('toggle-past-track', row.cellId)"
+            >
+          </td>
+          <td class="py-1 text-center">
+            <input
+              type="checkbox"
+              :data-testid="`cell-future-${row.cellId}`"
+              :disabled="!row.hasForecast"
+              :checked="futureCellIds.includes(row.cellId)"
+              @click.stop
+              @change="emit('toggle-future-track', row.cellId)"
+            >
           </td>
         </tr>
       </tbody>

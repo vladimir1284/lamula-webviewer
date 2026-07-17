@@ -7,6 +7,7 @@ import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
 import { overlayMachine } from '../../../machines/overlay'
+import type { OverlayLayerId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 import { formatFull } from '../../../utils/time-display'
@@ -466,8 +467,12 @@ const overlayJoinInfo = computed(() => {
   return null
 })
 
-function onToggleLayer(layer: 'cells' | 'meso') {
+function onToggleLayer(layer: OverlayLayerId) {
   send({ type: 'TOGGLE_LAYER', layer })
+}
+
+function onToggleCellTrack(cellId: string, kind: 'past' | 'future') {
+  send({ type: 'TOGGLE_CELL_TRACK', cellId, kind })
 }
 
 const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
@@ -719,6 +724,24 @@ function onSatOpacityInput(event: Event) {
             >
             <span>Mesociclones / TVS</span>
           </label>
+          <label class="mt-1 flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="layer-toggle-track-past"
+              :checked="ctx.layers.includes('trackPast')"
+              @change="onToggleLayer('trackPast')"
+            >
+            <span>Trayectoria pasada (todas)</span>
+          </label>
+          <label class="mt-1 flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="layer-toggle-track-future"
+              :checked="ctx.layers.includes('trackFuture')"
+              @change="onToggleLayer('trackFuture')"
+            >
+            <span>Trayectoria futura (todas)</span>
+          </label>
           <p
             v-if="overlayJoinInfo"
             data-testid="overlay-info"
@@ -750,6 +773,10 @@ function onSatOpacityInput(event: Event) {
             :show-coverage="ctx.coverage"
             :phenomena="overlayPhenomena"
             :selected-cell="ctx.cell"
+            :show-past-all="ctx.layers.includes('trackPast')"
+            :show-future-all="ctx.layers.includes('trackFuture')"
+            :past-cell-ids="ctx.pastCells"
+            :future-cell-ids="ctx.futureCells"
             :sat-enabled="ctx.sat"
             :sat-variant="ctx.satVariant"
             :sat-opacity="ctx.satOpacity"
@@ -809,8 +836,12 @@ function onSatOpacityInput(event: Event) {
             :phenomena="overlayCtx.phenomena"
             :joined="overlayCtx.joined"
             :selected-cell="ctx.cell"
+            :past-cell-ids="ctx.pastCells"
+            :future-cell-ids="ctx.futureCells"
             :units="ctx.units"
             @select="send({ type: 'SELECT_CELL', cellId: $event })"
+            @toggle-past-track="onToggleCellTrack($event, 'past')"
+            @toggle-future-track="onToggleCellTrack($event, 'future')"
           />
         </template>
         <template #trend>

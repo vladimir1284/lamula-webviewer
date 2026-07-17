@@ -11,6 +11,7 @@
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
 import View from 'ol/View'
+import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
@@ -50,6 +51,13 @@ const props = withDefaults(defineProps<{
   /** overlay de fenómenos del frame mostrado, ya filtrado por capas activas (F4) */
   phenomena?: Phenomenon[] | null
   selectedCell?: string | null
+  /** toggle de grupo: trayectorias pasadas de TODAS las celdas */
+  showPastAll?: boolean
+  /** toggle de grupo: trayectorias futuras de TODAS las celdas */
+  showFutureAll?: boolean
+  /** overrides individuales — visibilidad efectiva = showPastAll OR incluida aquí */
+  pastCellIds?: string[]
+  futureCellIds?: string[]
   /** capa de fondo GOES (NOAA WMS) — oculta en modo animación aunque esté activada */
   satEnabled?: boolean
   satVariant?: SatVariant
@@ -61,6 +69,10 @@ const props = withDefaults(defineProps<{
   activeFrame: 0,
   phenomena: null,
   selectedCell: null,
+  showPastAll: false,
+  showFutureAll: false,
+  pastCellIds: () => [],
+  futureCellIds: () => [],
   satEnabled: false,
   satVariant: 'ir',
   satOpacity: 0.6,
@@ -138,9 +150,27 @@ function updatePhenomena() {
   phenomenaSource.clear()
   if (!map || !props.phenomena || props.phenomena.length === 0) return
   const projCode = registerRadarProjection(props.radar.site_id, props.radar.proj4)
+  const pastSet = new Set(props.pastCellIds)
+  const futureSet = new Set(props.futureCellIds)
   phenomenaSource.addFeatures(
-    buildPhenomenaFeatures(props.phenomena, props.selectedCell ?? null, projCode),
+    buildPhenomenaFeatures(props.phenomena, props.selectedCell ?? null, projCode, {
+      pastVisible: cellId => props.showPastAll || (cellId !== null && pastSet.has(cellId)),
+      futureVisible: cellId => props.showFutureAll || (cellId !== null && futureSet.has(cellId)),
+    }),
   )
+}
+
+// centrar en celda: solo al cambiar selección (click), no en cada refresh de
+// fenómenos — si no, cualquier re-poll pisa el paneo libre del usuario.
+function centerOnSelectedCell() {
+  if (!map || props.selectedCell === null) return
+  const marker = phenomenaSource.getFeatures().find(
+    f => f.get('f4') === 'cell' && f.get('cellId') === props.selectedCell,
+  )
+  const geom = marker?.getGeometry()
+  if (geom instanceof Point) {
+    map.getView().animate({ center: geom.getCoordinates(), duration: 300 })
+  }
 }
 
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
@@ -350,7 +380,21 @@ watch(() => props.activeFrame, (i) => {
   rasterLoaded.value = pool.isReady(i) ? 'true' : 'false'
 })
 
-watch(() => [props.phenomena, props.selectedCell], updatePhenomena)
+watch(
+  () => [
+    props.phenomena,
+    props.selectedCell,
+    props.showPastAll,
+    props.showFutureAll,
+    props.pastCellIds,
+    props.futureCellIds,
+  ],
+  updatePhenomena,
+)
+
+watch(() => props.selectedCell, (cellId, prev) => {
+  if (cellId !== null && cellId !== prev) centerOnSelectedCell()
+})
 
 watch(() => props.opacity, (o) => {
   rasterLayer?.setOpacity(o)
