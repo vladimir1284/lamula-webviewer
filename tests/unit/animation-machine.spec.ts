@@ -130,9 +130,16 @@ describe('animationMachine — playback', () => {
     actor.send({ type: 'PLAY' })
     vi.advanceTimersByTime(250)
     expect(actor.getSnapshot().context.index).toBe(0) // no se saltó al 2
-    actor.send({ type: 'FRAME_READY', index: 1 })
-    vi.advanceTimersByTime(250)
-    expect(actor.getSnapshot().context.index).toBe(1)
+  })
+
+  it('primera vuelta: avanza en cuanto llega el FRAME_READY que bloqueaba, sin esperar el próximo tick', () => {
+    const actor = boot({ fps: 4 })
+    actor.send({ type: 'SET_FRAMES', count: 3 })
+    actor.send({ type: 'FRAME_READY', index: 0 })
+    actor.send({ type: 'PLAY' })
+    expect(actor.getSnapshot().context.index).toBe(0) // 1 sigue pending, frena
+    actor.send({ type: 'FRAME_READY', index: 1 }) // termina de bajar YA (sin avanzar el reloj)
+    expect(actor.getSnapshot().context.index).toBe(1) // la barra se sincroniza con la descarga, no con FRAME_DELAY
   })
 
   it('salta un frame failed (hueco real), no se queda esperándolo', () => {

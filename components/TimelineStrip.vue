@@ -27,7 +27,6 @@ const props = withDefaults(defineProps<{
   canNext: boolean
   clock?: ClockPref
   playing: boolean
-  bufferReady: number
   bufferTotal: number
   speed?: number
   speeds?: number[]
@@ -371,14 +370,6 @@ const tickLabels = computed(() => {
           {{ label.text }}
         </span>
       </div>
-      <p
-        v-if="bufferReady < bufferTotal"
-        data-testid="anim-buffer"
-        class="mt-1 text-xs font-medium text-white"
-        style="text-shadow: 0 0 3px #fff, 0 0 3px #fff;"
-      >
-        buffer {{ bufferReady }}/{{ bufferTotal }}
-      </p>
     </div>
   </div>
 </template>

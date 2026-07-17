@@ -180,6 +180,29 @@ export const animationMachine = setup({
           reenter: true,
           actions: assign({ fps: ({ event }) => event.fps }),
         },
+        // primera vuelta: si el frame que nos frenaba (el siguiente al
+        // actual) termina de descargar/fallar, avanzamos YA — la barra
+        // queda sincronizada con cada imagen bajando en vez de esperar el
+        // próximo tick de FRAME_DELAY. reenter reinicia el temporizador
+        // (evita doble avance cuando el tick natural llega justo después).
+        // Ya con todos los frames listos (vueltas siguientes) esto no
+        // dispara más — vuelve a ser el loop temporizado normal.
+        FRAME_READY: {
+          target: 'playing',
+          reenter: true,
+          actions: [
+            ({ context, event }) => context.frames[event.index]?.send({ type: 'READY' }),
+            assign({ index: ({ context }) => nextPlayableIndex(context) }),
+          ],
+        },
+        FRAME_FAILED: {
+          target: 'playing',
+          reenter: true,
+          actions: [
+            ({ context, event }) => context.frames[event.index]?.send({ type: 'FAILED', message: event.message }),
+            assign({ index: ({ context }) => nextPlayableIndex(context) }),
+          ],
+        },
       },
     },
   },

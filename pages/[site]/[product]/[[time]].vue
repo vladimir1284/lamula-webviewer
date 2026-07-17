@@ -390,9 +390,6 @@ const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.va
 // está enganchada (aunque en pausa — la URL no se toca hasta pausar), si no
 // el de timelineCurrent de siempre
 const sliderCurrent = computed(() => animationEngaged.value ? animCurrentVolTime.value : timelineCurrent.value)
-const animBufferReady = computed(() =>
-  animSnapshot.value.context.frames.filter(f => f.getSnapshot().matches('ready')).length,
-)
 const animBufferTotal = computed(() => animSnapshot.value.context.frames.length)
 
 // ── Overlays de fenómenos + VWP (F4) ─────────────────────────────────────
@@ -836,7 +833,6 @@ function onSatOpacityInput(event: Event) {
               :can-next="canStepNext"
               :clock="ctx.clock"
               :playing="animPlaying"
-              :buffer-ready="animBufferReady"
               :buffer-total="animBufferTotal"
               :speed="animSpeed"
               @select="onTimelineSelect"

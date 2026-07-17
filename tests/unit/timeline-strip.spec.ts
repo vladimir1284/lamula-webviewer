@@ -15,7 +15,6 @@ const BASE_PROPS = {
   canPrev: true,
   canNext: true,
   playing: false,
-  bufferReady: 0,
   bufferTotal: 0,
 }
 
@@ -83,20 +82,10 @@ describe('TimelineStrip', () => {
     const idle = mount(TimelineStrip, { props: BASE_PROPS })
     expect(idle.find('[data-testid="anim-speed-2"]').exists()).toBe(false)
 
-    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, bufferTotal: 3, bufferReady: 3, speed: 1 } })
+    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, bufferTotal: 3, speed: 1 } })
     const btn2x = wrapper.get('[data-testid="anim-speed-2"]')
     expect(btn2x.attributes('aria-pressed')).toBe('false')
     await btn2x.trigger('click')
     expect(wrapper.emitted('speed')?.[0]).toEqual([2])
-  })
-
-  it('muestra el indicador de buffer mientras no está completo', () => {
-    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, bufferTotal: 6, bufferReady: 2 } })
-    expect(wrapper.get('[data-testid="anim-buffer"]').text()).toBe('buffer 2/6')
-  })
-
-  it('oculta el indicador de buffer cuando ya cargó todo', () => {
-    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, bufferTotal: 6, bufferReady: 6 } })
-    expect(wrapper.find('[data-testid="anim-buffer"]').exists()).toBe(false)
   })
 })
