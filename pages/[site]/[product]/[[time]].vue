@@ -279,6 +279,8 @@ const prefetchTimer = ref<number | null>(null)
 const prefetchAbort = ref<AbortController | null>(null)
 
 watch([() => ctx.value.time, () => ctx.value.prefetch, animationEngaged], ([time, prefetch, engaged]) => {
+  if (import.meta.server) return
+
   if (prefetchTimer.value !== null) {
     window.clearTimeout(prefetchTimer.value)
     prefetchTimer.value = null
@@ -306,7 +308,7 @@ watch([() => ctx.value.time, () => ctx.value.prefetch, animationEngaged], ([time
       if (!frame.cog_url) continue
       try {
         await fetch(frame.cog_url, { signal: abort.signal })
-      } catch (e) {
+      } catch {
         // ignore errors during prefetch
       }
     }

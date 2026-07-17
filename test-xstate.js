@@ -1,4 +1,4 @@
-import { createMachine, createActor } from 'xstate';
+import { createMachine } from 'xstate';
 const m = createMachine({
   types: {}
 });

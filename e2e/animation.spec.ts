@@ -7,7 +7,7 @@
 // la máquina nunca se cuelga y el ciclado/paginado es correcto.
 import { test, expect } from '@playwright/test'
 import * as fs from 'fs'
-import type { Locator, Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
 import { series } from '../tests/helpers/derive'
 import { formatFull } from '../utils/time-display'
@@ -23,7 +23,7 @@ const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 // así que un reintento puede alcanzar al auto-play justo cuando dispara y
 // apagarlo de nuevo. Se espera 'networkidle' (hidratación completa) antes
 // del único click.
-async function gotoAndWaitHydrated(page: import('@playwright/test').Page, url: string) {
+async function gotoAndWaitHydrated(page: Page, url: string) {
   await page.goto(url)
   await page.waitForLoadState('networkidle')
   await page.waitForTimeout(500) // assure hydration listener attached
