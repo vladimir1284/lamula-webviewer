@@ -36,13 +36,13 @@ test('animación: play arranca en el frame que se venía viendo, sin errores', a
   const golden = series.times.at(-1)! // único vol_time con COG golden real
   await gotoAndWaitHydrated(page, `/${series.site}/${series.product}/${isoToPath(golden)}`)
 
-  await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
+  await expect(page.getByTestId('timeline-slider')).toHaveAttribute('aria-valuetext', local(golden))
   await page.getByTestId('anim-play').click()
 
   // arranca YA en el frame golden, no en el primero de la serie (regresión:
   // SET_FRAMES reseteaba el índice a 0 y el buffer esperaba el frame
   // equivocado hasta que el resto fallaba)
-  await expect(page.getByTestId('anim-frame-label')).toHaveText(local(golden))
+  await expect(page.getByTestId('timeline-slider')).toHaveAttribute('aria-valuetext', local(golden))
   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
 
   await page.waitForTimeout(2000)
@@ -59,7 +59,7 @@ test('animación: buffering no se cuelga aunque el frame inicial falle (404 real
   // el buffer se asienta (no queda colgado en 0/N para siempre) y el
   // ícono llega a play/pausa con normalidad
   await expect(page.getByTestId('anim-play')).toHaveText('⏸', { timeout: 5000 })
-  await expect(page.getByTestId('anim-frame-label')).not.toHaveText('—')
+  await expect(page.getByTestId('timeline-slider')).toHaveAttribute('aria-valuetext', /.+/)
   expect(errors).toEqual([])
 })
 

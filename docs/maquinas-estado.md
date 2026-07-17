@@ -71,6 +71,10 @@ stateDiagram-v2
             t_empty --> t_jumping: SELECT_DAY ¬sameDaySelected
             t_jumping --> t_ready: fetchDay → times (+ navigate push al último vol_time)
             t_jumping --> t_empty: fetchDay → [] (sin frame al que saltar, la URL no cambia)
+            t_ready --> t_refreshing: REFRESH_TIMELINE
+            t_empty --> t_refreshing: REFRESH_TIMELINE
+            t_refreshing --> t_ready: fetchDay → times (replace al último SOLO si ya estaba ahí; si no, conserva posición)
+            t_refreshing --> t_empty: fetchDay → []
         }
     }
 ```
@@ -84,6 +88,7 @@ stateDiagram-v2
 | `STEP(dir)` | `raster` | vecino local en `context.times` → `navigate` replace directo (sin roundtrip); si no hay vecino y esa dirección ya está confirmada (`atStart`/`atEnd`) → no-op; si no → `.steppingNext`/`.steppingPrev` (llama `/api/rasters/{next,prev}`: éxito navega replace, 404 marca `atStart`/`atEnd` y se queda en el frame actual, sin error visible) |
 | `SELECT_TIME(time)` | — | click en un tick de la timeline → `navigate` replace directo |
 | `SELECT_DAY` | `timeline` | guard `sameDaySelected` → nada; si no → `.jumping`: al resolver, si el día tiene datos, salta (push) al último `vol_time`; si no, se queda en `empty` sin tocar la URL (nada a lo que saltar) |
+| `REFRESH_TIMELINE` | `timeline` | botón refrescar de la barra de tiempo: siempre repide `fetchDay` del **mismo** día (a diferencia de `SELECT_DAY`, sin guard de "mismo día" — ese es justo el caso de uso). Si `context.time` era el último `vol_time` antes de refrescar, salta (replace) al nuevo último; si el usuario estaba en medio, conserva la posición sin tocar la URL |
 | `MOUNTED` | — | guard (time `null` + raster resuelto) → efecto `navigate` replace al `vol_time` (la URL siempre contiene el frame exacto) |
 | `SELECT_SITE` / `SELECT_PRODUCT` | — | efecto `navigate` push — la máquina **no** refetchea aquí; el refetch llega por `ROUTE_CHANGED` en cada región (URL manda) |
 | `SET_OPACITY` | — | asigna contexto + `persistPrefs` + `syncQuery` (query `?opacity` con replace debounced 300 ms, omitida si es el default 0.8) |
@@ -252,6 +257,7 @@ stateDiagram-v2
 | `PAUSE` / `TOGGLE` (en `playing`) | → `paused` |
 | `SEEK(i)` | asigna `index` (clamped); manejado en `buffering`/`paused`/`playing` |
 | `MOVE_END` | invalida (`INVALIDATE`) todos los hijos salvo el activo → `paused` (no sigue animando sobre un extent que ya no corresponde a los demás frames; el activo se conserva, sin corte visual) |
+| `SPEED(fps)` | asigna `fps` — válido en cualquier estado (selector `.5x/1x/2x/3x` en `AnimationControls.vue`, `1x` = `ANIM_BASE_FPS` ya afinado antes de esto, el resto escala sobre esa base). En `playing` además hace `reenter` sobre el mismo estado para recalcular `FRAME_DELAY` de inmediato — el `after` en curso no se actualiza solo, así que sin el reenter el cambio de velocidad tardaría hasta un frame completo (con la velocidad vieja) en notarse |
 
 **Salida de `buffering` sin bloqueo permanente:** el caso feliz es "el frame objetivo (`context.index`) está `ready`". Si ese frame específico *falla* (404 real, no un hueco transitorio), esperar solo por él colgaría la UI para siempre — por eso hay una segunda condición: en cuanto **todos** los hijos terminan de resolver (ninguno sigue `pending`), se sale igual, saltando a un índice `ready` si existe alguno; si absolutamente todos fallaron, se sale sin más (nada que mostrar, degradación vía `rasterError` del pool, no un buffering infinito).
 

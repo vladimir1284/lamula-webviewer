@@ -240,10 +240,19 @@ function onTimelineStep(dir: 1 | -1) {
 // Modo estático (F2, RadarMap con :raster) hasta que el usuario presiona
 // play por primera vez; a partir de ahí RadarMap pasa a modo pool
 // (:frames) y lo mantiene aun en pausa (scrubbing reutiliza el mismo pool).
+const ANIM_BASE_FPS = 4
 const { snapshot: animSnapshot, send: animSend } = useActor(animationMachine, {
-  input: { fps: 4, lastFrameDwellMs: 1500 },
+  input: { fps: ANIM_BASE_FPS, lastFrameDwellMs: 1500 },
 })
 const animationEngaged = ref(false)
+
+// selector .5x/1x/2x/3x: 1x preserva el ritmo ya afinado del proyecto
+// (ANIM_BASE_FPS), el resto escala sobre esa base
+const animSpeed = ref(1)
+function onSpeedChange(speed: number) {
+  animSpeed.value = speed
+  animSend({ type: 'SPEED', fps: ANIM_BASE_FPS * speed })
+}
 const pendingAutoPlay = ref(false)
 
 const windowAnchorIdx = ref<number>(-1)
@@ -366,6 +375,10 @@ watch(() => ctx.value.time, () => {
 })
 
 const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.value]?.vol_time ?? ctx.value.time)
+// resalta el frame realmente mostrado en la barra: el de animación mientras
+// está enganchada (aunque en pausa — la URL no se toca hasta pausar), si no
+// el de timelineCurrent de siempre
+const sliderCurrent = computed(() => animationEngaged.value ? animCurrentVolTime.value : timelineCurrent.value)
 const animBufferReady = computed(() =>
   animSnapshot.value.context.frames.filter(f => f.getSnapshot().matches('ready')).length,
 )
@@ -721,43 +734,9 @@ function onSatOpacityInput(event: Event) {
           :model-value="ctx.day"
           @update:model-value="onSelectDay"
         />
-        <p
-          v-if="timelineFetchError"
-          data-testid="timeline-error"
-          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
-        >
-          Error consultando la timeline: {{ timelineFetchError }}
-        </p>
-        <p
-          v-else-if="timelineEmpty"
-          data-testid="timeline-empty"
-          class="rounded bg-slate-800 p-3 text-sm text-slate-400"
-        >
-          Sin volúmenes este día (UTC).
-        </p>
-        <TimelineStrip
-          v-else-if="timelineReady"
-          :times="timelineTimes"
-          :current="timelineCurrent"
-          :gaps="timelineGaps"
-          :can-prev="canStepPrev"
-          :can-next="canStepNext"
-          :clock="ctx.clock"
-          @select="onTimelineSelect"
-          @step="onTimelineStep"
-        />
-        <AnimationControls
-          :playing="animPlaying"
-          :ready="timelineReady"
-          :current-vol-time="animCurrentVolTime"
-          :buffer-ready="animBufferReady"
-          :buffer-total="animBufferTotal"
-          :clock="ctx.clock"
-          @toggle="onToggleAnimation"
-        />
       </aside>
 
-      <main class="min-w-0 flex-1">
+      <main class="relative min-w-0 flex-1">
         <ClientOnly>
           <RadarMap
             v-if="radar"
@@ -782,6 +761,46 @@ function onSatOpacityInput(event: Event) {
             @move-end="animSend({ type: 'MOVE_END' })"
           />
         </ClientOnly>
+
+        <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
+             directamente sobre el mapa — decisión explícita de la maqueta -->
+        <div class="pointer-events-none absolute inset-x-0 bottom-6 px-8">
+          <div class="pointer-events-auto mx-auto max-w-4xl">
+            <p
+              v-if="timelineFetchError"
+              data-testid="timeline-error"
+              class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
+            >
+              Error consultando la timeline: {{ timelineFetchError }}
+            </p>
+            <p
+              v-else-if="timelineEmpty"
+              data-testid="timeline-empty"
+              class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
+            >
+              Sin volúmenes este día (UTC).
+            </p>
+            <TimelineStrip
+              v-else-if="timelineReady"
+              :times="timelineTimes"
+              :current="sliderCurrent"
+              :gaps="timelineGaps"
+              :can-prev="canStepPrev"
+              :can-next="canStepNext"
+              :clock="ctx.clock"
+              :playing="animPlaying"
+              :buffer-ready="animBufferReady"
+              :buffer-total="animBufferTotal"
+              :speed="animSpeed"
+              @select="onTimelineSelect"
+              @step="onTimelineStep"
+              @toggle="onToggleAnimation"
+              @speed="onSpeedChange"
+              @refresh="send({ type: 'REFRESH_TIMELINE' })"
+              @menu="prefsDialog?.open()"
+            />
+          </div>
+        </div>
       </main>
 
       <SidePanel :panel="ctx.panel" @select="send({ type: 'SELECT_PANEL', panel: $event })">

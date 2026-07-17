@@ -19,6 +19,8 @@ export type AnimationEvent =
   | { type: 'PAUSE' }
   | { type: 'TOGGLE' }
   | { type: 'SEEK', index: number }
+  /** cambia el ritmo de reproducción sin detenerla (selector .5x/1x/2x/3x) */
+  | { type: 'SPEED', fps: number }
   /** el pool invalida el buffer tras pan/zoom (nuevo extent → re-prefetch) */
   | { type: 'MOVE_END' }
 
@@ -83,6 +85,9 @@ export const animationMachine = setup({
   // resultado de un frame se reenvía siempre a su frameMachine hijo — el
   // `always` de 'buffering' y el hold de 'playing' lo consultan al vuelo
   on: {
+    SPEED: {
+      actions: assign({ fps: ({ event }) => event.fps }),
+    },
     SET_FRAMES: {
       target: '.buffering',
       actions: [
@@ -168,6 +173,13 @@ export const animationMachine = setup({
         PAUSE: 'paused',
         TOGGLE: 'paused',
         SEEK: { actions: assign({ index: ({ context, event }) => clampIndex(context, event.index) }) },
+        // reenter para recalcular FRAME_DELAY ya (el after en curso no se
+        // actualiza solo) — así el cambio de velocidad se nota al instante
+        SPEED: {
+          target: 'playing',
+          reenter: true,
+          actions: assign({ fps: ({ event }) => event.fps }),
+        },
       },
     },
   },

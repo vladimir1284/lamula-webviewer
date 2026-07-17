@@ -67,6 +67,8 @@ export type ViewerEvent =
   | { type: 'SELECT_SITE', site: string }
   | { type: 'SELECT_PRODUCT', product: number }
   | { type: 'SELECT_DAY', day: string }
+  /** botón refrescar de la barra de tiempo: repide /api/rasters/day para el mismo día */
+  | { type: 'REFRESH_TIMELINE' }
   | { type: 'SELECT_TIME', time: string }
   | { type: 'STEP', dir: 1 | -1 }
   | { type: 'SET_OPACITY', value: number }
@@ -634,6 +636,7 @@ export const viewerMachine = setup({
           { guard: { type: 'sameDaySelected', params: ({ event }) => event.day } },
           { target: '.jumping', actions: assign({ day: ({ event }) => event.day }) },
         ],
+        REFRESH_TIMELINE: '.refreshing',
       },
       initial: 'init',
       states: {
@@ -703,6 +706,39 @@ export const viewerMachine = setup({
         ready: {},
         empty: {},
         error: {},
+        // botón refrescar: repide fetchDay del MISMO día. Si el usuario
+        // estaba en el último frame, salta al nuevo último (más volúmenes
+        // llegaron); si estaba en medio, conserva su posición — a
+        // diferencia de 'jumping' (DayPicker) que siempre salta al último.
+        refreshing: {
+          invoke: {
+            src: 'fetchDay',
+            input: ({ context }) => ({ site: context.site, product: context.product, day: context.day }),
+            onDone: [
+              {
+                guard: ({ event }) => event.output.length > 0,
+                target: 'ready',
+                actions: enqueueActions(({ context, event, enqueue }) => {
+                  const wasAtLast = context.times.length > 0 && context.time === context.times.at(-1)!.vol_time
+                  enqueue.assign({ times: event.output, timelineError: null })
+                  if (wasAtLast) {
+                    const time = event.output.at(-1)!.vol_time
+                    enqueue.assign({ time })
+                    enqueue({ type: 'navigate', params: { patch: { time }, mode: 'replace' } })
+                  }
+                }),
+              },
+              { target: 'empty', actions: assign({ times: [], timelineError: null }) },
+            ],
+            onError: {
+              target: 'error',
+              actions: assign({
+                timelineError: ({ event }) =>
+                  event.error instanceof Error ? event.error.message : String(event.error),
+              }),
+            },
+          },
+        },
       },
     },
   },

@@ -9,6 +9,7 @@ import { viewerMachine } from '../../machines/viewer'
 
 const T0 = '2026-07-11T03:16:49'
 const T1 = '2026-07-11T03:11:52'
+const T2 = '2026-07-11T03:21:07'
 const DAY = '2026-07-11'
 const NOW_T = '2026-07-11T04:00:00'
 
@@ -265,6 +266,50 @@ describe('viewerMachine — SELECT_DAY', () => {
     const { actor, fetchDay } = boot({ initialTimes: [meta(T0)] })
     actor.send({ type: 'SELECT_DAY', day: DAY })
     expect(fetchDay).not.toHaveBeenCalled()
+  })
+})
+
+describe('viewerMachine — REFRESH_TIMELINE (botón refrescar)', () => {
+  it('a diferencia de SELECT_DAY, siempre refetchea el mismo día (sin guard de "ya activo")', async () => {
+    const { actor, fetchDay } = boot({
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [meta(T0)],
+    })
+    actor.send({ type: 'REFRESH_TIMELINE' })
+    expect(actor.getSnapshot().matches({ timeline: 'refreshing' })).toBe(true)
+    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    expect(fetchDay).toHaveBeenCalledWith({ site: 'AMX', product: 153, day: DAY })
+  })
+
+  it('si estaba en el último frame, salta (replace) al nuevo último tras refrescar', async () => {
+    const { actor, navigate } = boot({
+      route: routeAt({ time: T0 }),
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [meta(T0), meta(T2)],
+    })
+    actor.send({ type: 'REFRESH_TIMELINE' })
+    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    expect(navigate).toHaveBeenCalledWith({ patch: { time: T2 }, mode: 'replace' })
+    expect(actor.getSnapshot().context.time).toBe(T2)
+  })
+
+  it('si estaba en medio, conserva la posición tras refrescar (no navega)', async () => {
+    const { actor, navigate } = boot({
+      route: routeAt({ time: T1 }),
+      initialTimes: [meta(T1), meta(T0)],
+      fetchDay: async () => [meta(T1), meta(T0), meta(T2)],
+    })
+    actor.send({ type: 'REFRESH_TIMELINE' })
+    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    expect(navigate).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().context.time).toBe(T1)
+    expect(actor.getSnapshot().context.times).toHaveLength(3)
+  })
+
+  it('día sin datos tras refrescar: queda empty', async () => {
+    const { actor } = boot({ initialTimes: [meta(T0)], fetchDay: async () => [] })
+    actor.send({ type: 'REFRESH_TIMELINE' })
+    await waitFor(actor, s => s.matches({ timeline: 'empty' }))
   })
 })
 

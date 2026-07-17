@@ -189,4 +189,28 @@ describe('animationMachine — playback', () => {
     actor.send({ type: 'MOVE_END' })
     expect(actor.getSnapshot().matches('idle')).toBe(true)
   })
+
+  it('SPEED cambia el fps sin detener la reproducción', () => {
+    const actor = boot({ fps: 4 }) // 250ms/frame
+    actor.send({ type: 'SET_FRAMES', count: 3 })
+    readyAll(actor, 3)
+    actor.send({ type: 'PLAY' })
+    actor.send({ type: 'SPEED', fps: 8 }) // 2x -> 125ms/frame
+    expect(actor.getSnapshot().matches('playing')).toBe(true)
+    expect(actor.getSnapshot().context.fps).toBe(8)
+    vi.advanceTimersByTime(125)
+    expect(actor.getSnapshot().context.index).toBe(1)
+  })
+
+  it('SPEED en paused/buffering solo asigna fps (no dispara avance)', () => {
+    const actor = boot({ fps: 4 })
+    actor.send({ type: 'SPEED', fps: 12 })
+    expect(actor.getSnapshot().context.fps).toBe(12)
+    actor.send({ type: 'SET_FRAMES', count: 2 })
+    readyAll(actor, 2)
+    expect(actor.getSnapshot().matches('paused')).toBe(true)
+    actor.send({ type: 'SPEED', fps: 2 })
+    expect(actor.getSnapshot().matches('paused')).toBe(true)
+    expect(actor.getSnapshot().context.fps).toBe(2)
+  })
 })
