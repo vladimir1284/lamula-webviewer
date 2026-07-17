@@ -207,7 +207,7 @@ function initOrUpdatePool() {
     }, props.opacity)
   }
   rasterLoaded.value = 'false'
-  console.error("SET_FRAMES_CALLED", frames.length); pool.setFrames(frames)
+  pool.setFrames(frames)
   pool.activate(props.activeFrame)
 }
 

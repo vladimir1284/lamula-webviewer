@@ -12,7 +12,6 @@ export interface ViewerPrefs {
   units: 'imperial' | 'si'
   clock: 'utc' | 'local'
   animationFrames: number
-  prefetch: boolean
 }
 
 export const PREF_DEFAULTS = {
@@ -24,7 +23,6 @@ export const PREF_DEFAULTS = {
   units: 'imperial',
   clock: 'local',
   animationFrames: 12,
-  prefetch: true,
 } as const satisfies Omit<ViewerPrefs, 'v'>
 
 const KEY = 'lamula:prefs'
@@ -49,7 +47,6 @@ function isValidV2(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
     && (p.units === 'imperial' || p.units === 'si')
     && (p.clock === 'utc' || p.clock === 'local')
     && typeof p.animationFrames === 'number'
-    && typeof p.prefetch === 'boolean'
 }
 
 export function loadPrefs(): ViewerPrefs | null {
@@ -70,7 +67,6 @@ export function loadPrefs(): ViewerPrefs | null {
         units: PREF_DEFAULTS.units,
         clock: PREF_DEFAULTS.clock,
         animationFrames: PREF_DEFAULTS.animationFrames,
-        prefetch: PREF_DEFAULTS.prefetch,
       }
     }
     return null
@@ -93,7 +89,6 @@ export function savePrefs(patch: Partial<Omit<ViewerPrefs, 'v'>>): void {
     units: current?.units ?? PREF_DEFAULTS.units,
     clock: current?.clock ?? PREF_DEFAULTS.clock,
     animationFrames: current?.animationFrames ?? PREF_DEFAULTS.animationFrames,
-    prefetch: current?.prefetch ?? PREF_DEFAULTS.prefetch,
     ...patch,
   }
   try {

@@ -11,7 +11,6 @@ defineProps<{
   units: 'imperial' | 'si'
   clock: 'utc' | 'local'
   animationFrames: number
-  prefetch: boolean
 }>()
 
 const emit = defineEmits<{
@@ -121,15 +120,6 @@ defineExpose({
               <option value="24">24</option>
               <option value="48">48</option>
             </select>
-          </label>
-          <label class="mt-2 flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="pref-prefetch"
-              :checked="prefetch"
-              @change="emit('setPref', { prefetch: ($event.target as HTMLInputElement).checked })"
-            >
-            <span>Precarga en segundo plano</span>
           </label>
         </fieldset>
       </div>

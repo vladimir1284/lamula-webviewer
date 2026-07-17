@@ -60,7 +60,6 @@ export class FramePool {
   }
 
   private async fetchEntry(index: number) {
-    console.error("FETCH_ENTRY", index);
     const entry = this.entries[index]
     if (!entry || entry.state !== 'pending') return
     entry.state = 'fetching'
@@ -75,8 +74,8 @@ export class FramePool {
     }
     catch {
       if (abort.signal.aborted) return // serie reemplazada por setFrames: descartar
-      console.log("StateError", index); entry.state = "error"
-      console.log("FrameError", index); this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
+      entry.state = 'error'
+      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
       return
     }
@@ -92,8 +91,8 @@ export class FramePool {
     source.on('change', () => {
       if (source.getState() !== 'error') return
       if (entry.state === 'error') return
-      console.log("StateError", index); entry.state = "error"
-      console.log("FrameError", index); this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
+      entry.state = 'error'
+      this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
     })
     const layer = new WebGLTileLayer({
@@ -151,7 +150,7 @@ export class FramePool {
       if (!entry.layer.getRenderer()?.renderComplete) return
       entry.state = 'ready'
       if (i !== this.activeIndex) entry.layer.setVisible(false) // liberado: sin costo de render
-      console.log("FrameReady", i); this.callbacks.onFrameReady(i)
+      this.callbacks.onFrameReady(i)
       advanced = true
     })
     if (advanced) this.schedulePrefetch()

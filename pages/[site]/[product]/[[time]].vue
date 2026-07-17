@@ -179,7 +179,6 @@ onMounted(() => {
       units: prefs?.units ?? PREF_DEFAULTS.units,
       clock: prefs?.clock ?? PREF_DEFAULTS.clock,
       animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
-      prefetch: prefs?.prefetch ?? PREF_DEFAULTS.prefetch,
     },
   })
 })
@@ -273,51 +272,6 @@ const _rawAnimFrames = computed(() => {
   const anchor = windowAnchorIdx.value === -1 ? 0 : windowAnchorIdx.value
   const startIdx = Math.max(0, anchor - maxFrames + 1)
   return ctx.value.times.slice(startIdx, startIdx + maxFrames)
-})
-
-const prefetchTimer = ref<number | null>(null)
-const prefetchAbort = ref<AbortController | null>(null)
-
-watch([() => ctx.value.time, () => ctx.value.prefetch, animationEngaged], ([time, prefetch, engaged]) => {
-  if (import.meta.server) return
-
-  if (prefetchTimer.value !== null) {
-    window.clearTimeout(prefetchTimer.value)
-    prefetchTimer.value = null
-  }
-  if (prefetchAbort.value) {
-    prefetchAbort.value.abort()
-    prefetchAbort.value = null
-  }
-  
-  if (!prefetch || engaged || ctx.value.times.length <= 1) return
-
-  prefetchTimer.value = window.setTimeout(async () => {
-    prefetchTimer.value = null
-    const abort = new AbortController()
-    prefetchAbort.value = abort
-    
-    const maxFrames = ctx.value.animationFrames
-    const anchor = windowAnchorIdx.value === -1 ? 0 : windowAnchorIdx.value
-    const startIdx = Math.max(0, anchor - maxFrames + 1)
-    const framesToPrefetch = ctx.value.times.slice(startIdx, startIdx + maxFrames)
-    
-    for (const frame of framesToPrefetch) {
-      if (abort.signal.aborted) break
-      if (frame.vol_time === time) continue
-      if (!frame.cog_url) continue
-      try {
-        await fetch(frame.cog_url, { signal: abort.signal })
-      } catch {
-        // ignore errors during prefetch
-      }
-    }
-  }, 3000)
-}, { immediate: true })
-
-onBeforeUnmount(() => {
-  if (prefetchTimer.value !== null) window.clearTimeout(prefetchTimer.value)
-  if (prefetchAbort.value) prefetchAbort.value.abort()
 })
 
 const animFrames = ref<RasterMeta[] | null>(null)
@@ -555,7 +509,6 @@ function onOpacityInput(event: Event) {
       :units="ctx.units"
       :clock="ctx.clock"
       :animation-frames="ctx.animationFrames"
-      :prefetch="ctx.prefetch"
       @set-pref="send({ type: 'SET_PREF', patch: $event })"
     />
 

@@ -41,7 +41,7 @@ export interface NavigateParams {
 export type PrefsParams = Partial<Omit<ViewerPrefs, 'v'>>
 
 /** preferencias de display del usuario (no compartibles — nunca en la URL) */
-export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames' | 'prefetch'>
+export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames'>
 
 export interface ViewerInput {
   radars: Radar[]
@@ -104,7 +104,6 @@ interface ViewerContext {
   units: 'imperial' | 'si'
   clock: 'utc' | 'local'
   animationFrames: number
-  prefetch: boolean
 }
 
 /** slice de la query que refleja el estado de overlays (D23) */
@@ -230,7 +229,6 @@ export const viewerMachine = setup({
     units: 'imperial',
     clock: 'utc',
     animationFrames: 12,
-    prefetch: true,
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },

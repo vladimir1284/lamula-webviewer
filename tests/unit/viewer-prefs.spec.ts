@@ -20,7 +20,6 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       units: 'imperial',
       clock: 'local',
       animationFrames: 12,
-      prefetch: true,
     })
   })
 
@@ -71,7 +70,6 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       units: 'imperial',
       clock: 'local',
       animationFrames: 12,
-      prefetch: true,
     })
   })
 
@@ -99,7 +97,6 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       units: 'si',
       clock: 'local',
       animationFrames: 12,
-      prefetch: true,
     })
   })
 })
