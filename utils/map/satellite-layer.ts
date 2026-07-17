@@ -35,12 +35,10 @@ export function setSatelliteVariant(layer: TileLayer<TileWMS>, variant: SatVaria
   layer.getSource()?.updateParams({ LAYERS: SAT_LAYER_NAMES[variant] })
 }
 
-// GeoServer sirve el default (más reciente) si se omite `time`, pero al
-// omitirlo la URL de cada tile sería idéntica siempre — OL la cachearía
-// indefinidamente y nunca refrescaría la imagen aunque el servidor tuviera
-// datos más nuevos (actualiza cada 5 min). updateParams() invalida la caché
-// de tiles y fuerza el refetch, así que refrescar `time` en un intervalo es
-// la única forma de que esta capa no quede congelada en el primer load.
-export function refreshSatelliteTime(layer: TileLayer<TileWMS>): void {
-  layer.getSource()?.updateParams({ time: nowParam() })
+// `time` fija qué imagen sirve GeoServer y también actúa como cache-buster de
+// tiles (misma URL ⇒ OL nunca refetchea). timeIso null (sin dato de radar
+// resuelto aún) cae a wall-clock; si no, se pasa el vol_time del raster
+// mostrado para que GOES quede alineado a ESE dato, no a "ahora".
+export function setSatelliteTime(layer: TileLayer<TileWMS>, timeIso: string | null): void {
+  layer.getSource()?.updateParams({ time: timeIso ?? nowParam() })
 }

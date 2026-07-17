@@ -217,18 +217,21 @@ function onSelectDay(day: string) {
 }
 
 const timelineReady = computed(() => snapshot.value.matches({ timeline: 'ready' }))
-const timelineTimes = computed(() => ctx.value.times.map(r => r.vol_time))
+// lista completa del día, solo para gating de step en el extremo (no se renderiza)
+const dayTimes = computed(() => ctx.value.times.map(r => r.vol_time))
+// la strip renderiza la ventana de animación (animationFrames), no el día entero
+const timelineTimes = computed(() => timelineWindowMeta.value.map(r => r.vol_time))
 const timelineGaps = computed(() => computeGaps(timelineTimes.value))
 // resaltar el frame realmente mostrado; si aún no resolvió, el time pedido
 const timelineCurrent = computed(() => raster.value?.vol_time ?? ctx.value.time)
 const currentIdx = computed(() =>
-  ctx.value.time !== null ? timelineTimes.value.indexOf(ctx.value.time) : -1,
+  ctx.value.time !== null ? dayTimes.value.indexOf(ctx.value.time) : -1,
 )
 // dentro de los vecinos locales siempre se puede pisar; en el extremo,
 // depende de si ya se confirmó (404) que no hay más en esa dirección
 const canStepPrev = computed(() => currentIdx.value > 0 || !ctx.value.atStart)
 const canStepNext = computed(() =>
-  (currentIdx.value !== -1 && currentIdx.value < timelineTimes.value.length - 1) || !ctx.value.atEnd,
+  (currentIdx.value !== -1 && currentIdx.value < dayTimes.value.length - 1) || !ctx.value.atEnd,
 )
 
 function onTimelineSelect(time: string) {
@@ -284,14 +287,20 @@ watch(
   { immediate: true }
 )
 
-const _rawAnimFrames = computed(() => {
-  if (ctx.value.times.length === 0) return null
-  if (!animationEngaged.value) return null
-  
+// ventana [anchor-maxFrames+1, anchor] anclada a windowAnchorIdx — la misma
+// ventana alimenta tanto la strip (siempre) como el pool de animación (al jugar)
+const timelineWindowMeta = computed(() => {
+  const times = ctx.value.times
+  if (times.length === 0) return []
   const maxFrames = ctx.value.animationFrames
   const anchor = windowAnchorIdx.value === -1 ? 0 : windowAnchorIdx.value
   const startIdx = Math.max(0, anchor - maxFrames + 1)
-  return ctx.value.times.slice(startIdx, startIdx + maxFrames)
+  return times.slice(startIdx, startIdx + maxFrames)
+})
+
+const _rawAnimFrames = computed(() => {
+  if (!animationEngaged.value) return null
+  return timelineWindowMeta.value.length > 0 ? timelineWindowMeta.value : null
 })
 
 const animFrames = ref<RasterMeta[] | null>(null)
@@ -775,6 +784,7 @@ function onSatOpacityInput(event: Event) {
             :raster="raster"
             :frames="animFrames"
             :active-frame="activeFrameIndex"
+            :anim-playing="animPlaying"
             :product-def="productDef"
             :opacity="ctx.opacity"
             :show-base="ctx.base !== 'off'"
