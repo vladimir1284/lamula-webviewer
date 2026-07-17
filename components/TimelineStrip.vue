@@ -132,12 +132,23 @@ function amPm(str: string): string {
   return str.replace(/\b(AM|PM)\b/, m => m.toLowerCase()).replace(/,/g, '')
 }
 
-/** '7/17 5:40 am' bajo la pista — corto, sin año/zona (la zona ya la da el tooltip) */
-function formatTickLabel(iso: string): string {
+function dayKey(iso: string): string {
   const tz = props.clock === 'utc' ? 'UTC' : undefined
-  return amPm(new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
     month: 'numeric',
     day: 'numeric',
+    timeZone: tz,
+  }).format(naiveUtcToEpochMs(iso))
+}
+
+/** '5:40 am', o '7/17 5:40 am' si es el primer tick de ese día — evita repetir
+    fecha en cada etiqueta (sin año/zona, la zona ya la da el tooltip) */
+function formatTickLabel(iso: string, showDate: boolean): string {
+  const tz = props.clock === 'utc' ? 'UTC' : undefined
+  return amPm(new Intl.DateTimeFormat('en-US', {
+    month: showDate ? 'numeric' : undefined,
+    day: showDate ? 'numeric' : undefined,
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -167,6 +178,7 @@ const tickLabels = computed(() => {
   if (n === 0) return []
   const count = Math.min(6, n)
   const seen = new Set<number>()
+  const seenDays = new Set<string>()
   const labels: { time: string, pct: number, text: string, edge: 'start' | 'end' | 'mid' }[] = []
   for (let i = 0; i < count; i++) {
     const idx = count === 1 ? 0 : Math.round((i * (n - 1)) / (count - 1))
@@ -174,7 +186,10 @@ const tickLabels = computed(() => {
     seen.add(idx)
     const time = props.times[idx]
     const edge = idx === 0 ? 'start' : idx === n - 1 ? 'end' : 'mid'
-    labels.push({ time, pct: pct(time), text: formatTickLabel(time), edge })
+    const day = dayKey(time)
+    const showDate = !seenDays.has(day)
+    seenDays.add(day)
+    labels.push({ time, pct: pct(time), text: formatTickLabel(time, showDate), edge })
   }
   return labels
 })
