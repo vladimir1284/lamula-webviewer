@@ -12,6 +12,14 @@ dist/
 test-results/
 playwright-report/
 coverage/
+trace_out/
+
+# scratch / debug (nunca commitear)
+*.log
+debug-*.js
+scratch*.js
+test-*.js
+browser.html
 
 # env
 .env
