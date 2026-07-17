@@ -43,12 +43,20 @@ export class FramePool {
   constructor(
     private readonly map: Map,
     private readonly projCode: string,
-    private readonly style: WebGLStyle,
+    private style: WebGLStyle,
     private readonly callbacks: FramePoolCallbacks,
     opacity = 1,
   ) {
     this.opacity = opacity
     this.map.on('postrender', this.checkReady)
+  }
+
+  /** Cambio de producto (misma pool reciclada): repinta capas ya cargadas con la nueva paleta/escala. */
+  setStyle(style: WebGLStyle) {
+    this.style = style
+    for (const entry of this.entries) {
+      entry.layer?.setStyle(style)
+    }
   }
 
   /** Reemplaza toda la serie (cambio de site/product/día): dispone lo anterior. */

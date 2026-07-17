@@ -296,7 +296,7 @@ watch(_rawAnimFrames, (newFrames) => {
     shouldUpdate = true
   } else if (oldFrames.length !== newFrames.length) {
     shouldUpdate = true
-  } else if (newFrames.some((f, i) => f.vol_time !== oldFrames[i].vol_time)) {
+  } else if (newFrames.some((f, i) => f.r2_key !== oldFrames[i].r2_key)) {
     shouldUpdate = true
   }
   

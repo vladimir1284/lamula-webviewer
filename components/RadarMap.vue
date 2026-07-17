@@ -232,6 +232,9 @@ function initOrUpdatePool() {
       },
     }, props.opacity)
   }
+  else {
+    pool.setStyle(style)
+  }
   rasterLoaded.value = 'false'
   pool.setFrames(frames)
   pool.activate(props.activeFrame)
