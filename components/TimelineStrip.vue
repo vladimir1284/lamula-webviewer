@@ -202,7 +202,7 @@ const tickLabels = computed(() => {
 </script>
 
 <template>
-  <div data-testid="timeline" class="flex flex-col gap-2" style="overflow: visible;">
+  <div data-testid="timeline" class="flex flex-col gap-0.2" style="overflow: visible;">
     <!-- fila de controles: todos botones h-11 + el track (línea fina) como
          único elemento sin esa altura — items-center los centra a TODOS
          contra el mismo eje, en vez de contra la columna track+etiquetas+
@@ -374,8 +374,8 @@ const tickLabels = computed(() => {
           :class="label.edge === 'start' ? '' : label.edge === 'end' ? '-translate-x-full items-end' : '-translate-x-1/2 items-center'"
           :style="{ left: `${label.pct}%`, color: TICK_NAVY, textShadow: HALO }"
         >
-          <span v-if="label.date">{{ label.date }}</span>
           <span>{{ label.text }}</span>
+          <span :class="{ invisible: !label.date }">{{ label.date ?? ' ' }}</span>
         </span>
       </div>
     </div>
