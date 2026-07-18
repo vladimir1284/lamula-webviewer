@@ -140,18 +140,26 @@ function dayKey(iso: string): string {
   }).format(naiveUtcToEpochMs(iso))
 }
 
-/** '5:40 am', o '7/17 5:40 am' si es el primer tick de ese día — evita repetir
-    fecha en cada etiqueta (sin año/zona, la zona ya la da el tooltip) */
-function formatTickLabel(iso: string, showDate: boolean): string {
+/** '5:40 am' siempre; si es el primer tick del día se le antepone un renglón
+    con la fecha '7/17' arriba — evita repetir fecha en cada etiqueta (sin
+    año/zona, la zona ya la da el tooltip) */
+function formatTickLabel(iso: string): string {
   const tz = props.clock === 'utc' ? 'UTC' : undefined
   return amPm(new Intl.DateTimeFormat('en-US', {
-    month: showDate ? 'numeric' : undefined,
-    day: showDate ? 'numeric' : undefined,
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
     timeZone: tz,
   }).format(naiveUtcToEpochMs(iso)))
+}
+
+function formatTickDate(iso: string): string {
+  const tz = props.clock === 'utc' ? 'UTC' : undefined
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    timeZone: tz,
+  }).format(naiveUtcToEpochMs(iso))
 }
 
 /** 'Fri 7/17 8:56 am UTC' en el tooltip del handle — timestamp exacto del frame, no interpolado */
@@ -177,7 +185,7 @@ const tickLabels = computed(() => {
   const count = Math.min(6, n)
   const seen = new Set<number>()
   const seenDays = new Set<string>()
-  const labels: { time: string, pct: number, text: string, edge: 'start' | 'end' | 'mid' }[] = []
+  const labels: { time: string, pct: number, date: string | null, text: string, edge: 'start' | 'end' | 'mid' }[] = []
   for (let i = 0; i < count; i++) {
     const idx = count === 1 ? 0 : Math.round((i * (n - 1)) / (count - 1))
     if (seen.has(idx)) continue
@@ -187,7 +195,7 @@ const tickLabels = computed(() => {
     const day = dayKey(time)
     const showDate = !seenDays.has(day)
     seenDays.add(day)
-    labels.push({ time, pct: pct(time), text: formatTickLabel(time, showDate), edge })
+    labels.push({ time, pct: pct(time), date: showDate ? formatTickDate(time) : null, text: formatTickLabel(time), edge })
   }
   return labels
 })
@@ -358,15 +366,16 @@ const tickLabels = computed(() => {
          botones+gaps que flanquean el track arriba, para no meterse debajo
          de refrescar/menú/prev/play/next. -->
     <div :style="{ paddingLeft: 'calc(2 * 2.75rem + 0.25rem + 0.75rem)', paddingRight: 'calc(3 * 2.75rem + 2 * 0.25rem + 1.25rem)' }">
-      <div class="relative h-4">
+      <div class="relative h-8">
         <span
           v-for="label in tickLabels"
           :key="label.time"
-          class="absolute whitespace-nowrap text-sm font-bold"
-          :class="label.edge === 'start' ? '' : label.edge === 'end' ? '-translate-x-full' : '-translate-x-1/2'"
+          class="absolute flex flex-col whitespace-nowrap text-sm font-bold leading-tight"
+          :class="label.edge === 'start' ? '' : label.edge === 'end' ? '-translate-x-full items-end' : '-translate-x-1/2 items-center'"
           :style="{ left: `${label.pct}%`, color: TICK_NAVY, textShadow: HALO }"
         >
-          {{ label.text }}
+          <span v-if="label.date">{{ label.date }}</span>
+          <span>{{ label.text }}</span>
         </span>
       </div>
     </div>
