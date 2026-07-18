@@ -176,7 +176,7 @@ describe('animationMachine — playback', () => {
     expect(actor.getSnapshot().context.index).toBe(0)
   })
 
-  it('MOVE_END pausa el playback e invalida los frames inactivos (no el activo)', () => {
+  it('MOVE_END pausa el playback sin invalidar ningún frame (blob ya en memoria, no hace falta re-fetch)', () => {
     const actor = boot()
     actor.send({ type: 'SET_FRAMES', count: 3 })
     readyAll(actor, 3)
@@ -184,11 +184,12 @@ describe('animationMachine — playback', () => {
     actor.send({ type: 'PLAY' })
     actor.send({ type: 'MOVE_END' })
     expect(actor.getSnapshot().matches('paused')).toBe(true)
-    // el frame activo (1) sigue listo — se ve sin corte
+    // ningún frame se invalida — si no, quedan en 'pending' para siempre
+    // (el pool no vuelve a emitir FRAME_READY tras solo ocultar capas) y la
+    // animación se congela al reanudar (bug real, ver commit)
+    expect(actor.getSnapshot().context.frames[0]!.getSnapshot().matches('ready')).toBe(true)
     expect(actor.getSnapshot().context.frames[1]!.getSnapshot().matches('ready')).toBe(true)
-    // los demás vuelven a pending, listos para re-prefetch bajo el nuevo extent
-    expect(actor.getSnapshot().context.frames[0]!.getSnapshot().matches('pending')).toBe(true)
-    expect(actor.getSnapshot().context.frames[2]!.getSnapshot().matches('pending')).toBe(true)
+    expect(actor.getSnapshot().context.frames[2]!.getSnapshot().matches('ready')).toBe(true)
   })
 
   it('MOVE_END sin frames cargados no hace nada', () => {

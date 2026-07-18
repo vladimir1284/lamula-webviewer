@@ -239,7 +239,7 @@ stateDiagram-v2
     failed --> pending: INVALIDATE
 ```
 
-`INVALIDATE` lo envía `animationMachine` en `MOVE_END` a todos los frames salvo el activo (pan/zoom: sus tiles cacheados ya no sirven bajo el nuevo extent, vuelven a prefetchear).
+`INVALIDATE` ya no lo envía nadie en producción — quedó del diseño previo a `getCogBlob`/`cog-cache.ts` (cuando el frame se armaba de tiles OL, sí inválidos bajo un extent nuevo). Desde que cada frame trae su COG entero como blob (fetch único, ver `frame-pool.ts`), pan/zoom no invalida nada real. `animationMachine` lo llegó a enviar en `MOVE_END`, pero como `invalidateInactive()` solo oculta capas (no refetchea ni vuelve a llamar `onFrameReady`), esos hijos quedaban en `pending` para siempre y la animación se congelaba al reanudar — bug real, fix: `MOVE_END` ya no invalida, solo pausa.
 
 ## `animationMachine`
 
@@ -255,8 +255,8 @@ stateDiagram-v2
     paused --> playing: PLAY / TOGGLE
     playing --> playing: FRAME_DELAY (avanza si el siguiente está ready; hold si pending; salta si failed)
     playing --> paused: PAUSE / TOGGLE
-    paused --> idle: MOVE_END (invalida los frames inactivos)
-    playing --> paused: MOVE_END (pausa + invalida los inactivos)
+    paused --> paused: MOVE_END (no-op, ya pausado)
+    playing --> paused: MOVE_END (pausa; ya no invalida frames)
 ```
 
 **Contexto:** `frames` (refs a `frameMachine` hijos), `gen` (generación, para ids únicos al respawnear), `index` (frame mostrado), `fps`, `lastFrameDwellMs`.
@@ -268,7 +268,7 @@ stateDiagram-v2
 | `PLAY` / `TOGGLE` (en `paused`) | → `playing` |
 | `PAUSE` / `TOGGLE` (en `playing`) | → `paused` |
 | `SEEK(i)` | asigna `index` (clamped); manejado en `buffering`/`paused`/`playing` |
-| `MOVE_END` | invalida (`INVALIDATE`) todos los hijos salvo el activo → `paused` (no sigue animando sobre un extent que ya no corresponde a los demás frames; el activo se conserva, sin corte visual) |
+| `MOVE_END` | → `paused` (no sigue animando durante pan/zoom); ya no invalida frames — el pool solo oculta capas inactivas, los blobs siguen siendo válidos bajo cualquier extent |
 | `SPEED(fps)` | asigna `fps` — válido en cualquier estado (selector `.5x/1x/2x/3x` en `AnimationControls.vue`, `1x` = `ANIM_BASE_FPS` ya afinado antes de esto, el resto escala sobre esa base). En `playing` además hace `reenter` sobre el mismo estado para recalcular `FRAME_DELAY` de inmediato — el `after` en curso no se actualiza solo, así que sin el reenter el cambio de velocidad tardaría hasta un frame completo (con la velocidad vieja) en notarse |
 
 **Salida de `buffering` sin bloqueo permanente:** el caso feliz es "el frame objetivo (`context.index`) está `ready`". Si ese frame específico *falla* (404 real, no un hueco transitorio), esperar solo por él colgaría la UI para siempre — por eso hay una segunda condición: en cuanto **todos** los hijos terminan de resolver (ninguno sigue `pending`), se sale igual, saltando a un índice `ready` si existe alguno; si absolutamente todos fallaron, se sale sin más (nada que mostrar, degradación vía `rasterError` del pool, no un buffering infinito).
@@ -288,6 +288,6 @@ No es una máquina XState — es el driver imperativo que habla con OpenLayers y
 - N capas con el mismo `className`/zIndex contiguo comparten **un solo contexto WebGL** — sin límite práctico de contextos, y ayuda en CI (SwiftShader pierde contexto con concurrencia).
 - "Frame listo" = `layer.getRenderer().renderComplete`, muestreado en el `postrender` del mapa. Es una propiedad **semi-pública** del renderer (no forma parte de la API documentada de ol) — protegida por el canario `tests/unit/render-complete-canary.spec.ts`; si un upgrade de `ol` la renombra o la quita, ese test falla antes que el pool deje de avanzar en silencio. Plan B si se rompe: `rendercomplete` secuencial del mapa (más lento, 100 % API pública).
 - Prefetch acotado a `PREFETCH_CONCURRENCY = 3` concurrentes; tope de seguridad `MAX_POOL = 24` frames (memoria) — 20 frames típicos caben sin evicción.
-- `invalidateInactive()` (llamado en `moveend` del mapa): el frame activo se conserva; el resto vuelve a `'loading'` y se re-prioriza.
+- `invalidateInactive()` (llamado en `moveend` del mapa): el frame activo se conserva; el resto solo se oculta (`setVisible(false)`) para no pagar su render bajo el nuevo extent — el `state` de la entry no cambia, no hay refetch (el blob ya es válido para cualquier extent).
 
 **Limitación conocida de los goldens/fixtures para e2e:** solo el `vol_time` más reciente de cada `(site, product)` tiene un COG golden commiteado (`tests/fixtures/cogs/r2/`) — el resto 404 en el entorno offline de CI. Los e2e de animación (`e2e/animation.spec.ts`) validan que la máquina no se cuelga y el ciclado es correcto ante fallos reales, pero **no** pueden validar el ciclado fluido de múltiples frames reales cargando a la vez; eso es la puerta manual contra datos vivos (`docs/validaciones.md`).

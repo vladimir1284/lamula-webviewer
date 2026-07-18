@@ -117,18 +117,17 @@ export const animationMachine = setup({
       actions: ({ context, event }) =>
         context.frames[event.index]?.send({ type: 'FAILED', message: event.message }),
     },
-    // pan/zoom: el frame activo se conserva (sigue siendo válido, se
-    // muestra sin corte); el resto vuelve a 'pending' para re-prefetch en
-    // segundo plano bajo el nuevo extent. Pausa el playback (no seguir
-    // animando sobre un extent que ya no corresponde a los demás frames).
+    // pan/zoom: cada frame ya tiene su COG completo en memoria (blob, no
+    // tiles — ver frame-pool.ts), así que ningún frame se invalida de
+    // verdad; el pool solo oculta las capas inactivas para no pagar su
+    // render bajo el nuevo extent. Antes esto mandaba INVALIDATE a los
+    // frames inactivos (heredado de un diseño por tiles); como el pool ya
+    // no vuelve a emitir FRAME_READY para ellos (no hay refetch), quedaban
+    // en 'pending' para siempre y la animación se congelaba al reanudar.
+    // Solo pausa el playback.
     MOVE_END: {
       guard: ({ context }) => context.frames.length > 0,
       target: '.paused',
-      actions: ({ context }) => {
-        context.frames.forEach((actor, i) => {
-          if (i !== context.index) actor.send({ type: 'INVALIDATE' })
-        })
-      },
     },
   },
   initial: 'idle',
