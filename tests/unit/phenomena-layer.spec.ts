@@ -4,10 +4,32 @@ import type { Phenomenon } from '#shared/contract'
 import type Feature from 'ol/Feature'
 import type { LineString, Point } from 'ol/geom'
 import { toLonLat } from 'ol/proj'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { registerRadarProjection } from '~/utils/map/projection'
 import { buildPhenomenaFeatures, overlayStyle } from '~/utils/map/phenomena-layer'
 import { radars } from '../helpers/derive'
+
+// happy-dom no implementa canvas 2D (getContext('2d') → null) y cellIcon
+// dibuja el marker en un canvas propio: stub con la superficie que usa —
+// aquí se asserta identidad/cache de estilos, la fidelidad visual la cubre
+// el golden e2e (BYX-overlay) sobre Chromium real.
+beforeAll(() => {
+  if (document.createElement('canvas').getContext('2d') !== null) return
+  const noop = () => {}
+  const ctx = {
+    lineWidth: 0,
+    strokeStyle: '',
+    fillStyle: '',
+    beginPath: noop,
+    arc: noop,
+    fill: noop,
+    stroke: noop,
+    moveTo: noop,
+    lineTo: noop,
+  }
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(ctx as unknown as ReturnType<HTMLCanvasElement['getContext']>)
+})
 
 const radar = radars[0]!
 const projCode = registerRadarProjection(radar.site_id, radar.proj4)
