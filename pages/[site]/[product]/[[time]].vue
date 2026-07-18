@@ -248,7 +248,7 @@ function onTimelineStep(dir: 1 | -1) {
 // Modo estático (F2, RadarMap con :raster) hasta que el usuario presiona
 // play por primera vez; a partir de ahí RadarMap pasa a modo pool
 // (:frames) y lo mantiene aun en pausa (scrubbing reutiliza el mismo pool).
-const ANIM_BASE_FPS = 4
+const ANIM_BASE_FPS = 2
 const { snapshot: animSnapshot, send: animSend } = useActor(animationMachine, {
   input: { fps: ANIM_BASE_FPS, lastFrameDwellMs: 1500 },
 })
