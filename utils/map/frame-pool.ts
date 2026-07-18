@@ -18,6 +18,7 @@ import WebGLTileLayer from 'ol/layer/WebGLTile'
 import type { Style as WebGLStyle } from 'ol/layer/WebGLTile'
 import GeoTIFF from 'ol/source/GeoTIFF'
 import type { RasterMeta } from '#shared/contract'
+import { getCogBlob } from './cog-cache'
 
 const PREFETCH_CONCURRENCY = 3
 /** tope de seguridad (memoria); 20 frames típicos caben sin evicción */
@@ -27,7 +28,6 @@ interface PoolEntry {
   frame: RasterMeta
   layer?: WebGLTileLayer
   state: 'pending' | 'fetching' | 'loading' | 'ready' | 'error'
-  abort?: AbortController
 }
 
 export interface FramePoolCallbacks {
@@ -71,17 +71,16 @@ export class FramePool {
     const entry = this.entries[index]
     if (!entry || entry.state !== 'pending') return
     entry.state = 'fetching'
-    const abort = new AbortController()
-    entry.abort = abort
 
     let blob: Blob
     try {
-      const res = await fetch(entry.frame.cog_url!, { signal: abort.signal })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      blob = await res.blob()
+      // cacheado por r2_key (utils/map/cog-cache.ts): un frame ya visto en
+      // una ventana anterior no vuelve a bajar por red, solo reconstruye la
+      // capa GL a partir del blob ya en memoria.
+      blob = await getCogBlob(entry.frame.r2_key, entry.frame.cog_url!)
     }
     catch {
-      if (abort.signal.aborted) return // serie reemplazada por setFrames: descartar
+      if (this.entries[index] !== entry) return // serie reemplazada por setFrames: descartar
       entry.state = 'error'
       this.callbacks.onFrameError(index, `No se pudo cargar el COG (${entry.frame.r2_key})`)
       this.schedulePrefetch()
@@ -206,8 +205,10 @@ export class FramePool {
   }
 
   private disposeEntries() {
+    // el fetch del blob (cog-cache) sigue en curso si estaba pendiente: no
+    // se aborta, así completa y queda cacheado para la próxima ventana que
+    // lo necesite en vez de perderse con la entry.
     for (const entry of this.entries) {
-      entry.abort?.abort()
       if (entry.layer) {
         this.map.removeLayer(entry.layer)
         entry.layer.dispose()

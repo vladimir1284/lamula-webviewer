@@ -28,6 +28,7 @@ import type { Phenomenon, Radar, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
+import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
@@ -94,7 +95,7 @@ let map: Map | undefined
 let baseLayer: TileLayer<OSM> | undefined
 let coverageLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
-let rasterLoadAbort: AbortController | undefined
+let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raster más nuevo
 let pool: FramePool | undefined // modo animación
 let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
 const coverageSource = new VectorSource()
@@ -187,7 +188,8 @@ function centerOnSelectedCell() {
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
 
 function updateRasterLayer() {
-  rasterLoadAbort?.abort()
+  rasterRequestId += 1
+  const requestId = rasterRequestId
   if (rasterLayer) {
     map?.removeLayer(rasterLayer)
     rasterLayer.dispose()
@@ -201,18 +203,12 @@ function updateRasterLayer() {
   rasterLoaded.value = 'false'
 
   const projCode = registerRadarProjection(radar.site_id, radar.proj4)
-  const abort = new AbortController()
-  rasterLoadAbort = abort
 
-  // COG <2MB (single-site/product): un solo fetch como blob en vez de dejar
-  // que geotiff.js emita range requests por tile/overview bajo `url`.
-  fetch(raster.cog_url, { signal: abort.signal })
-    .then((res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.blob()
-    })
+  // cacheado por r2_key (utils/map/cog-cache.ts): re-visitar un tiempo ya
+  // mostrado (stepping, scrubbing) no vuelve a bajar el COG por red.
+  getCogBlob(raster.r2_key, raster.cog_url)
     .then((blob) => {
-      if (abort.signal.aborted || !map) return
+      if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
       const source = new GeoTIFF({
         sources: [{ blob }],
         normalize: false,
@@ -239,7 +235,7 @@ function updateRasterLayer() {
       })
     })
     .catch(() => {
-      if (abort.signal.aborted) return
+      if (requestId !== rasterRequestId) return
       emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
     })
 }
@@ -359,12 +355,20 @@ watch(() => props.radar.site_id, () => {
   updateCoverage()
 })
 
-// cambio de site/product/día: reconstruye el modo que corresponda
+// cambio de site/product/día: reconstruye el modo que corresponda.
+// OJO: en modo animación `raster` no se usa para renderizar (el pool vive de
+// `frames`+`activeFrame`) — sí cambia en cada pausa (SELECT_TIME reasigna
+// context.raster al frame que quedó visible). Sin el chequeo de abajo, esa
+// reasignación disparaba un rebuild completo del pool (dispose+refetch de
+// TODOS los frames) solo por pausar, con el raster desapareciendo un rato.
 watch(
   () => [props.raster?.r2_key, props.productDef?.code, props.frames],
-  () => {
+  (curr, prev) => {
+    const [, prodCode, frames] = curr
+    const [, prevProdCode, prevFrames] = prev ?? []
     updateCoverage()
     if (animationMode()) {
+      if (frames === prevFrames && prodCode === prevProdCode) return
       if (rasterLayer) {
         map?.removeLayer(rasterLayer)
         rasterLayer.dispose()
@@ -423,7 +427,7 @@ watch(() => props.satVariant, (v) => {
 })
 
 onBeforeUnmount(() => {
-  rasterLoadAbort?.abort()
+  rasterRequestId += 1 // invalida cualquier fetch de raster en curso
   teardownPool()
   satelliteLayer?.dispose()
   satelliteLayer = undefined
