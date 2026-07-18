@@ -204,11 +204,22 @@ el de un scope anterior no vale, la página reemite `SET_TIME`), `layers`,
 | `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice |
 
 **Join temporal (D24):** `joined = nearestWithin(phenTimes, volTime, 600 s)`
-(`utils/overlay/join.ts`; empate → anterior, la regla de `pickClosest`).
-Durante animación la mayoría de frames casan al mismo volumen → cache hit sin
-red; los fetch reales son ≤ nº de volúmenes de fenómenos del día. Fuera de
-tolerancia el overlay se limpia (`noData`) — nunca celdas de otro momento
+(`utils/overlay/join.ts`; empate → anterior, la regla de `pickClosest`). Fuera
+de tolerancia el overlay se limpia (`noData`) — nunca celdas de otro momento
 presentadas como actuales.
+
+**Congelado durante playback:** mientras la animación reproduce, `SET_TIME`
+no se emite por frame — la página (`pages/[site]/[product]/[[time]].vue`)
+frena el watcher si `animPlaying`, así que fenómenos/VWP quedan clavados en
+el vol_time que tenían al arrancar el play; solo el raster anima. Al pausar
+(o detenerse la animación), tras `OVERLAY_RESUME_DELAY_MS` (3 s, debounce
+para no disparar si el usuario alterna play/pause rápido) se emite un
+`SET_TIME` único con el vol_time del frame que quedó visible, y de ahí en
+más el comportamiento es el mismo que fuera de animación (cada paso de
+frame resincroniza al toque). Antes de esto, `SET_TIME` se emitía en cada
+tick y se apoyaba solo en el cache de `phenCache`/`vwpProfiles` para no
+pegarle a la red — pero el cálculo del join corría igual en cada frame;
+ahora directamente no corre.
 
 **Dependencias inyectadas:** actores `fetchTimes` (`Promise.all` de
 `/api/phenomena/times` + `/api/vwp/times`), `fetchPhenomena`
