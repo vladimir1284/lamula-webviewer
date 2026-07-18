@@ -27,7 +27,6 @@ const props = withDefaults(defineProps<{
   canNext: boolean
   clock?: ClockPref
   playing: boolean
-  bufferTotal: number
   speed?: number
   speeds?: number[]
 }>(), { clock: 'utc', speed: 1, speeds: () => [0.5, 1, 2] })
@@ -233,7 +232,7 @@ const tickLabels = computed(() => {
            ellos, más juntos). -->
       <div class="relative min-w-0 flex-1 ml-3" style="overflow: visible;">
         <div
-          v-if="bufferTotal > 0"
+          v-if="playing"
           class="absolute flex items-center gap-2"
           style="bottom: 100%; margin-bottom: 64px; left: 0;"
         >

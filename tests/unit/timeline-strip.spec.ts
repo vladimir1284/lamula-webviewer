@@ -15,7 +15,6 @@ const BASE_PROPS = {
   canPrev: true,
   canNext: true,
   playing: false,
-  bufferTotal: 0,
 }
 
 describe('TimelineStrip', () => {
@@ -78,11 +77,14 @@ describe('TimelineStrip', () => {
     expect(wrapper.emitted('menu')).toHaveLength(1)
   })
 
-  it('el selector de velocidad solo aparece con buffer activo (animación enganchada) y emite el valor clicado', async () => {
+  it('el selector de velocidad solo aparece mientras reproduce y emite el valor clicado', async () => {
     const idle = mount(TimelineStrip, { props: BASE_PROPS })
     expect(idle.find('[data-testid="anim-speed-2"]').exists()).toBe(false)
 
-    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, bufferTotal: 3, speed: 1 } })
+    const paused = mount(TimelineStrip, { props: { ...BASE_PROPS, playing: false, speed: 1 } })
+    expect(paused.find('[data-testid="anim-speed-2"]').exists()).toBe(false)
+
+    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, playing: true, speed: 1 } })
     const btn2x = wrapper.get('[data-testid="anim-speed-2"]')
     expect(btn2x.attributes('aria-pressed')).toBe('false')
     await btn2x.trigger('click')
