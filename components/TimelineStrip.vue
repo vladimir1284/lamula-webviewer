@@ -375,7 +375,7 @@ const tickLabels = computed(() => {
           :style="{ left: `${label.pct}%`, color: TICK_NAVY, textShadow: HALO }"
         >
           <span>{{ label.text }}</span>
-          <span :class="{ invisible: !label.date }">{{ label.date ?? ' ' }}</span>
+          <span :class="{ invisible: !label.date }">{{ label.date ?? '\u00A0' }}</span>
         </span>
       </div>
     </div>
