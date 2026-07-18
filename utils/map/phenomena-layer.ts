@@ -31,7 +31,7 @@ export type OverlayFeatureKind =
   | 'meso'
   | 'tvs'
 
-const CELL_SELECTED = '#facc15' // yellow-400
+const CELL_SELECTED = '#ffffff' // white
 const MESO_COLOR = '#f59e0b' // amber-500
 const SEVERE_COLOR = '#ef4444' // red-500
 /** mesociclón con strength_rank ≥ 5: convención NWS de "fuerte" */
