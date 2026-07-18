@@ -15,6 +15,7 @@ import { circular } from 'ol/geom/Polygon'
 import { fromLonLat, transform } from 'ol/proj'
 import CircleStyle from 'ol/style/Circle'
 import Fill from 'ol/style/Fill'
+import Icon from 'ol/style/Icon'
 import RegularShape from 'ol/style/RegularShape'
 import Stroke from 'ol/style/Stroke'
 import Style from 'ol/style/Style'
@@ -152,8 +153,52 @@ function cachedArr(key: string, make: () => Style[]): Style[] {
   return styles
 }
 
+const cellIconCache = new Map<string, Icon>()
+
+/**
+ * Circunferencia + X en un solo canvas → un solo `Icon`. Antes eran 2-3
+ * `Style` separados con `image` cada uno; con declutter activo, OL solo
+ * pinta UN `image` por feature del grupo — el resto se descartaba según
+ * el orden del índice espacial, que cambia con el zoom (por eso el marker
+ * alternaba entre círculo y X, y la X entre blanca/azul según cuál ganara).
+ */
+function cellIcon(radiusKey: number, selected: boolean): Icon {
+  const key = `${radiusKey}|${selected}`
+  let icon = cellIconCache.get(key)
+  if (!icon) {
+    const strokeWidth = 2
+    const pad = strokeWidth + 1
+    const size = Math.ceil((radiusKey + pad) * 2)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    const c = size / 2
+
+    ctx.lineWidth = strokeWidth
+    ctx.strokeStyle = TRACK_NAVY
+    ctx.beginPath()
+    ctx.arc(c, c, radiusKey, 0, 2 * Math.PI)
+    if (selected) {
+      ctx.fillStyle = CELL_SELECTED
+      ctx.fill()
+    }
+    ctx.stroke()
+
+    const xr = radiusKey * 0.6
+    ctx.beginPath()
+    ctx.moveTo(c - xr, c - xr)
+    ctx.lineTo(c + xr, c + xr)
+    ctx.moveTo(c - xr, c + xr)
+    ctx.lineTo(c + xr, c - xr)
+    ctx.stroke()
+
+    icon = new Icon({ img: canvas, size: [size, size] })
+    cellIconCache.set(key, icon)
+  }
+  return icon
+}
+
 function cellStyle(cellId: string | null, selected: boolean, dbzMax: number | null): Style {
-  const color = selected ? CELL_SELECTED : TRACK_NAVY
   const radius = dbzToRadius(dbzMax)
   const radiusKey = Math.round(radius)
   return cached(`cell|${cellId ?? ''}|${selected}|${radiusKey}`, () =>
@@ -163,10 +208,7 @@ function cellStyle(cellId: string | null, selected: boolean, dbzMax: number | nu
       // sin zIndex, declutter elegía cuál de los dos pintar según el orden
       // del índice espacial, y a veces tapaba la celda misma)
       zIndex: 10,
-      image: new CircleStyle({
-        radius,
-        fill: new Fill({ color }),
-      }),
+      image: cellIcon(radiusKey, selected),
       text: new Text({
         text: cellId ?? '',
         font: 'bold 11px ui-monospace, monospace',
