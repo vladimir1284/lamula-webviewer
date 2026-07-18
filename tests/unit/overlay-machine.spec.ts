@@ -1,6 +1,6 @@
 // overlayMachine pura: fetch inyectados como mocks — sin red. Regiones
-// paralelas index/frame/series/vwp; diagrama en docs/maquinas-estado.md.
-import type { Phenomenon, VwpLevel } from '#shared/contract'
+// paralelas index/frame/series/vwp/wind; diagrama en docs/maquinas-estado.md.
+import type { Phenomenon, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { overlayMachine } from '../../machines/overlay'
@@ -9,6 +9,7 @@ const SITE = 'AMX'
 const DAY = '2026-07-11'
 const PT = ['2026-07-11T02:50:38', '2026-07-11T02:55:54', '2026-07-11T03:01:02']
 const VT = ['2026-07-11T03:06:27', '2026-07-11T03:11:52']
+const WT = ['2026-07-11T02:00:00', '2026-07-11T03:00:00', '2026-07-11T04:00:00']
 
 function phen(volTime: string, cellId: string): Phenomenon {
   return {
@@ -36,13 +37,36 @@ function vwpLevel(volTime: string, heightFt: number): VwpLevel {
   }
 }
 
+function windMeta(validTime: string): WindGridMeta {
+  return {
+    site_id: SITE,
+    valid_time: validTime,
+    cycle_time: '2026-07-11T00:00:00',
+    forecast_hour: Number(validTime.slice(11, 13)),
+    model: 'gfs0p25',
+    r2_key: `${SITE}/WIND/x_${validTime}.json`,
+    wind_url: `https://r2.test/${SITE}/WIND/x_${validTime}.json`,
+  }
+}
+
+function windFile(validTime: string): WindGridFile {
+  return {
+    header: { nx: 2, ny: 2, lo1: -81, la1: 26, dx: 0.25, dy: 0.25, refTime: `${validTime}Z`, forecastHour: 0 },
+    u: [1, 2, 3, 4],
+    v: [0, 0, 0, 0],
+  }
+}
+
 function boot(opts: {
   phenTimes?: string[]
   vwpTimes?: string[]
+  windTimes?: string[]
   fetchTimes?: (i: { site: string, day: string }) => Promise<{ phen: string[], vwp: string[] }>
   fetchPhenomena?: (i: { site: string, volTime: string }) => Promise<Phenomenon[]>
   fetchSeries?: (i: { site: string, cellId: string }) => Promise<Phenomenon[]>
   fetchVwp?: (i: { site: string, volTimes: string[] }) => Promise<Record<string, VwpLevel[]>>
+  fetchWindTimes?: (i: { site: string, day: string }) => Promise<WindGridMeta[]>
+  fetchWindGrid?: (i: { meta: WindGridMeta }) => Promise<WindGridFile>
 } = {}) {
   const fetchTimes = vi.fn(
     opts.fetchTimes
@@ -57,6 +81,12 @@ function boot(opts: {
     ?? (async ({ volTimes }: { site: string, volTimes: string[] }) =>
       Object.fromEntries(volTimes.map(t => [t, [vwpLevel(t, 1000)]]))),
   )
+  const fetchWindTimes = vi.fn(
+    opts.fetchWindTimes ?? (async () => (opts.windTimes ?? WT).map(windMeta)),
+  )
+  const fetchWindGrid = vi.fn(
+    opts.fetchWindGrid ?? (async ({ meta }: { meta: WindGridMeta }) => windFile(meta.valid_time)),
+  )
   const actor = createActor(
     overlayMachine.provide({
       actors: {
@@ -64,12 +94,14 @@ function boot(opts: {
         fetchPhenomena: fromPromise(({ input: i }) => fetchPhenomena(i)),
         fetchSeries: fromPromise(({ input: i }) => fetchSeries(i)),
         fetchVwp: fromPromise(({ input: i }) => fetchVwp(i)),
+        fetchWindTimes: fromPromise(({ input: i }) => fetchWindTimes(i)),
+        fetchWindGrid: fromPromise(({ input: i }) => fetchWindGrid(i)),
       },
     }),
     { input: { site: SITE, day: DAY } },
   )
   actor.start()
-  return { actor, fetchTimes, fetchPhenomena, fetchSeries, fetchVwp }
+  return { actor, fetchTimes, fetchPhenomena, fetchSeries, fetchVwp, fetchWindTimes, fetchWindGrid }
 }
 
 const settled = (actor: ReturnType<typeof boot>['actor']) =>
@@ -77,7 +109,9 @@ const settled = (actor: ReturnType<typeof boot>['actor']) =>
     !s.matches({ index: 'loading' })
     && !s.matches({ frame: 'fetching' })
     && !s.matches({ series: 'loading' })
-    && !s.matches({ vwp: 'loading' }))
+    && !s.matches({ vwp: 'loading' })
+    && !s.matches({ wind: 'loadingIndex' })
+    && !s.matches({ wind: 'fetching' }))
 
 describe('overlayMachine — gating y arranque', () => {
   it('arranca todo idle y sin fetch (hidratación segura)', () => {
@@ -236,6 +270,102 @@ describe('overlayMachine — serie de celda', () => {
     actor.send({ type: 'SELECT_CELL', cellId: null })
     expect(actor.getSnapshot().matches({ series: 'idle' })).toBe(true)
     expect(actor.getSnapshot().context.series).toBeNull()
+  })
+})
+
+describe('overlayMachine — viento (región wind)', () => {
+  it('activar wind carga SU índice y el grid del frame; cero fetch de fenómenos', async () => {
+    const { actor, fetchWindTimes, fetchWindGrid, fetchTimes, fetchPhenomena } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! }) // 02:50:38 → casa con 03:00
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ wind: 'shown' })).toBe(true)
+    expect(s.context.windJoined).toBe(WT[1])
+    expect(s.context.windGrid).toEqual(windFile(WT[1]!))
+    expect(fetchWindTimes).toHaveBeenCalledWith({ site: SITE, day: DAY })
+    expect(fetchWindGrid).toHaveBeenCalledOnce()
+    // 'wind' no es capa de fenómenos: ni índice phen/vwp ni filas
+    expect(fetchTimes).not.toHaveBeenCalled()
+    expect(fetchPhenomena).not.toHaveBeenCalled()
+    expect(s.matches({ frame: 'idle' })).toBe(true)
+  })
+
+  it('frame a >1 h de todo valid_time → noData con grid limpio, sin fetch del JSON', async () => {
+    const { actor, fetchWindGrid } = boot()
+    actor.send({ type: 'SET_TIME', volTime: '2026-07-11T08:00:00' })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ wind: 'noData' })).toBe(true)
+    expect(s.context.windJoined).toBeNull()
+    expect(s.context.windGrid).toBeNull()
+    expect(fetchWindGrid).not.toHaveBeenCalled()
+  })
+
+  it('cache por r2_key: dos frames que casan al mismo valid_time → un solo fetch del JSON', async () => {
+    const { actor, fetchWindGrid } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    actor.send({ type: 'SET_TIME', volTime: PT[2]! }) // 03:01:02 → mismo 03:00
+    await settled(actor)
+    expect(actor.getSnapshot().matches({ wind: 'shown' })).toBe(true)
+    expect(fetchWindGrid).toHaveBeenCalledOnce()
+  })
+
+  it('toggle off limpia join y grid; on de nuevo reusa índice y cache (cero red)', async () => {
+    const { actor, fetchWindTimes, fetchWindGrid } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
+    let s = actor.getSnapshot()
+    expect(s.matches({ wind: 'idle' })).toBe(true)
+    expect(s.context.windGrid).toBeNull()
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    s = actor.getSnapshot()
+    expect(s.matches({ wind: 'shown' })).toBe(true)
+    expect(fetchWindTimes).toHaveBeenCalledOnce()
+    expect(fetchWindGrid).toHaveBeenCalledOnce()
+  })
+
+  it('índice vacío → noData visible', async () => {
+    const { actor, fetchWindGrid } = boot({ windTimes: [] })
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    expect(actor.getSnapshot().matches({ wind: 'noData' })).toBe(true)
+    expect(fetchWindGrid).not.toHaveBeenCalled()
+  })
+
+  it('SET_SCOPE limpia índice/cache y recarga solo si wind sigue activo', async () => {
+    const { actor, fetchWindTimes } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    await settled(actor)
+    actor.send({ type: 'SET_SCOPE', site: 'BYX', day: DAY })
+    await settled(actor)
+    expect(fetchWindTimes).toHaveBeenCalledTimes(2)
+    expect(fetchWindTimes).toHaveBeenLastCalledWith({ site: 'BYX', day: DAY })
+    // sin frame nuevo aún (la página reemite SET_TIME): join sin volTime → noData
+    expect(actor.getSnapshot().matches({ wind: 'noData' })).toBe(true)
+    expect(actor.getSnapshot().context.windCache).toEqual({})
+  })
+
+  it('wind + cells conviven: cada región fetchea lo suyo', async () => {
+    const { actor, fetchWindGrid, fetchPhenomena, fetchTimes, fetchWindTimes } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ frame: 'shown' })).toBe(true)
+    expect(s.matches({ wind: 'shown' })).toBe(true)
+    expect(fetchTimes).toHaveBeenCalledOnce()
+    expect(fetchWindTimes).toHaveBeenCalledOnce()
+    expect(fetchPhenomena).toHaveBeenCalledOnce()
+    expect(fetchWindGrid).toHaveBeenCalledOnce()
   })
 })
 

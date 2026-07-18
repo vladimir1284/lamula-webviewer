@@ -115,7 +115,8 @@ stateDiagram-v2
 
 ## `overlayMachine`
 
-Overlays de fenómenos + panel VWP (F4, decisiones 24/27). Separada de
+Overlays de fenómenos + panel VWP (F4, decisiones 24/27) + capa de viento
+GFS (región `wind`). Separada de
 `viewerMachine` (patrón `animationMachine`): el vol_time efectivo durante la
 animación vive en la página (`times[activeFrameIndex]`), no en `viewerMachine`.
 La página la orquesta con watchers — `SET_SCOPE` (site/día), `SET_TIME` (frame
@@ -124,7 +125,7 @@ mostrado, animación o estático), `SET_ACTIVE` (toggles parseados de la URL),
 SSR y cliente por igual (la activación llega por eventos tras el mount) — sin
 mismatch de hidratación.
 
-`type: 'parallel'`, cuatro regiones. **Todos los eventos se manejan a nivel de
+`type: 'parallel'`, cinco regiones. **Todos los eventos se manejan a nivel de
 región** (ninguno en la raíz — la lección del ensombrecido de `viewerMachine`
 aplicada por diseño): varias regiones pueden manejar el mismo evento porque en
 XState v5 los eventos se difunden a todas las regiones activas. Dos sutilezas
@@ -183,6 +184,25 @@ stateDiagram-v2
             v_shown --> v_sync: SET_TIME (recalcula ventana/joined)
             v_shown --> v_idle: SET_ACTIVE panel≠vwp / SET_SCOPE
         }
+        --
+        state "wind — grilla de viento GFS (capa 'wind')" as W {
+            [*] --> w_idle
+            w_idle --> w_loadingIndex: SET_ACTIVE off→on con índice sin cargar
+            w_idle --> w_join: SET_ACTIVE off→on con índice cargado
+            w_loadingIndex --> w_join: fetchWindTimes → índice del día ±2 h
+            w_loadingIndex --> w_error: fetchWindTimes falla
+            w_join --> w_noData: windJoined = null (nada ≤ 1 h)
+            w_join --> w_shown: cache hit por r2_key
+            w_join --> w_fetching: valid_time casado sin cache
+            w_fetching --> w_shown: fetchWindGrid → JSON u/v (cachea)
+            w_fetching --> w_error: fetchWindGrid falla
+            w_shown --> w_join: SET_TIME (re-join, casi siempre mismo ciclo)
+            w_noData --> w_join: SET_TIME
+            w_shown --> w_idle: SET_ACTIVE sin 'wind' (limpia grid)
+            w_shown --> w_deciding: SET_SCOPE
+            w_deciding --> w_loadingIndex: 'wind' sigue activo
+            w_deciding --> w_idle: inactivo
+        }
     }
 ```
 
@@ -193,20 +213,26 @@ el de un scope anterior no vale, la página reemite `SET_TIME`), `layers`,
 "nada en tolerancia" de "volumen sin fenómenos" — `phenomena: []`),
 `phenomena`, `phenCache` (inmutable por vol_time → cache sin invalidación),
 `series`, `vwpWindow` (≤12 columnas del día hasta el frame), `vwpJoined`,
-`vwpProfiles` (cache por vol_time), errores por región.
+`vwpProfiles` (cache por vol_time), `windTimes` (índice `WindGridMeta[]` del
+día ±2 h; `null` = sin cargar), `windJoined` (valid_time casado a ≤1 h),
+`windGrid` (JSON u/v del frame), `windCache` (por `r2_key` — el ciclo va en
+la key, inmutable de verdad), errores por región.
 
 | Evento | Regiones que lo manejan | Efecto |
 |---|---|---|
-| `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding` recarga si algo sigue activo |
-| `SET_TIME(volTime)` | `frame`, `vwp` | `frame` asigna `volTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto |
-| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba) |
+| `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding`/`wind.deciding` recargan si lo suyo sigue activo |
+| `SET_TIME(volTime)` | `frame`, `vwp`, `wind` | `frame` asigna `volTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto; `wind` re-joinea con tolerancia de 1 h |
+| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp`, `wind` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp`/`wind` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba). `'wind'` NO cuenta para `needsPhenomena` (`PHENOMENA_LAYERS`): activar solo viento no fetchea fenómenos y viceversa |
 | `SELECT_CELL(cellId\|null)` | `series` | carga la serie cross-volumen o la limpia |
-| `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice |
+| `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice (`wind` no lo necesita: su índice es propio) |
 
 **Join temporal (D24):** `joined = nearestWithin(phenTimes, volTime, 600 s)`
 (`utils/overlay/join.ts`; empate → anterior, la regla de `pickClosest`). Fuera
 de tolerancia el overlay se limpia (`noData`) — nunca celdas de otro momento
-presentadas como actuales.
+presentadas como actuales. El viento usa la misma función con
+`WIND_JOIN_TOLERANCE_S = 3600` (valid_times horarios GFS); por eso su índice
+se consulta con el día **±2 h** (`WIND_DAY_PAD_S`) — un frame pegado a
+medianoche debe poder casar con el valid_time del día vecino.
 
 **Congelado durante playback:** mientras la animación reproduce, `SET_TIME`
 no se emite por frame — la página (`pages/[site]/[product]/[[time]].vue`)
@@ -224,7 +250,9 @@ ahora directamente no corre.
 **Dependencias inyectadas:** actores `fetchTimes` (`Promise.all` de
 `/api/phenomena/times` + `/api/vwp/times`), `fetchPhenomena`
 (`/api/phenomena`), `fetchSeries` (`/api/phenomena/series`), `fetchVwp`
-(batch de `/api/vwp` para los vol_times sin cache).
+(batch de `/api/vwp` para los vol_times sin cache), `fetchWindTimes`
+(`/api/wind/times`) y `fetchWindGrid` (JSON u/v con `fetch` directo a R2
+vía `meta.wind_url` — como los COGs — validado con `zWindGridFile`).
 
 ## `frameMachine`
 

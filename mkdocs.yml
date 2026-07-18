@@ -41,6 +41,7 @@ nav:
   - Arquitectura: arquitectura.md
   - Decisiones de diseño: decisiones.md
   - Contrato de datos: contrato.md
+  - Spec pipeline viento: pipeline-viento.md
   - Máquinas de estado: maquinas-estado.md
   - Plan de implementación: plan-implementacion.md
   - Estrategia de pruebas: pruebas.md

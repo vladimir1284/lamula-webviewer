@@ -57,6 +57,10 @@ Estado **observado en el feed real** (grabación de fixtures, jul-2026). La tabl
 
 Una fila por `(site_id, vol_time, height_ft)`: `wind_dir_deg`, `wind_speed_kt`, `rms_kt`. El viewer deriva u/v en cliente; **no hay componente vertical `w`** en el contrato. Consultas: por `(site_id, vol_time)` para el perfil, y `DISTINCT vol_time` por `(site_id, día UTC)` como índice del join temporal (decisión 24).
 
+### `wind_grids` — viento GFS 10 m en grilla
+
+Una fila por `(site_id, valid_time)`: `cycle_time`, `forecast_hour`, `model`, `r2_key` → JSON u/v en R2 (gzip + `immutable` desde el edge — el ciclo va en la key). Consulta del viewer: por `(site_id, día UTC ± 2 h)` como índice del join temporal (padding mayor que phen/vwp porque la tolerancia es 1 h). Migración del pipeline: `0003_wind_grids.sql` (snapshot en `tests/contract/schema/`, drift check activo). Spec completa (keys R2, formato del fichero, cron) en [Spec pipeline viento](pipeline-viento.md).
+
 ## R2
 
 - Convención de claves: `{site}/{mnemo}/{YYYY}/{MM}/{DD}/{site}_{mnemo}_{YYYYMMDD_HHMMSS}.tif` — pero el viewer **no construye claves**: usa `rasters.r2_key` literal.
@@ -77,3 +81,4 @@ Una fila por `(site_id, vol_time, height_ft)`: `wind_dir_deg`, `wind_speed_kt`, 
 3. ~~Documentar claves de `attrs` en el pipeline~~ — hecho: tabla canónica en `db/README.md` de aquel repo.
 4. Acceso público de lectura + CORS del bucket R2 y `NUXT_PUBLIC_R2_BASE_URL` en el proyecto Pages del viewer — sin esto `cog_url` va null; bloqueante de F2, no de F1.
 5. Confirmar con el experto la semántica de `past`/`forecast`/`movement_deg` (orden y convención "desde") — parte de la puerta M4.
+6. ~~Viento GFS 10 m~~ — cerrado jul-2026: el pipeline mergeó `0003_wind_grids.sql` e ingesta activa; CORS (`localhost:3000`, pages.dev) y gzip del edge **verificados contra el dominio custom** el 2026-07-18. Queda del lado del viewer: re-grabar fixtures (incl. `wind.json` real + bajar los JSON u/v golden) en la próxima re-grabación completa.

@@ -6,6 +6,8 @@ import type {
   RadarHealth,
   RasterMeta,
   RasterRow,
+  WindGridMeta,
+  WindGridRow,
 } from '../../shared/contract'
 import { FRESH_MAX_MINUTES, naiveUtcToEpochMs } from '../../shared/contract'
 
@@ -13,6 +15,12 @@ import { FRESH_MAX_MINUTES, naiveUtcToEpochMs } from '../../shared/contract'
 export function toRasterMeta(row: Omit<RasterRow, 'size_bytes'>, r2BaseUrl: string | null): RasterMeta {
   const base = r2BaseUrl?.replace(/\/+$/, '')
   return { ...row, cog_url: base ? `${base}/${row.r2_key}` : null }
+}
+
+/** URL pública del JSON u/v desde la clave literal de R2. */
+export function toWindMeta(row: Omit<WindGridRow, 'size_bytes'>, r2BaseUrl: string | null): WindGridMeta {
+  const base = r2BaseUrl?.replace(/\/+$/, '')
+  return { ...row, wind_url: base ? `${base}/${row.r2_key}` : null }
 }
 
 /** attrs TEXT → objeto; una fila corrupta no tumba la respuesta completa. */

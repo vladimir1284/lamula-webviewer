@@ -54,5 +54,15 @@ query "SELECT site_id, vol_time, height_ft, wind_dir_deg, wind_speed_kt, rms_kt,
        WHERE vol_time >= ($SINCE)
        ORDER BY site_id, vol_time, height_ft" > "$OUT/vwp.json"
 
+# viento GFS: retención completa (72 h) — filas de metadata livianas, y el
+# span multi-día garantiza que el padding ±2 h del índice quede ejercitado.
+# OJO: los JSON u/v de los valid_times cercanos a los rasters grabados hay
+# que bajarlos a tests/fixtures/cogs/r2/<r2_key> (mismo flujo que los COGs
+# golden) para que e2e/wind.spec.ts corra offline.
+echo "→ wind_grids (retención completa)"
+query "SELECT site_id, valid_time, cycle_time, forecast_hour, model, r2_key, size_bytes, created_at
+       FROM wind_grids
+       ORDER BY site_id, valid_time" > "$OUT/wind.json"
+
 wc -c "$OUT"/*.json
 echo "✓ fixtures grabadas en $OUT/ — ahora: pnpm test (contract tests) y revisar el diff"

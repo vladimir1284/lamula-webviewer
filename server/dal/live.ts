@@ -8,9 +8,11 @@ import type {
   RasterMeta,
   RasterRow,
   VwpLevel,
+  WindGridMeta,
+  WindGridRow,
 } from '../../shared/contract'
-import { dayRange } from '../../shared/contract'
-import { buildHealth, pickClosest, toPhenomenon, toRasterMeta } from './mappers'
+import { dayRange, dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract'
+import { buildHealth, pickClosest, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { D1Like, Dal, RasterLookupMode } from './types'
 
 type RasterCols = Omit<RasterRow, 'size_bytes'>
@@ -150,6 +152,18 @@ export class LiveDal implements Dal {
       .bind(site, volTime)
       .all<VwpLevel>()
     return results
+  }
+
+  async listWindTimes(site: string, day: string): Promise<WindGridMeta[]> {
+    const { from, to } = dayRangePadded(day, WIND_DAY_PAD_S)
+    const { results } = await this.db
+      .prepare(
+        'SELECT site_id, valid_time, cycle_time, forecast_hour, model, r2_key FROM wind_grids '
+        + 'WHERE site_id = ? AND valid_time >= ? AND valid_time < ? ORDER BY valid_time',
+      )
+      .bind(site, from, to)
+      .all<Omit<WindGridRow, 'size_bytes'>>()
+    return results.map(row => toWindMeta(row, this.r2BaseUrl))
   }
 
   async health(now: Date): Promise<Health> {

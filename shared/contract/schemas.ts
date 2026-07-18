@@ -78,6 +78,36 @@ export const zVwpRow = z.object({
   rms_kt: z.number().nullable(),
 })
 
+export const zWindGridRow = z.object({
+  site_id: zSiteId,
+  valid_time: zIsoNaive,
+  cycle_time: zIsoNaive,
+  forecast_hour: z.number().int().min(0),
+  model: z.string().min(1),
+  r2_key: z.string().endsWith('.json'),
+  size_bytes: z.number().int().positive(),
+})
+
+/** JSON u/v de R2 — validación en cliente antes de alimentar partículas.
+ * `.refine` garantiza que u/v cubren la grilla completa (nx·ny). */
+export const zWindGridFile = z.object({
+  header: z.object({
+    nx: z.number().int().min(2),
+    ny: z.number().int().min(2),
+    lo1: z.number().min(-180).max(180),
+    la1: z.number().min(-90).max(90),
+    dx: z.number().positive(),
+    dy: z.number().positive(),
+    refTime: z.string(),
+    forecastHour: z.number().int().min(0),
+  }),
+  u: z.array(z.number()),
+  v: z.array(z.number()),
+}).refine(
+  (f) => f.u.length === f.header.nx * f.header.ny && f.v.length === f.u.length,
+  'u/v deben tener exactamente nx·ny valores',
+)
+
 // ── Parámetros de query de las server routes ───────────────────────────
 
 export const zSiteProductDay = z.object({

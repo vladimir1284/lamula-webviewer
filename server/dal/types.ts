@@ -7,6 +7,7 @@ import type {
   Radar,
   RasterMeta,
   VwpLevel,
+  WindGridMeta,
 } from '../../shared/contract'
 
 export type RasterLookupMode = 'closest' | 'next' | 'prev'
@@ -35,6 +36,9 @@ export interface Dal {
   listVwpTimes(site: string, day: string): Promise<string[]>
   /** Niveles del perfil de viento de un volumen, por altura ascendente. */
   listVwp(site: string, volTime: string): Promise<VwpLevel[]>
+  /** Grillas de viento GFS de un site en un día UTC ±2 h (WIND_DAY_PAD_S),
+   * ascendente por valid_time — índice para el join temporal cliente (D24). */
+  listWindTimes(site: string, day: string): Promise<WindGridMeta[]>
   /** Frescura por radar desde radars.last_seen_at. */
   health(now: Date): Promise<Health>
 }

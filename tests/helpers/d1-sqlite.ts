@@ -2,7 +2,7 @@
 // versionado en tests/contract/schema/). D1 es SQLite, así que el adaptador
 // live se ejercita contra la misma sintaxis y las mismas constraints que
 // en producción — el contrato se prueba por construcción.
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import type { D1Like } from '~/server/dal/types'
@@ -12,14 +12,19 @@ import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
 import rasters from '~/server/dal/fixtures/rasters.json'
 import vwp from '~/server/dal/fixtures/vwp.json'
+import wind from '~/server/dal/fixtures/wind.json'
 
-// vitest corre con cwd = raíz del repo
-const SCHEMA_PATH = join(process.cwd(), 'tests/contract/schema/0001_init.sql')
+// vitest corre con cwd = raíz del repo. Todas las migraciones snapshoteadas
+// del pipeline, en orden (0001_init, 0003_wind_grids, …) — mismo criterio
+// que el drift check: lo que hay en schema/ ES el contrato.
+const SCHEMA_DIR = join(process.cwd(), 'tests/contract/schema')
 
 export function createContractDb(): Database.Database {
   const db = new Database(':memory:')
   db.pragma('foreign_keys = ON')
-  db.exec(readFileSync(SCHEMA_PATH, 'utf8'))
+  for (const name of readdirSync(SCHEMA_DIR).filter(f => f.endsWith('.sql')).sort()) {
+    db.exec(readFileSync(join(SCHEMA_DIR, name), 'utf8'))
+  }
   return db
 }
 
@@ -45,6 +50,7 @@ export function createSeededDb(): Database.Database {
   insertRows(db, 'rasters', rasters)
   insertRows(db, 'phenomena', phenomena)
   insertRows(db, 'vwp', vwp)
+  insertRows(db, 'wind_grids', wind)
   return db
 }
 

@@ -9,6 +9,7 @@ import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
 import rasters from '~/server/dal/fixtures/rasters.json'
 import vwp from '~/server/dal/fixtures/vwp.json'
+import wind from '~/server/dal/fixtures/wind.json'
 import {
   zIsoNaive,
   zPhenomenonRow,
@@ -16,6 +17,7 @@ import {
   zRadarRow,
   zRasterRow,
   zVwpRow,
+  zWindGridRow,
 } from '~/shared/contract'
 import { createSeededDb } from '../helpers/d1-sqlite'
 
@@ -59,6 +61,10 @@ describe('fixtures grabadas vs schemas Zod del contrato', () => {
   it('vwp', () => {
     z.array(withCreatedAt(zVwpRow)).parse(vwp)
   })
+
+  it('wind: sintético hasta que el pipeline ingiera GFS (misma forma que la tabla propuesta)', () => {
+    z.array(withCreatedAt(zWindGridRow)).parse(wind)
+  })
 })
 
 describe('fixtures grabadas vs schema SQL real (inserción)', () => {
@@ -71,5 +77,6 @@ describe('fixtures grabadas vs schema SQL real (inserción)', () => {
     expect(count('rasters')).toBe(rasters.length)
     expect(count('phenomena')).toBe(phenomena.length)
     expect(count('vwp')).toBe(vwp.length)
+    expect(count('wind_grids')).toBe(wind.length)
   })
 })

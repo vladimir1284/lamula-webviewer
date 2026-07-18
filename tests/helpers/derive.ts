@@ -8,7 +8,8 @@
 // Ambos runners corren con cwd = raíz del repo.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow } from '../../shared/contract/types'
+import type { PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow, WindGridRow } from '../../shared/contract/types'
+import { dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract/time'
 
 type Recorded<T> = T & { created_at: string }
 
@@ -23,6 +24,8 @@ export const products = loadFixture<ProductRow[]>('products')
 export const rasters = loadFixture<Recorded<RasterRow>[]>('rasters')
 export const phenomena = loadFixture<Recorded<PhenomenonRow>[]>('phenomena')
 export const vwp = loadFixture<Recorded<VwpRow>[]>('vwp')
+// SINTÉTICO (scripts/make-wind-fixture.mjs) hasta que el pipeline ingiera GFS
+export const windGrids = loadFixture<Recorded<WindGridRow>[]>('wind')
 
 function fail(msg: string): never {
   throw new Error(`fixtures insuficientes: ${msg} — re-grabar con scripts/record-fixtures.sh`)
@@ -161,6 +164,36 @@ export const vwpVolume = (() => {
   const best = [...groups.values()].sort((a, b) => b.length - a.length)[0]
   if (!best) fail('no hay VWP grabado')
   return { site: best[0]!.site_id, volTime: best[0]!.vol_time, rows: best }
+})()
+
+/**
+ * (site, día UTC) con más grillas de viento + expectativa del índice CON
+ * padding ±2 h (contrato de listWindTimes). `hasNeighbor` marca si la
+ * grabación trae un vecino en el día contiguo (ejercita el padding) —
+ * con retención completa siempre; una grabación corta puede no tenerlo.
+ */
+export const windDay = (() => {
+  const groups = new Map<string, Recorded<WindGridRow>[]>()
+  for (const w of windGrids) {
+    const key = `${w.site_id}|${w.valid_time.slice(0, 10)}`
+    groups.set(key, [...(groups.get(key) ?? []), w])
+  }
+  const best = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
+  if (!best) fail('no hay viento grabado (sintético: scripts/make-wind-fixture.mjs)')
+  const [site, day] = best[0].split('|') as [string, string]
+  const { from, to } = dayRangePadded(day, WIND_DAY_PAD_S)
+  const rows = windGrids
+    .filter(w => w.site_id === site && w.valid_time >= from && w.valid_time < to)
+    .sort((a, b) => a.valid_time.localeCompare(b.valid_time))
+  return { site, day, rows, hasNeighbor: rows.some(w => !w.valid_time.startsWith(day)) }
+})()
+
+/** Site del catálogo sin ninguna grilla de viento — índice vacío. Null si
+ * todos tienen (esperable con la ingesta real: el pipeline cubre el
+ * catálogo entero); el test correspondiente se salta. */
+export const windEmptySite = (() => {
+  const withWind = new Set(windGrids.map(w => w.site_id))
+  return siteIds.find(s => !withWind.has(s)) ?? null
 })()
 
 /** Instante naive-UTC desplazado n segundos respecto a un vol_time. */

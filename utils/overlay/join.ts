@@ -7,6 +7,10 @@ import { naiveUtcToEpochMs } from '#shared/contract'
 /** ~2 volúmenes VCP: cubre los frames N0B/N0G intermedios sin arrastrar tormentas viejas. */
 export const JOIN_TOLERANCE_S = 600
 
+/** Viento GFS: valid_times horarios → media distancia nominal 30 min más un
+ * fichero perdido; 3 h dejaría viento de otra masa de aire como "actual". */
+export const WIND_JOIN_TOLERANCE_S = 3600
+
 /**
  * vol_time de `times` (ascendentes) más cercano a `t` dentro de la
  * tolerancia, o null. Empate → el anterior (misma regla que pickClosest

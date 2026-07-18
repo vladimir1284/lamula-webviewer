@@ -22,12 +22,16 @@
 // payload del evento, no context.layers/panel.
 //
 // Diagrama: docs/maquinas-estado.md (actualizar en el mismo commit).
-import type { Phenomenon, VwpLevel } from '#shared/contract'
+import type { Phenomenon, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
 import { assign, fromPromise, raise, setup } from 'xstate'
-import { nearestWithin } from '../utils/overlay/join'
+import { nearestWithin, WIND_JOIN_TOLERANCE_S } from '../utils/overlay/join'
 
-export const OVERLAY_LAYERS = ['cells', 'meso', 'trackPast', 'trackFuture'] as const
+export const OVERLAY_LAYERS = ['cells', 'meso', 'trackPast', 'trackFuture', 'wind'] as const
 export type OverlayLayerId = (typeof OVERLAY_LAYERS)[number]
+
+/** subconjunto de layers que se pinta con filas de fenómenos — 'wind' NO
+ * dispara ese fetch (tiene región e índice propios) */
+export const PHENOMENA_LAYERS: readonly OverlayLayerId[] = ['cells', 'meso', 'trackPast', 'trackFuture']
 
 export const PANELS = ['cells', 'trend', 'vwp'] as const
 export type PanelId = (typeof PANELS)[number]
@@ -72,11 +76,23 @@ interface OverlayContext {
   vwpJoined: string | null
   vwpProfiles: Record<string, VwpLevel[]>
   vwpError: string | null
+  /** índice de grillas de viento del día ±2 h (null = sin cargar) */
+  windTimes: WindGridMeta[] | null
+  /** valid_time casado con el frame (null = fuera de tolerancia de 1 h) */
+  windJoined: string | null
+  windGrid: WindGridFile | null
+  /** por r2_key (el ciclo va en la key → inmutable de verdad) */
+  windCache: Record<string, WindGridFile>
+  windError: string | null
 }
 
 /** el overlay del mapa o los paneles de celdas necesitan las filas de fenómenos */
 const needsPhenomena = (layers: OverlayLayerId[], panel: PanelId | null) =>
-  layers.length > 0 || panel === 'cells' || panel === 'trend'
+  layers.some(l => PHENOMENA_LAYERS.includes(l)) || panel === 'cells' || panel === 'trend'
+
+/** metadata de la grilla casada (la key R2 sale de aquí, no se construye) */
+const joinedWindMeta = (ctx: OverlayContext): WindGridMeta | null =>
+  ctx.windTimes?.find(w => w.valid_time === ctx.windJoined) ?? null
 
 /** últimas n columnas del día hasta el frame; sin frame → últimas n del día */
 function windowUpTo(times: string[], volTime: string | null, n: number): string[] {
@@ -111,6 +127,15 @@ export const overlayMachine = setup({
         throw new Error('fetchVwp sin proveer (.provide)')
       },
     ),
+    // índice del día ±2 h (/api/wind/times) — propio, no va en fetchTimes:
+    // activar viento no debe fetchear índices de fenómenos/VWP ni viceversa
+    fetchWindTimes: fromPromise<WindGridMeta[], { site: string, day: string }>(async () => {
+      throw new Error('fetchWindTimes sin proveer (.provide)')
+    }),
+    // JSON u/v directo de R2 (como los COGs), validado con zWindGridFile
+    fetchWindGrid: fromPromise<WindGridFile, { meta: WindGridMeta }>(async () => {
+      throw new Error('fetchWindGrid sin proveer (.provide)')
+    }),
   },
   guards: {
     activeFromEvent: ({ event }) => {
@@ -145,6 +170,11 @@ export const overlayMachine = setup({
     vwpJoined: null,
     vwpProfiles: {},
     vwpError: null,
+    windTimes: null,
+    windJoined: null,
+    windGrid: null,
+    windCache: {},
+    windError: null,
   }),
   type: 'parallel',
   states: {
@@ -173,6 +203,11 @@ export const overlayMachine = setup({
             vwpJoined: null,
             vwpProfiles: {},
             vwpError: null,
+            windTimes: null,
+            windJoined: null,
+            windGrid: null,
+            windCache: {},
+            windError: null,
           })),
         },
         SET_ACTIVE: [
@@ -442,6 +477,140 @@ export const overlayMachine = setup({
         },
         shown: {},
         empty: {},
+        error: {},
+      },
+    },
+
+    // grillas de viento GFS (capa de partículas): índice propio
+    // (/api/wind/times, día ±2 h) + join con tolerancia de 1 h + fetch del
+    // JSON u/v directo de R2 con cache por r2_key (D24: fuera de tolerancia
+    // la capa se limpia, nunca viento de otro momento como actual)
+    wind: {
+      on: {
+        SET_SCOPE: { target: '.deciding' },
+        SET_ACTIVE: [
+          {
+            // guard sobre el payload; context.layers aún es el snapshot previo.
+            // off→on estricto: un SET_ACTIVE con viento ya activo no debe
+            // reentrar loadingIndex (cancelaría el fetch en vuelo)
+            guard: ({ context, event }) =>
+              event.layers.includes('wind')
+              && !context.layers.includes('wind')
+              && context.windTimes === null,
+            target: '.loadingIndex',
+          },
+          {
+            // reactivación con índice ya cargado (toggle off→on, cache viva)
+            guard: ({ context, event }) =>
+              event.layers.includes('wind') && !context.layers.includes('wind'),
+            target: '.join',
+          },
+          {
+            guard: ({ event }) => !event.layers.includes('wind'),
+            target: '.idle',
+            actions: assign({ windJoined: null, windGrid: null }),
+          },
+        ],
+        // el assign de volTime corre en 'frame' (anterior en orden de
+        // documento) en el mismo micropaso → el entry de join ya lo lee
+        SET_TIME: [
+          {
+            guard: ({ context, event }) =>
+              event.volTime !== null
+              && context.layers.includes('wind')
+              && context.windTimes !== null,
+            target: '.join',
+          },
+          {
+            guard: ({ event }) => event.volTime === null,
+            target: '.idle',
+            actions: assign({ windJoined: null, windGrid: null }),
+          },
+        ],
+      },
+      initial: 'idle',
+      states: {
+        idle: {},
+        // reentrada tras SET_SCOPE (windTimes ya limpiado por 'index'):
+        // recarga solo si la capa sigue activa
+        deciding: {
+          always: [
+            { guard: ({ context }) => context.layers.includes('wind'), target: 'loadingIndex' },
+            { target: 'idle' },
+          ],
+        },
+        loadingIndex: {
+          invoke: {
+            src: 'fetchWindTimes',
+            input: ({ context }) => ({ site: context.site, day: context.day }),
+            onDone: {
+              target: 'join',
+              actions: assign({
+                windTimes: ({ event }) => event.output,
+                windError: null,
+              }),
+            },
+            onError: {
+              target: 'error',
+              actions: assign({ windError: ({ event }) => errMsg(event.error) }),
+            },
+          },
+        },
+        // decisión síncrona: casar y resolver desde cache si se puede
+        join: {
+          entry: assign({
+            windJoined: ({ context }) =>
+              context.volTime === null || context.windTimes === null
+                ? null
+                : nearestWithin(
+                    context.windTimes.map(w => w.valid_time),
+                    context.volTime,
+                    WIND_JOIN_TOLERANCE_S,
+                  ),
+            windError: null,
+          }),
+          always: [
+            {
+              guard: ({ context }) => context.windJoined === null,
+              target: 'noData',
+              actions: assign({ windGrid: null }),
+            },
+            {
+              guard: ({ context }) => {
+                const meta = joinedWindMeta(context)
+                return meta !== null && context.windCache[meta.r2_key] !== undefined
+              },
+              target: 'shown',
+              actions: assign({
+                windGrid: ({ context }) => context.windCache[joinedWindMeta(context)!.r2_key]!,
+              }),
+            },
+            { target: 'fetching' },
+          ],
+        },
+        fetching: {
+          invoke: {
+            src: 'fetchWindGrid',
+            input: ({ context }) => ({ meta: joinedWindMeta(context)! }),
+            onDone: {
+              target: 'shown',
+              actions: assign({
+                windGrid: ({ event }) => event.output,
+                windCache: ({ context, event }) => ({
+                  ...context.windCache,
+                  [joinedWindMeta(context)!.r2_key]: event.output,
+                }),
+              }),
+            },
+            onError: {
+              target: 'error',
+              actions: assign({ windError: ({ event }) => errMsg(event.error) }),
+            },
+          },
+        },
+        shown: {},
+        // windJoined === null: nada a ≤1 h del frame (índice vacío incluido)
+        noData: {},
         error: {},
       },
     },

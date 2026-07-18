@@ -101,6 +101,49 @@ export interface Phenomenon extends Omit<PhenomenonRow, 'attrs'> {
 
 export type VwpLevel = VwpRow
 
+// ── Viento en grilla (GFS 10 m, ingerido por el pipeline) ──────────────
+
+/** `wind_grids` — una fila por (site_id, valid_time). Contrato propuesto
+ * en docs/pipeline-viento.md; hasta que el pipeline lo mergee el DDL vive
+ * en tests/contract/proposed/. */
+export interface WindGridRow {
+  site_id: string
+  /** momento al que aplica el campo, ISO-8601 UTC naive (como vol_time) */
+  valid_time: string
+  /** ciclo del modelo, ISO-8601 UTC naive */
+  cycle_time: string
+  forecast_hour: number
+  model: string
+  /** clave literal en R2 — el viewer no construye claves */
+  r2_key: string
+  size_bytes: number
+}
+
+/** /api/wind/times — fila + URL del JSON resuelta por el DAL. */
+export interface WindGridMeta extends Omit<WindGridRow, 'size_bytes'> {
+  /** URL pública del JSON u/v; null si el origen R2 no está configurado */
+  wind_url: string | null
+}
+
+/** Fichero u/v en R2 (velocity-JSON): grilla regular lon/lat, row-major
+ * desde la esquina NO (oeste→este, norte→sur, convención GRIB).
+ * u/v en m/s; `la1` = lat norte, `lo1` = lon oeste en [-180, 180). */
+export interface WindGridFile {
+  header: {
+    nx: number
+    ny: number
+    lo1: number
+    la1: number
+    dx: number
+    dy: number
+    /** ciclo del modelo, ISO-8601 con Z */
+    refTime: string
+    forecastHour: number
+  }
+  u: number[]
+  v: number[]
+}
+
 /** Umbral de frescura: mismo criterio que FreshnessBadge. */
 export const FRESH_MAX_MINUTES = 30
 

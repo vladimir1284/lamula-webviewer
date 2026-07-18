@@ -14,14 +14,17 @@ import type {
   RasterRow,
   VwpLevel,
   VwpRow,
+  WindGridMeta,
+  WindGridRow,
 } from '../../shared/contract'
-import { dayRange } from '../../shared/contract'
+import { dayRange, dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract'
 import phenomenaJson from './fixtures/phenomena.json'
 import productsJson from './fixtures/products.json'
 import radarsJson from './fixtures/radars.json'
 import rastersJson from './fixtures/rasters.json'
 import vwpJson from './fixtures/vwp.json'
-import { buildHealth, pickClosest, toPhenomenon, toRasterMeta } from './mappers'
+import windJson from './fixtures/wind.json'
+import { buildHealth, pickClosest, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { Dal, RasterLookupMode } from './types'
 
 // Las grabaciones incluyen created_at (columna NOT NULL, grabada tal cual);
@@ -31,6 +34,9 @@ const products = productsJson as ProductRow[]
 const rasters = rastersJson as (RasterRow & { created_at: string })[]
 const phenomena = phenomenaJson as (PhenomenonRow & { created_at: string })[]
 const vwp = vwpJson as (VwpRow & { created_at: string })[]
+// wind es SINTÉTICO (scripts/make-wind-fixture.mjs) hasta que el pipeline
+// implemente la ingesta GFS — misma forma que la tabla propuesta.
+const wind = windJson as (WindGridRow & { created_at: string })[]
 
 const byVolTime = <T extends { vol_time: string }>(a: T, b: T) =>
   a.vol_time.localeCompare(b.vol_time)
@@ -138,6 +144,14 @@ export class FixtureDal implements Dal {
       .filter(v => v.site_id === site && v.vol_time === volTime)
       .sort((a, b) => a.height_ft - b.height_ft)
       .map(({ created_at: _created, ...row }) => row)
+  }
+
+  async listWindTimes(site: string, day: string): Promise<WindGridMeta[]> {
+    const { from, to } = dayRangePadded(day, WIND_DAY_PAD_S)
+    return wind
+      .filter(w => w.site_id === site && w.valid_time >= from && w.valid_time < to)
+      .sort((a, b) => a.valid_time.localeCompare(b.valid_time))
+      .map(({ size_bytes: _size, created_at: _created, ...row }) => toWindMeta(row, this.r2BaseUrl))
   }
 
   async health(now: Date): Promise<Health> {

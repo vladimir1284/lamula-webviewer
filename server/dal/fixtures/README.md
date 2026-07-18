@@ -27,3 +27,17 @@ pnpm test                          # valida lo grabado
 
 Los COGs golden (GeoTIFFs para F2) van en `tests/fixtures/cogs/` — ver
 README allí.
+
+**Excepción: `wind.json` es SINTÉTICO** aunque el pipeline ya ingiere viento
+GFS (migración `0003_wind_grids.sql`, jul-2026): la grabación vigente es del
+2026-07-11 y la retención de 72 h ya purgó ese rango — un `wind.json` real de
+hoy no casaría temporalmente con estos rasters, y re-grabar TODO destruiría
+el caso BYX 03:08:18 (meso+raster+VWP, COGs irreproducibles). Lo genera
+`node scripts/make-wind-fixture.mjs` a partir de las grabaciones (radar-
+agnóstico: sitio con meso+raster = viento horario que joinea; siguiente
+sitio = viento fuera de tolerancia; resto = vacío), junto con los ficheros
+u/v en `tests/fixtures/cogs/r2/<site>/WIND/…`. **Regenerarlo tras cada
+re-grabación** — hasta la próxima re-grabación COMPLETA: ahí
+`record-fixtures.sh` ya graba `wind_grids` real, hay que bajar los JSON u/v
+de los valid_times cercanos a los rasters grabados (mismo flujo curl que los
+COGs golden) y el generador se retira.

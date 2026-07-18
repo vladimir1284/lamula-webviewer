@@ -65,6 +65,14 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
     - **Diálogo `<dialog>` nativo**, no PrimeVue (la 26 sigue vigente): unstyled sin design tokens obliga a escribir el mismo CSS, y `showModal()` da top-layer/focus-trap/Esc gratis. Reversible si las preferencias crecen.
     - Migración v1→v2 de `lamula:prefs` en memoria al leer (rellena defaults, conserva lo guardado); shape inválido o versión desconocida degradan a `null` como siempre.
 
+29. **Capa opcional de viento animado (partículas GFS 10 m), fuente externa vía el pipeline.** No existe viento vectorial en grilla en el stack (N0G es velocidad radial escalar; VWP es un perfil puntual): el dato lo ingiere un **job nuevo en nexrad-l3-pipeline** desde NOMADS (spec entregada en [pipeline-viento.md](pipeline-viento.md) — tabla `wind_grids`, JSON u/v por sitio en R2, ciclos 00/06/12/18Z × f000–f012 → valid_times horarios en las 72 h). Decisiones y descartes:
+    - **GFS 0.25°, no HRRR**: HRRR es CONUS-only y no cubre JUA — rompería el principio radar-agnóstico.
+    - **velocity-JSON, no binario**: 49×49 puntos ≈ 30 KB (~10 KB gzip) — un decoder binario no se paga; fixtures legibles.
+    - **Render propio canvas 2D** (`utils/wind/{grid,particles}.ts` + `utils/map/wind-layer.ts`, algoritmo earth.nullschool, RNG con seed): `ol-wind` lleva ~2 años sin release y sin evidencia de compat OL ≥9; línea de la decisión 25. Canvas 2D y no WebGL: no compite con el contexto del frame-pool y SwiftShader (CI) lo rasteriza. zIndex 15 (sobre raster y máscara — el viento cubre ±6°, más allá del alcance del radar —, bajo fenómenos).
+    - **Región `wind` en `overlayMachine`** con índice propio (`/api/wind/times`, día **±2 h**) + `nearestWithin` con tolerancia **1 h** (3 h dejaría viento de otra masa de aire como actual) + cache por `r2_key` (el ciclo va en la key ⇒ inmutable). `'wind'` entra en `OVERLAY_LAYERS` (`?layers=wind` — toda la plomería URL sale gratis) pero NO en `PHENOMENA_LAYERS`: activar viento no fetchea fenómenos.
+    - **Oculta durante la reproducción de la animación** (mismo contrato que el satélite): partículas de un ciclo fijo mientras los frames barren horas serían un sinsentido; al pausar vuelve con el grid del frame en reposo (cache lo hace instantáneo).
+    - **Fixtures sintéticas** (`scripts/make-wind-fixture.mjs`: campo analítico flujo+vórtice, data-driven sobre las grabaciones) y DDL en `tests/contract/proposed/` — NO en `tests/contract/schema/` (el drift check byte a byte rompería CI) — hasta que el pipeline mergee su migración. Goldens intactos: default off y la capa jamás entra en screenshot-diff (e2e funcional con readback del canvas + unit deterministas por seed).
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |

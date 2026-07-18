@@ -1,0 +1,62 @@
+[
+  {
+    "site_id": "AMX",
+    "valid_time": "2026-07-11T06:00:00",
+    "cycle_time": "2026-07-11T06:00:00",
+    "forecast_hour": 0,
+    "model": "gfs0p25",
+    "r2_key": "AMX/WIND/2026/07/11/AMX_WIND_20260711_060000_c2026071106f000.json",
+    "size_bytes": 26560,
+    "created_at": "2026-07-11T06:00:00"
+  },
+  {
+    "site_id": "AMX",
+    "valid_time": "2026-07-11T07:00:00",
+    "cycle_time": "2026-07-11T06:00:00",
+    "forecast_hour": 1,
+    "model": "gfs0p25",
+    "r2_key": "AMX/WIND/2026/07/11/AMX_WIND_20260711_070000_c2026071106f001.json",
+    "size_bytes": 26769,
+    "created_at": "2026-07-11T07:00:00"
+  },
+  {
+    "site_id": "BYX",
+    "valid_time": "2026-07-10T23:00:00",
+    "cycle_time": "2026-07-10T18:00:00",
+    "forecast_hour": 5,
+    "model": "gfs0p25",
+    "r2_key": "BYX/WIND/2026/07/10/BYX_WIND_20260710_230000_c2026071018f005.json",
+    "size_bytes": 27981,
+    "created_at": "2026-07-10T23:00:00"
+  },
+  {
+    "site_id": "BYX",
+    "valid_time": "2026-07-11T02:00:00",
+    "cycle_time": "2026-07-11T00:00:00",
+    "forecast_hour": 2,
+    "model": "gfs0p25",
+    "r2_key": "BYX/WIND/2026/07/11/BYX_WIND_20260711_020000_c2026071100f002.json",
+    "size_bytes": 26551,
+    "created_at": "2026-07-11T02:00:00"
+  },
+  {
+    "site_id": "BYX",
+    "valid_time": "2026-07-11T03:00:00",
+    "cycle_time": "2026-07-11T00:00:00",
+    "forecast_hour": 3,
+    "model": "gfs0p25",
+    "r2_key": "BYX/WIND/2026/07/11/BYX_WIND_20260711_030000_c2026071100f003.json",
+    "size_bytes": 26604,
+    "created_at": "2026-07-11T03:00:00"
+  },
+  {
+    "site_id": "BYX",
+    "valid_time": "2026-07-11T04:00:00",
+    "cycle_time": "2026-07-11T00:00:00",
+    "forecast_hour": 4,
+    "model": "gfs0p25",
+    "r2_key": "BYX/WIND/2026/07/11/BYX_WIND_20260711_040000_c2026071100f004.json",
+    "size_bytes": 26154,
+    "created_at": "2026-07-11T04:00:00"
+  }
+]

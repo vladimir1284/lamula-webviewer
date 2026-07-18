@@ -22,6 +22,8 @@ import {
   trackedCell,
   vwpDay,
   vwpVolume,
+  windDay,
+  windEmptySite,
 } from '../helpers/derive'
 
 const R2_BASE = 'https://cogs.example.test'
@@ -179,6 +181,26 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     expect(await dal.listVwp(vwpVolume.site, '2000-01-01T00:00:00')).toEqual([])
   })
 
+  it('listWindTimes: grillas del día ±2 h, ascendentes, wind_url resuelta', async () => {
+    const grids = await dal.listWindTimes(windDay.site, windDay.day)
+    const expected = windDay.rows.map(({ size_bytes: _s, created_at: _c, ...row }) => ({
+      ...row,
+      wind_url: `${R2_BASE}/${row.r2_key}`,
+    }))
+    expect(grids).toEqual(expected)
+    // padding ±2 h: vecino de un día contiguo presente si la grabación lo trae
+    if (windDay.hasNeighbor) {
+      expect(grids.some(g => !g.valid_time.startsWith(windDay.day))).toBe(true)
+    }
+  })
+
+  it('listWindTimes: día sin datos y site sin viento → []', async () => {
+    expect(await dal.listWindTimes(windDay.site, '2000-01-01')).toEqual([])
+    if (windEmptySite !== null) {
+      expect(await dal.listWindTimes(windEmptySite, windDay.day)).toEqual([])
+    }
+  })
+
   it('health: minutos desde el último scan y umbral de frescura', async () => {
     const health = await dal.health(healthNow)
     const expected = [...radars]
@@ -216,6 +238,7 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['listVwpTimes', d => d.listVwpTimes(vwpDay.site, vwpDay.day)],
     ['listPhenomenaByCell', d => d.listPhenomenaByCell(trackedCell.site, trackedCell.cellId)],
     ['listVwp', d => d.listVwp(vwpVolume.site, vwpVolume.volTime)],
+    ['listWindTimes', d => d.listWindTimes(windDay.site, windDay.day)],
     ['health', d => d.health(healthNow)],
   ]
 

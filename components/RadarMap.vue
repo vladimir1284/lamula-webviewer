@@ -24,7 +24,7 @@ import Fill from 'ol/style/Fill'
 import Style from 'ol/style/Style'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
-import type { Phenomenon, Radar, RasterMeta } from '#shared/contract'
+import type { Phenomenon, Radar, RasterMeta, WindGridFile } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
@@ -34,6 +34,7 @@ import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-lay
 import { registerRadarProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
+import { WindParticleLayer } from '../utils/map/wind-layer'
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -63,6 +64,8 @@ const props = withDefaults(defineProps<{
   satOpacity?: number
   /** animación reproduciendo (no solo "hay frames" — pausada cuenta como no-reproduciendo) */
   animPlaying?: boolean
+  /** campo u/v GFS del frame casado (capa 'wind'); null = capa limpia */
+  windGrid?: WindGridFile | null
 }>(), {
   showBase: true,
   showCoverage: true,
@@ -78,6 +81,7 @@ const props = withDefaults(defineProps<{
   satVariant: 'ir',
   satOpacity: 0.6,
   animPlaying: false,
+  windGrid: null,
 })
 
 const emit = defineEmits<{
@@ -98,6 +102,7 @@ let rasterLayer: WebGLTileLayer | undefined // modo estático
 let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raster más nuevo
 let pool: FramePool | undefined // modo animación
 let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
+let windLayer: WindParticleLayer | undefined
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
@@ -131,6 +136,16 @@ function currentDisplayTime(): string | null {
 
 function updateSatelliteTime() {
   if (satelliteLayer?.getVisible()) setSatelliteTime(satelliteLayer, currentDisplayTime())
+}
+
+// ── Capa de viento (partículas) ──────────────────────────────────────────
+// Mismo contrato que el satélite: oculta/pausada SOLO mientras la animación
+// reproduce (partículas de un ciclo fijo con frames barriendo horas serían
+// un sinsentido); al pausar vuelve con el grid del frame en reposo.
+function updateWind() {
+  if (!windLayer) return
+  windLayer.setPaused(props.animPlaying)
+  windLayer.setGrid(props.windGrid)
 }
 
 function updateCoverage() {
@@ -296,6 +311,10 @@ onMounted(() => {
           fill: new Fill({ color: 'rgba(15, 23, 42, 0.1)' }),
         }),
       })),
+      // sobre raster (5) y máscara de cobertura (10) — el viento cubre ±6°,
+      // más allá del alcance del radar —, bajo fenómenos (20). Seed fijo:
+      // trayectorias deterministas (e2e) sin costo en prod.
+      (windLayer = new WindParticleLayer({ zIndex: 15, seed: 1 })),
       (phenomenaLayer = new VectorLayer({
         source: phenomenaSource,
         zIndex: 20,
@@ -346,6 +365,7 @@ onMounted(() => {
 
   updateCoverage()
   updatePhenomena()
+  updateWind()
   if (animationMode()) initOrUpdatePool()
   else updateRasterLayer()
 })
@@ -421,6 +441,7 @@ watch(
     updateSatelliteTime()
   },
 )
+watch(() => [props.windGrid, props.animPlaying], updateWind)
 watch(() => props.satOpacity, o => satelliteLayer?.setOpacity(o))
 watch(() => props.satVariant, (v) => {
   if (satelliteLayer) setSatelliteVariant(satelliteLayer, v)
@@ -429,6 +450,8 @@ watch(() => props.satVariant, (v) => {
 onBeforeUnmount(() => {
   rasterRequestId += 1 // invalida cualquier fetch de raster en curso
   teardownPool()
+  windLayer?.dispose()
+  windLayer = undefined
   satelliteLayer?.dispose()
   satelliteLayer = undefined
   map?.setTarget(undefined)
