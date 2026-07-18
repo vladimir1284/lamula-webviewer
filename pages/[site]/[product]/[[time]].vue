@@ -40,8 +40,9 @@ definePageMeta({
 })
 
 const route = useRoute()
-// prueba manual de suavizado de raster (?smooth=1) — sin persistir en XState/URL machine todavía
-const smoothTest = computed(() => route.query.smooth === '1')
+// prueba manual de suavizado de raster — estado local, a propósito fuera
+// de la URL/XState: conmutar no debe navegar ni remontar el mapa (zoom intacto)
+const smoothTest = ref<'off' | 'bilinear' | 'gaussian'>('off')
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 
@@ -893,6 +894,14 @@ function onSatOpacityInput(event: Event) {
             @move-end="animSend({ type: 'MOVE_END' })"
           />
         </ClientOnly>
+
+        <!-- prueba manual: conmutar suavizado sin navegar (zoom/vista intactos) -->
+        <div class="pointer-events-auto absolute right-3 top-3 z-10 flex gap-2 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
+          <label v-for="opt in (['off', 'bilinear', 'gaussian'] as const)" :key="opt" class="flex items-center gap-1">
+            <input v-model="smoothTest" type="radio" :value="opt" name="smooth-test">
+            {{ opt }}
+          </label>
+        </div>
 
         <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
              directamente sobre el mapa — decisión explícita de la maqueta -->

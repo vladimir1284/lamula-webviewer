@@ -33,7 +33,7 @@ import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
-import { createSmoothedRasterSource } from '../utils/map/raster-rgba'
+import { createSmoothedRasterSource, type SmoothMode } from '../utils/map/raster-rgba'
 import { rasterStyle, smoothedRasterStyle } from '../utils/map/raster-style'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 import { WindParticleLayer } from '../utils/map/wind-layer'
@@ -68,11 +68,12 @@ const props = withDefaults(defineProps<{
   animPlaying?: boolean
   /** campo u/v GFS del frame casado (capa 'wind'); null = capa limpia */
   windGrid?: WindGridFile | null
-  /** prueba: suavizado cliente de la capa raster estática (RGBA premultiplicado + bilineal GPU) */
-  smooth?: boolean
+  /** prueba: suavizado cliente de la capa raster estática — 'off' | 'bilinear' | 'gaussian' */
+  smooth?: SmoothMode | 'off'
 }>(), {
   showBase: true,
   showCoverage: true,
+  smooth: 'off',
   frames: null,
   activeFrame: 0,
   phenomena: null,
@@ -232,9 +233,9 @@ function updateRasterLayer() {
       let source: GeoTIFF | Awaited<ReturnType<typeof createSmoothedRasterSource>>
       let style: ReturnType<typeof rasterStyle> | ReturnType<typeof smoothedRasterStyle>
 
-      if (props.smooth) {
+      if (props.smooth && props.smooth !== 'off') {
         const table = buildLevelColorTable(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-        source = await createSmoothedRasterSource(blob, table, projCode)
+        source = await createSmoothedRasterSource(blob, table, projCode, props.smooth)
         style = smoothedRasterStyle()
       }
       else {

@@ -1,13 +1,16 @@
 // Suavizado opcional de la capa raster (prueba, D?? pendiente en
 // docs/decisiones.md si se confirma). Decodifica el COG por separado
 // (geotiff.js no comparte decode con ol/source/GeoTIFF, ver spike) y
-// construye una textura RGBA premultiplicada para que el filtrado
-// bilineal de la GPU mezcle color (fade a transparente en bordes de
-// nodata/range-folded) en vez de mezclar índices de nivel crudos.
+// construye una textura RGBA para que el filtrado bilineal de GPU (y,
+// opcionalmente, un blur gaussiano previo) mezcle color — no índices de
+// nivel crudos — evitando fringing de color falso en bordes nodata/
+// range-folded.
 import { fromBlob } from 'geotiff'
 import DataTile from 'ol/source/DataTile'
 import TileGrid from 'ol/tilegrid/TileGrid'
 import type { LevelColorTable } from '#shared/products'
+
+export type SmoothMode = 'bilinear' | 'gaussian'
 
 export interface DecodedLevels {
   data: Uint8Array
@@ -27,36 +30,71 @@ export async function decodeLevels(blob: Blob): Promise<DecodedLevels> {
   return { data: band, width, height, extent }
 }
 
-/** RGBA premultiplicado (alpha 0-255) — requerido para filtrado bilineal sin halo de color falso. */
-export function buildPremultipliedRgba(levels: Uint8Array, table: LevelColorTable): Uint8Array {
-  const rgba = new Uint8Array(levels.length * 4)
+/** RGBA de alpha recto (no premultiplicado) — lo que espera ImageData/Canvas2D. */
+export function buildStraightRgba(levels: Uint8Array, table: LevelColorTable): Uint8ClampedArray {
+  const rgba = new Uint8ClampedArray(levels.length * 4)
   for (let i = 0; i < levels.length; i++) {
     const level = levels[i]!
-    const r = table[level * 4]!
-    const g = table[level * 4 + 1]!
-    const b = table[level * 4 + 2]!
-    const a = table[level * 4 + 3]!
     const o = i * 4
-    rgba[o] = (r * a) / 255
-    rgba[o + 1] = (g * a) / 255
-    rgba[o + 2] = (b * a) / 255
-    rgba[o + 3] = a
+    rgba[o] = table[level * 4]!
+    rgba[o + 1] = table[level * 4 + 1]!
+    rgba[o + 2] = table[level * 4 + 2]!
+    rgba[o + 3] = table[level * 4 + 3]!
   }
   return rgba
 }
 
+/** Premultiplica alpha recto → requerido para filtrado bilineal de GPU sin halo de color falso. */
+export function premultiply(straight: Uint8ClampedArray): Uint8Array {
+  const out = new Uint8Array(straight.length)
+  for (let i = 0; i < straight.length; i += 4) {
+    const a = straight[i + 3]!
+    out[i] = (straight[i]! * a) / 255
+    out[i + 1] = (straight[i + 1]! * a) / 255
+    out[i + 2] = (straight[i + 2]! * a) / 255
+    out[i + 3] = a
+  }
+  return out
+}
+
 /**
- * Fuente RGBA premultiplicada + filtrado bilineal de GPU. Un solo tile
- * cubre el raster entero (mismo esquema que ol/source/GeoTIFF con estos
- * COGs sin pirámide, ver spike). Usar con smoothedRasterStyle().
+ * Blur gaussiano vía filtro nativo de Canvas2D (Skia/Chromium ya maneja
+ * premultiplicación internamente para el compositing — por eso se opera
+ * en alpha recto y se premultiplica DESPUÉS, no antes). `ctx.filter` no
+ * aplica a putImageData (bypassa el pipeline de compositing), de ahí el
+ * canvas intermedio + drawImage.
+ */
+export function gaussianBlurRgba(straight: Uint8ClampedArray, width: number, height: number, radiusPx: number): Uint8ClampedArray {
+  const raw = new OffscreenCanvas(width, height)
+  raw.getContext('2d')!.putImageData(new ImageData(straight as Uint8ClampedArray<ArrayBuffer>, width, height), 0, 0)
+
+  const blurred = new OffscreenCanvas(width, height)
+  const bctx = blurred.getContext('2d')!
+  bctx.filter = `blur(${radiusPx}px)`
+  bctx.drawImage(raw, 0, 0)
+
+  return bctx.getImageData(0, 0, width, height).data
+}
+
+/**
+ * Fuente RGBA + filtrado bilineal de GPU. Un solo tile cubre el raster
+ * entero (mismo esquema que ol/source/GeoTIFF con estos COGs sin
+ * pirámide, ver spike). 'gaussian' aplica blur previo en espacio de
+ * color recto; en ambos casos la textura final que llega a la GPU va
+ * premultiplicada. Usar con smoothedRasterStyle().
  */
 export async function createSmoothedRasterSource(
   blob: Blob,
   table: LevelColorTable,
   projCode: string,
+  mode: SmoothMode,
+  gaussianRadiusPx = 4,
 ): Promise<DataTile> {
   const { data, width, height, extent } = await decodeLevels(blob)
-  const rgba = buildPremultipliedRgba(data, table)
+  let straight = buildStraightRgba(data, table)
+  if (mode === 'gaussian') straight = gaussianBlurRgba(straight, width, height, gaussianRadiusPx)
+  const rgba = premultiply(straight)
+
   const [minX, , maxX, maxY] = extent
   const tileGrid = new TileGrid({
     extent,
