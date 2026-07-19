@@ -1,12 +1,15 @@
 // Preferencias no compartibles (arquitectura: estado en URL). Solo cliente:
 // localStorage no existe en SSR — los llamadores aplican prefs tras montar.
 // El time jamás se persiste (se pudre con la retención de 72 h).
+import type { BaseMapId } from '#shared/basemaps'
+import { isBaseMapId } from '#shared/basemaps'
+
 export interface ViewerPrefs {
   v: 2
   site: string
   product: number
   opacity: number
-  base: 'osm' | 'off'
+  base: BaseMapId
   /** overlay de alcance del radar visible */
   coverage: boolean
   units: 'imperial' | 'si'
@@ -34,7 +37,7 @@ function isValidV1(p: Record<string, unknown>): boolean {
     && typeof p.site === 'string'
     && typeof p.product === 'number'
     && typeof p.opacity === 'number'
-    && (p.base === 'osm' || p.base === 'off')
+    && isBaseMapId(p.base)
 }
 
 function isValidV2(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
@@ -42,7 +45,7 @@ function isValidV2(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
     && typeof p.site === 'string'
     && typeof p.product === 'number'
     && typeof p.opacity === 'number'
-    && (p.base === 'osm' || p.base === 'off')
+    && isBaseMapId(p.base)
     && typeof p.coverage === 'boolean'
     && (p.units === 'imperial' || p.units === 'si')
     && (p.clock === 'utc' || p.clock === 'local')
@@ -62,7 +65,7 @@ export function loadPrefs(): ViewerPrefs | null {
         site: parsed.site as string,
         product: parsed.product as number,
         opacity: parsed.opacity as number,
-        base: parsed.base as 'osm' | 'off',
+        base: parsed.base as BaseMapId,
         coverage: PREF_DEFAULTS.coverage,
         units: PREF_DEFAULTS.units,
         clock: PREF_DEFAULTS.clock,

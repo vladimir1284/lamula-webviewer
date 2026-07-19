@@ -104,6 +104,21 @@ test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio 
   }).toPass({ timeout: 5000 })
 })
 
+test('selector de mapa base: refleja ?base= en la URL y persiste en prefs', async ({ page }) => {
+  const t = series.times[1]
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
+
+  // <select>: acción idempotente — reintento seguro ante la carrera de hidratación
+  await expect(async () => {
+    await page.getByTestId('base-select').selectOption('carto-voyager')
+    await expect(page).toHaveURL(/base=carto-voyager/, { timeout: 2000 })
+  }).toPass({ timeout: 10_000 })
+
+  await expect(async () => {
+    expect((await readPrefs(page)).base).toBe('carto-voyager')
+  }).toPass({ timeout: 5000 })
+})
+
 test('coverage off sembrado: el viewer arranca sin la máscara y el toggle la restaura', async ({ page }) => {
   await seedPrefs(page, {
     v: 2,

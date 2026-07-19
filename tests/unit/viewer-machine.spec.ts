@@ -436,6 +436,25 @@ describe('viewerMachine — eventos de UI', () => {
     })
   })
 
+  it('SELECT_BASE actualiza contexto, persiste prefs y sincroniza la query', () => {
+    const { actor, persistPrefs, syncQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SELECT_BASE', base: 'carto-voyager' })
+    expect(actor.getSnapshot().context.base).toBe('carto-voyager')
+    expect(persistPrefs).toHaveBeenCalledWith({
+      site: 'AMX',
+      product: 153,
+      opacity: 0.8,
+      base: 'carto-voyager',
+    })
+    expect(syncQuery).toHaveBeenCalledWith({
+      opacity: 0.8,
+      base: 'carto-voyager',
+      sat: false,
+      satVariant: 'ir',
+      satOpacity: 0.6,
+    })
+  })
+
   it('TOGGLE_SATELLITE / SELECT_SAT_VARIANT / SET_SAT_OPACITY actualizan contexto y sincronizan la query (nunca el time, nunca persistPrefs)', () => {
     const { actor, persistPrefs, syncQuery } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'TOGGLE_SATELLITE' })

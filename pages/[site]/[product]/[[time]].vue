@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
+import type { BaseMapId } from '#shared/basemaps'
+import { BASE_MAP_IDS, BASE_MAP_LABELS } from '#shared/basemaps'
 import type { Phenomenon, RasterMeta, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
 import { zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
@@ -573,6 +575,9 @@ function onSelectProduct(event: Event) {
 function onOpacityInput(event: Event) {
   send({ type: 'SET_OPACITY', value: Number((event.target as HTMLInputElement).value) })
 }
+function onSelectBase(event: Event) {
+  send({ type: 'SELECT_BASE', base: (event.target as HTMLSelectElement).value as BaseMapId })
+}
 function onToggleSatellite() {
   send({ type: 'TOGGLE_SATELLITE' })
 }
@@ -654,6 +659,22 @@ function onSatOpacityInput(event: Event) {
           >
             <option v-for="p in rasterProducts" :key="p.code" :value="String(p.code)">
               {{ rasterProductDef(p.code)?.name ?? p.mnemonic }} ({{ p.mnemonic }})
+            </option>
+          </select>
+        </label>
+
+        <label class="block text-sm">
+          <span class="mb-1 block text-slate-400">Mapa base</span>
+          <!-- sin opción 'off': apagar la base es cosa de e2e/goldens (?base=off),
+               no una elección de usuario; con base=off el select muestra el default -->
+          <select
+            :value="ctx.base === 'off' ? 'osm' : ctx.base"
+            data-testid="base-select"
+            class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+            @change="onSelectBase"
+          >
+            <option v-for="id in BASE_MAP_IDS" :key="id" :value="id">
+              {{ BASE_MAP_LABELS[id] }}
             </option>
           </select>
         </label>
@@ -870,7 +891,7 @@ function onSatOpacityInput(event: Event) {
             :anim-playing="animPlaying"
             :product-def="productDef"
             :opacity="ctx.opacity"
-            :show-base="ctx.base !== 'off'"
+            :base-map="ctx.base"
             :show-coverage="ctx.coverage"
             :phenomena="overlayPhenomena"
             :selected-cell="ctx.cell"

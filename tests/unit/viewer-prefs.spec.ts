@@ -55,6 +55,16 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
     expect(loadPrefs()).toBeNull()
   })
 
+  it('base del catálogo (carto-*) valida; base desconocida → null', () => {
+    const base = (b: string) => JSON.stringify({
+      v: 2, site: 'AMX', product: 153, opacity: 0.8, base: b, coverage: true, units: 'imperial', clock: 'utc', animationFrames: 12,
+    })
+    localStorage.setItem('lamula:prefs', base('carto-voyager'))
+    expect(loadPrefs()?.base).toBe('carto-voyager')
+    localStorage.setItem('lamula:prefs', base('google-maps'))
+    expect(loadPrefs()).toBeNull()
+  })
+
   it('v1 válido → migra con defaults nuevos, conserva lo viejo', () => {
     localStorage.setItem(
       'lamula:prefs',

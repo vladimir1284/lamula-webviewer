@@ -73,6 +73,12 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
     - **Oculta durante la reproducción de la animación** (mismo contrato que el satélite): partículas de un ciclo fijo mientras los frames barren horas serían un sinsentido; al pausar vuelve con el grid del frame en reposo (cache lo hace instantáneo).
     - **Fixtures sintéticas** (`scripts/make-wind-fixture.mjs`: campo analítico flujo+vórtice, data-driven sobre las grabaciones) y DDL en `tests/contract/proposed/` — NO en `tests/contract/schema/` (el drift check byte a byte rompería CI) — hasta que el pipeline mergee su migración. Goldens intactos: default off y la capa jamás entra en screenshot-diff (e2e funcional con readback del canvas + unit deterministas por seed).
 
+30. **Catálogo de mapas base con nombres por encima de las capas.** Los nombres de lugares de OSM van horneados en los tiles — quedan bajo raster/viento/cobertura. Solución: catálogo `shared/basemaps.ts` (`osm` default + variantes CARTO `voyager`/`positron`/`dark`) donde las variantes CARTO usan el par `*_nolabels` (base, zIndex 0) + `*_only_labels` (capa de nombres, zIndex 18: sobre raster 5, cobertura 10 y viento 15, bajo fenómenos 20 — las celdas de tormenta siempre ganan). Detalles y descartes:
+    - **Nunca labels duplicados**: con base OSM no se superpone capa de nombres (fuentes/posiciones distintas a las horneadas); quien quiera nombres arriba elige una variante CARTO.
+    - **`base` reutiliza la plomería existente** (query `?base` + `lamula:prefs` + contexto de `viewerMachine`): solo se amplió la unión (`'osm' | 'off'` → catálogo) y se añadió `SELECT_BASE` (patrón `SET_OPACITY`: persistPrefs + syncQuery). `'off'` se conserva para goldens/e2e y no aparece en el selector.
+    - **Tiles raster de CARTO** (gratis con atribución OSM+CARTO), no vector tiles con estilo partido: fuera del stack (OL + tiles raster) por un solo requisito. `{r}` retina se resuelve con `devicePixelRatio` al crear la fuente (OL no expande ese token).
+    - Sin migración de prefs: v2 sigue válida, el validador acepta el catálogo ampliado.
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |

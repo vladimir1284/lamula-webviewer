@@ -2,6 +2,7 @@
 // del viewer a ViewerRouteState y efecto de navegación que la máquina
 // invoca vía la acción 'navigate'.
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import { isBaseMapId } from '#shared/basemaps'
 import { isoToPath, pathToIso } from '#shared/url/time-path'
 import type { OverlayLayerId, PanelId } from '../machines/overlay'
 import { OVERLAY_LAYERS, PANELS } from '../machines/overlay'
@@ -67,7 +68,7 @@ export function parseViewerRoute(
     product: Number(product),
     time: timeIso,
     opacity,
-    base: route.query.base === 'off' ? 'off' : 'osm',
+    base: isBaseMapId(route.query.base) ? route.query.base : 'osm',
     layers,
     panel,
     cell,

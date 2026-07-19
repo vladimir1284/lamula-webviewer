@@ -4,6 +4,7 @@
 // inyectan vía .provide() — los tests corren con createActor sin router ni
 // red. Regiones paralelas: 'raster' (frame mostrado) y 'timeline' (rasters
 // del día). Diagrama: docs/maquinas-estado.md (actualizar en el mismo commit).
+import type { BaseMapId } from '#shared/basemaps'
 import type { Product, Radar, RasterMeta } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
 import type { ViewerPrefs } from '../composables/useViewerPrefs'
@@ -17,7 +18,7 @@ export interface ViewerRouteState {
   /** ISO naive del contrato; null = vista live (sin time en el path) */
   time: string | null
   opacity: number
-  base: 'osm' | 'off'
+  base: BaseMapId
   /** capas de fenómenos activas (?layers=cells,meso — D23) */
   layers: OverlayLayerId[]
   /** panel derecho abierto (?panel=cells|trend|vwp) */
@@ -76,6 +77,7 @@ export type ViewerEvent =
   | { type: 'SELECT_TIME', time: string }
   | { type: 'STEP', dir: 1 | -1 }
   | { type: 'SET_OPACITY', value: number }
+  | { type: 'SELECT_BASE', base: BaseMapId }
   | { type: 'CURSOR_MOVE', sample: CursorSample | null }
   | { type: 'COG_ERROR', message: string }
   | { type: 'TOGGLE_LAYER', layer: OverlayLayerId }
@@ -105,7 +107,7 @@ interface ViewerContext {
   atStart: boolean
   atEnd: boolean
   opacity: number
-  base: 'osm' | 'off'
+  base: BaseMapId
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
@@ -128,7 +130,7 @@ interface ViewerContext {
 /** query params de configuración de display (opacity/base/satélite) — un solo syncQuery debounced */
 export interface DisplayQueryParams {
   opacity: number
-  base: 'osm' | 'off'
+  base: BaseMapId
   sat: boolean
   satVariant: 'vis' | 'ir'
   satOpacity: number
@@ -289,6 +291,32 @@ export const viewerMachine = setup({
           params: ({ context, event }) => ({
             opacity: event.value,
             base: context.base,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          }),
+        },
+      ],
+    },
+    // mapa base (catálogo en shared/basemaps.ts): pref personal + shareable,
+    // mismo doble efecto que SET_OPACITY (persistPrefs + syncQuery)
+    SELECT_BASE: {
+      actions: [
+        assign({ base: ({ event }) => event.base }),
+        {
+          type: 'persistPrefs',
+          params: ({ context, event }) => ({
+            site: context.site,
+            product: context.product,
+            opacity: context.opacity,
+            base: event.base,
+          }),
+        },
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: event.base,
             sat: context.sat,
             satVariant: context.satVariant,
             satOpacity: context.satOpacity,

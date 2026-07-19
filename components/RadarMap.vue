@@ -18,16 +18,18 @@ import VectorLayer from 'ol/layer/Vector'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
 import { fromLonLat } from 'ol/proj'
 import GeoTIFF from 'ol/source/GeoTIFF'
-import OSM from 'ol/source/OSM'
+import type TileSource from 'ol/source/Tile'
 import VectorSource from 'ol/source/Vector'
 import Fill from 'ol/style/Fill'
 import Style from 'ol/style/Style'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
+import type { BaseMapId } from '#shared/basemaps'
 import type { Phenomenon, Radar, RasterMeta, WindGridFile } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
+import { createBaseMapSources } from '../utils/map/base-layers'
 import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
@@ -44,8 +46,9 @@ const props = withDefaults(defineProps<{
   activeFrame?: number
   productDef: RasterProductDef | null
   opacity: number
-  /** apagar la base OSM (goldens visuales: fondo determinista) */
-  showBase?: boolean
+  /** mapa base del catálogo (shared/basemaps.ts); 'off' apaga base y labels
+   * (goldens visuales: fondo determinista) */
+  baseMap?: BaseMapId
   /** overlay de alcance del radar (donut mask) — pref de usuario (D28) */
   showCoverage?: boolean
   /** overlay de fenómenos del frame mostrado, ya filtrado por capas activas (F4) */
@@ -67,7 +70,7 @@ const props = withDefaults(defineProps<{
   /** campo u/v GFS del frame casado (capa 'wind'); null = capa limpia */
   windGrid?: WindGridFile | null
 }>(), {
-  showBase: true,
+  baseMap: 'osm',
   showCoverage: true,
   frames: null,
   activeFrame: 0,
@@ -96,7 +99,8 @@ const emit = defineEmits<{
 const container = ref<HTMLDivElement>()
 
 let map: Map | undefined
-let baseLayer: TileLayer<OSM> | undefined
+let baseLayer: TileLayer<TileSource> | undefined
+let labelsLayer: TileLayer<TileSource> | undefined
 let coverageLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined // modo estático
 let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raster más nuevo
@@ -146,6 +150,19 @@ function updateWind() {
   if (!windLayer) return
   windLayer.setPaused(props.animPlaying)
   windLayer.setGrid(props.windGrid)
+}
+
+// ── Mapa base + labels (catálogo shared/basemaps.ts) ─────────────────────
+// Los nombres van en capa aparte (zIndex 18: sobre raster/cobertura/viento,
+// bajo fenómenos en 20) SOLO en las variantes CARTO *_nolabels; con OSM van
+// horneados en el tile (labels = null) — nunca duplicados. 'off' apaga ambas.
+function updateBaseMap() {
+  if (!baseLayer || !labelsLayer) return
+  const { base, labels } = createBaseMapSources(props.baseMap)
+  baseLayer.setSource(base)
+  baseLayer.setVisible(base !== null)
+  labelsLayer.setSource(labels)
+  labelsLayer.setVisible(labels !== null)
 }
 
 function updateCoverage() {
@@ -293,7 +310,9 @@ function initOrUpdatePool() {
 }
 
 onMounted(() => {
-  baseLayer = new TileLayer({ source: new OSM(), zIndex: 0, visible: props.showBase })
+  const { base, labels } = createBaseMapSources(props.baseMap)
+  baseLayer = new TileLayer({ source: base ?? undefined, zIndex: 0, visible: base !== null })
+  labelsLayer = new TileLayer({ source: labels ?? undefined, zIndex: 18, visible: labels !== null })
   satelliteLayer = createSatelliteLayer(props.satVariant, props.satOpacity)
   satelliteLayer.setZIndex(3)
   updateSatelliteVisibility()
@@ -315,6 +334,8 @@ onMounted(() => {
       // más allá del alcance del radar —, bajo fenómenos (20). Seed fijo:
       // trayectorias deterministas (e2e) sin costo en prod.
       (windLayer = new WindParticleLayer({ zIndex: 15, seed: 1 })),
+      // nombres del mapa base por encima de todo excepto fenómenos (20)
+      labelsLayer,
       (phenomenaLayer = new VectorLayer({
         source: phenomenaSource,
         zIndex: 20,
@@ -431,7 +452,7 @@ watch(() => props.opacity, (o) => {
   rasterLayer?.setOpacity(o)
   pool?.setOpacity(o)
 })
-watch(() => props.showBase, v => baseLayer?.setVisible(v))
+watch(() => props.baseMap, updateBaseMap)
 watch(() => props.showCoverage, v => coverageLayer?.setVisible(v))
 
 watch(
