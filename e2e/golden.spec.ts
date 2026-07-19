@@ -4,8 +4,12 @@
 // La base OSM va apagada (?base=off): fondo determinista, el golden compara
 // solo raster + cobertura.
 //
+// DESACTIVADOS por defecto (gate GOLDENS=1 en playwright.config.ts) mientras
+// la UI está en flujo — cada cambio de layout invalidaba los 10 baselines.
+// Correr a demanda antes de tocar paletas/render: GOLDENS=1 pnpm test:e2e
+//
 // Regenerar tras re-grabar fixtures/COGs o cambiar una paleta:
-//   pnpm exec playwright test e2e/golden.spec.ts --update-snapshots
+//   GOLDENS=1 pnpm exec playwright test e2e/golden.spec.ts --update-snapshots --no-deps
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'

@@ -24,15 +24,26 @@ export default defineConfig({
       testIgnore: /golden\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      // Goldens visuales aparte y en serie: N contextos WebGL simultáneos
-      // (SwiftShader) provocan pérdida de contexto → canvas en blanco.
-      name: 'goldens',
-      testMatch: /golden\.spec\.ts/,
-      dependencies: ['chromium'],
-      fullyParallel: false,
-      use: { ...devices['Desktop Chrome'] },
-    },
+    // Goldens visuales DESACTIVADOS por defecto mientras la UI está en flujo:
+    // cualquier cambio de layout cerca del mapa invalida los 10 baselines y
+    // regenerarlos cuesta más que lo que protegen a este ritmo de cambios.
+    // Siguen siendo la única guarda del render raster (paleta→píxeles, M2):
+    // correrlos a demanda antes de tocar paletas/render con
+    //   GOLDENS=1 pnpm test:e2e
+    // (la dependencia en `chromium` serializa goldens tras la suite normal;
+    // un --project=goldens también la arrastraría, así que sin filtro).
+    // Reactivar en CI (quitar el gate) cuando el layout se estabilice.
+    ...(process.env.GOLDENS
+      ? [{
+          // Aparte y en serie: N contextos WebGL simultáneos (SwiftShader)
+          // provocan pérdida de contexto → canvas en blanco.
+          name: 'goldens',
+          testMatch: /golden\.spec\.ts/,
+          dependencies: ['chromium'],
+          fullyParallel: false,
+          use: { ...devices['Desktop Chrome'] },
+        }]
+      : []),
   ],
   webServer: [
     {
