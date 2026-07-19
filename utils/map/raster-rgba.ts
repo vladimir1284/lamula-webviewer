@@ -75,19 +75,31 @@ export function gaussianBlurRgba(straight: Uint8ClampedArray, width: number, hei
   return bctx.getImageData(0, 0, width, height).data
 }
 
+export interface SmoothedRasterSource {
+  source: DataTile
+  /** niveles crudos sin suavizar + geometría — para muestreo de cursor (nunca leer del RGBA difuminado). */
+  decoded: DecodedLevels
+}
+
 /**
  * Fuente RGBA suavizada (blur gaussiano en color recto + bilineal de GPU
  * al resamplear). Un solo tile cubre el raster entero (mismo esquema que
  * ol/source/GeoTIFF con estos COGs sin pirámide, ver spike). Usar con
  * smoothedRasterStyle().
+ *
+ * `radiusPx` es en píxeles NATIVOS del COG (antes de reproyectar) — para que
+ * el radio represente una distancia real constante en el terreno con
+ * independencia del zoom de pantalla, calcularlo desde `cell_m` en el
+ * caller, no un píxel fijo arbitrario (ver docs/decisiones.md).
  */
 export async function createSmoothedRasterSource(
   blob: Blob,
   table: LevelColorTable,
   projCode: string,
-  radiusPx = 4,
-): Promise<DataTile> {
-  const { data, width, height, extent } = await decodeLevels(blob)
+  radiusPx: number,
+): Promise<SmoothedRasterSource> {
+  const decoded = await decodeLevels(blob)
+  const { data, width, height, extent } = decoded
   const straight = gaussianBlurRgba(buildStraightRgba(data, table), width, height, radiusPx)
   const rgba = premultiply(straight)
 
@@ -98,7 +110,7 @@ export async function createSmoothedRasterSource(
     resolutions: [(maxX - minX) / width],
     tileSize: [width, height],
   })
-  return new DataTile({
+  const source = new DataTile({
     loader: () => rgba,
     bandCount: 4,
     interpolate: true,
@@ -106,4 +118,20 @@ export async function createSmoothedRasterSource(
     tileGrid,
     transition: 0,
   })
+  return { source, decoded }
+}
+
+/**
+ * Nivel crudo (sin difuminar) bajo una coordenada del cursor, ya en la
+ * proyección AEQD del COG (`x`,`y`). null si cae fuera del extent. SIEMPRE
+ * usar esto para el readout de cursor en modo suavizado — la textura RGBA
+ * que ve la GPU está difuminada y premultiplicada, no representa el dato físico.
+ */
+export function sampleRawLevel(decoded: DecodedLevels, x: number, y: number): number | null {
+  const { data, width, height, extent } = decoded
+  const [minX, minY, maxX, maxY] = extent
+  const col = Math.floor(((x - minX) / (maxX - minX)) * width)
+  const row = Math.floor(((maxY - y) / (maxY - minY)) * height)
+  if (col < 0 || col >= width || row < 0 || row >= height) return null
+  return data[row * width + col]!
 }

@@ -16,7 +16,7 @@ import Polygon, { circular } from 'ol/geom/Polygon'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
-import { fromLonLat } from 'ol/proj'
+import { fromLonLat, transform } from 'ol/proj'
 import GeoTIFF from 'ol/source/GeoTIFF'
 import OSM from 'ol/source/OSM'
 import VectorSource from 'ol/source/Vector'
@@ -33,7 +33,7 @@ import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
-import { createSmoothedRasterSource } from '../utils/map/raster-rgba'
+import { createSmoothedRasterSource, sampleRawLevel, type DecodedLevels } from '../utils/map/raster-rgba'
 import { rasterStyle, smoothedRasterStyle } from '../utils/map/raster-style'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 
@@ -103,6 +103,14 @@ let rasterLayer: WebGLTileLayer | undefined // modo estático
 let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raster más nuevo
 let pool: FramePool | undefined // modo animación
 let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
+// modo suavizado (estático únicamente, ver props.smooth): niveles crudos +
+// geometría del raster mostrado — SIEMPRE usar esto para el readout de
+// cursor, nunca leer del RGBA difuminado (ver utils/map/raster-rgba.ts)
+let smoothedRawLevels: DecodedLevels | undefined
+let smoothedProjCode: string | undefined
+// radio de blur constante en TERRENO (no en píxeles de pantalla): mismo
+// desenfoque real sin importar la resolución nativa del producto/COG
+const GAUSSIAN_BLUR_RADIUS_M = 1000
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
@@ -202,6 +210,8 @@ function updateRasterLayer() {
   }
   emit('cursor', null)
   rasterLoaded.value = 'none'
+  smoothedRawLevels = undefined
+  smoothedProjCode = undefined
 
   const { raster, productDef, radar } = props
   if (!map || !raster?.cog_url || !productDef) return
@@ -215,12 +225,18 @@ function updateRasterLayer() {
     .then(async (blob) => {
       if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
 
-      let source: GeoTIFF | Awaited<ReturnType<typeof createSmoothedRasterSource>>
+      let source: GeoTIFF | Awaited<ReturnType<typeof createSmoothedRasterSource>>['source']
       let style: ReturnType<typeof rasterStyle> | ReturnType<typeof smoothedRasterStyle>
 
       if (props.smooth) {
         const table = buildLevelColorTable(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-        source = await createSmoothedRasterSource(blob, table, projCode)
+        const radiusPx = Math.min(20, Math.max(1, GAUSSIAN_BLUR_RADIUS_M / raster.cell_m))
+        const smoothed = await createSmoothedRasterSource(blob, table, projCode, radiusPx)
+        source = smoothed.source
+        if (requestId === rasterRequestId) {
+          smoothedRawLevels = smoothed.decoded
+          smoothedProjCode = projCode
+        }
         style = smoothedRasterStyle()
       }
       else {
@@ -341,10 +357,21 @@ onMounted(() => {
       emit('cursor', null)
       return
     }
-    const data = activeLayer.getData(evt.pixel)
-    const level = data && !(data instanceof DataView) && data.length > 0
-      ? Number(data[0])
-      : Number.NaN
+    // en modo suavizado la textura de la GPU es RGBA difuminado, no el
+    // nivel físico — el readout SIEMPRE tiene que venir de los niveles
+    // crudos guardados aparte, nunca de activeLayer.getData() aquí
+    let level = Number.NaN
+    if (!animationMode() && props.smooth && smoothedRawLevels && smoothedProjCode) {
+      const [x, y] = transform(evt.coordinate, map!.getView().getProjection(), smoothedProjCode)
+      const raw = sampleRawLevel(smoothedRawLevels, x!, y!)
+      if (raw !== null) level = raw
+    }
+    else {
+      const data = activeLayer.getData(evt.pixel)
+      level = data && !(data instanceof DataView) && data.length > 0
+        ? Number(data[0])
+        : Number.NaN
+    }
     emit('cursor', sampleFromLevel(level, activeMeta.value_scale, activeMeta.value_offset))
   })
   map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
@@ -393,6 +420,8 @@ watch(
         rasterLayer.dispose()
         rasterLayer = undefined
       }
+      smoothedRawLevels = undefined
+      smoothedProjCode = undefined
       initOrUpdatePool()
     }
     else {

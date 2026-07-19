@@ -833,12 +833,16 @@ function onSatOpacityInput(event: Event) {
           />
         </ClientOnly>
 
-        <!-- prueba manual: conmutar suavizado gaussiano sin navegar (zoom/vista intactos) -->
+        <!-- prueba manual: conmutar suavizado gaussiano sin navegar (zoom/vista intactos).
+             Solo modo estático — el pool de animación no lo implementa todavía
+             (perf sin medir para blur por frame), deshabilitado explícito en vez
+             de ignorarlo en silencio. -->
         <div class="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-2 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
-          <label class="flex items-center gap-1">
-            <input v-model="smoothTest" type="checkbox">
+          <label class="flex items-center gap-1" :class="{ 'opacity-50': animationEngaged }">
+            <input v-model="smoothTest" type="checkbox" :disabled="animationEngaged">
             suavizado gaussiano
           </label>
+          <span v-if="animationEngaged" class="text-slate-400">(no en animación)</span>
         </div>
 
         <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
