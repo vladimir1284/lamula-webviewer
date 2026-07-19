@@ -13,6 +13,8 @@ import { FRESH_MAX_MINUTES, naiveUtcToEpochMs, zProductRow, zRadarRow } from '~/
 import { asD1, createSeededDb } from '../helpers/d1-sqlite'
 import {
   healthNow,
+  lightningDay,
+  lightningEmptySite,
   phenDay,
   phenVolume,
   radars,
@@ -201,6 +203,33 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     }
   })
 
+  it('listLightningBuckets: cubos del día ±900 s, ascendentes, lightning_url resuelta', async () => {
+    const buckets = await dal.listLightningBuckets(lightningDay.site, lightningDay.day)
+    const expected = lightningDay.rows.map(({ size_bytes: _s, created_at: _c, ...row }) => ({
+      ...row,
+      lightning_url: row.r2_key ? `${R2_BASE}/${row.r2_key}` : null,
+    }))
+    expect(buckets).toEqual(expected)
+    // padding ±900 s: vecino de un día contiguo presente si la grabación lo trae
+    if (lightningDay.hasNeighbor) {
+      expect(buckets.some(b => !b.bucket_start.startsWith(lightningDay.day))).toBe(true)
+    }
+    // cubo cubierto sin descargas: fila presente, sin URL (≠ hueco de ingesta)
+    if (lightningDay.zeroBucket !== null) {
+      const zero = buckets.find(b => b.bucket_start === lightningDay.zeroBucket!.bucket_start)!
+      expect(zero.strike_count).toBe(0)
+      expect(zero.r2_key).toBeNull()
+      expect(zero.lightning_url).toBeNull()
+    }
+  })
+
+  it('listLightningBuckets: día sin datos y site sin rayos → []', async () => {
+    expect(await dal.listLightningBuckets(lightningDay.site, '2000-01-01')).toEqual([])
+    if (lightningEmptySite !== null) {
+      expect(await dal.listLightningBuckets(lightningEmptySite, lightningDay.day)).toEqual([])
+    }
+  })
+
   it('health: minutos desde el último scan y umbral de frescura', async () => {
     const health = await dal.health(healthNow)
     const expected = [...radars]
@@ -239,6 +268,7 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['listPhenomenaByCell', d => d.listPhenomenaByCell(trackedCell.site, trackedCell.cellId)],
     ['listVwp', d => d.listVwp(vwpVolume.site, vwpVolume.volTime)],
     ['listWindTimes', d => d.listWindTimes(windDay.site, windDay.day)],
+    ['listLightningBuckets', d => d.listLightningBuckets(lightningDay.site, lightningDay.day)],
     ['health', d => d.health(healthNow)],
   ]
 

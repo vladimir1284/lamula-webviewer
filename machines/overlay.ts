@@ -22,15 +22,24 @@
 // payload del evento, no context.layers/panel.
 //
 // Diagrama: docs/maquinas-estado.md (actualizar en el mismo commit).
-import type { Phenomenon, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
+import type {
+  LightningBucketFile,
+  LightningBucketMeta,
+  Phenomenon,
+  VwpLevel,
+  WindGridFile,
+  WindGridMeta,
+} from '#shared/contract'
 import { assign, fromPromise, raise, setup } from 'xstate'
 import { nearestWithin, WIND_JOIN_TOLERANCE_S } from '../utils/overlay/join'
+import type { NormalizedStrike, ObservationWindow } from '../utils/overlay/lightning-join'
+import { bucketsInWindow, observationWindow, strikesInWindow } from '../utils/overlay/lightning-join'
 
-export const OVERLAY_LAYERS = ['cells', 'meso', 'trackPast', 'trackFuture', 'wind'] as const
+export const OVERLAY_LAYERS = ['cells', 'meso', 'trackPast', 'trackFuture', 'wind', 'lightning'] as const
 export type OverlayLayerId = (typeof OVERLAY_LAYERS)[number]
 
-/** subconjunto de layers que se pinta con filas de fenómenos — 'wind' NO
- * dispara ese fetch (tiene región e índice propios) */
+/** subconjunto de layers que se pinta con filas de fenómenos — 'wind' y
+ * 'lightning' NO disparan ese fetch (tienen región e índice propios) */
 export const PHENOMENA_LAYERS: readonly OverlayLayerId[] = ['cells', 'meso', 'trackPast', 'trackFuture']
 
 export const PANELS = ['cells', 'trend', 'vwp'] as const
@@ -46,7 +55,9 @@ export interface OverlayInput {
 
 export type OverlayEvent =
   | { type: 'SET_SCOPE', site: string, day: string }
-  | { type: 'SET_TIME', volTime: string | null }
+  /** prevVolTime = frame raster anterior en el timeline (ventana de
+   * observación del overlay de rayos); null/ausente → fallback de 600 s */
+  | { type: 'SET_TIME', volTime: string | null, prevVolTime?: string | null }
   | { type: 'SET_ACTIVE', layers: OverlayLayerId[], panel: PanelId | null }
   | { type: 'SELECT_CELL', cellId: string | null }
   | { type: 'INDEX_READY' }
@@ -56,6 +67,8 @@ interface OverlayContext {
   day: string
   /** vol_time del frame raster mostrado (animación o estático) */
   volTime: string | null
+  /** vol_time del frame anterior en el timeline (null = desconocido) */
+  prevVolTime: string | null
   layers: OverlayLayerId[]
   panel: PanelId | null
   cellId: string | null
@@ -84,6 +97,16 @@ interface OverlayContext {
   /** por r2_key (el ciclo va en la key → inmutable de verdad) */
   windCache: Record<string, WindGridFile>
   windError: string | null
+  /** índice de cubos de rayos del día ±900 s (null = sin cargar) */
+  lightningBuckets: LightningBucketMeta[] | null
+  /** ventana de observación del frame (null = sin frame) */
+  lightningWindow: ObservationWindow | null
+  /** strikes normalizados de la ventana (null = capa limpia; [] = ventana
+   * cubierta sin descargas) */
+  lightningStrikes: NormalizedStrike[] | null
+  /** ficheros de cubo por r2_key (inmutables → cache sin invalidación) */
+  lightningCache: Record<string, LightningBucketFile>
+  lightningError: string | null
 }
 
 /** el overlay del mapa o los paneles de celdas necesitan las filas de fenómenos */
@@ -93,6 +116,29 @@ const needsPhenomena = (layers: OverlayLayerId[], panel: PanelId | null) =>
 /** metadata de la grilla casada (la key R2 sale de aquí, no se construye) */
 const joinedWindMeta = (ctx: OverlayContext): WindGridMeta | null =>
   ctx.windTimes?.find(w => w.valid_time === ctx.windJoined) ?? null
+
+/** cubos con strikes que solapan la ventana del frame */
+const lightningWanted = (ctx: OverlayContext): LightningBucketMeta[] =>
+  ctx.lightningBuckets === null || ctx.lightningWindow === null
+    ? []
+    : bucketsInWindow(ctx.lightningBuckets, ctx.lightningWindow)
+
+/** cubos deseados aún sin fichero en cache */
+const lightningMissing = (ctx: OverlayContext): LightningBucketMeta[] =>
+  lightningWanted(ctx).filter(m => ctx.lightningCache[m.r2_key!] === undefined)
+
+/** strikes de la ventana desde la cache dada (la vigente o la recién ampliada) */
+const lightningResolve = (
+  ctx: OverlayContext,
+  cache: Record<string, LightningBucketFile>,
+): NormalizedStrike[] =>
+  strikesInWindow(
+    lightningWanted(ctx).flatMap((m) => {
+      const file = cache[m.r2_key!]
+      return file === undefined ? [] : [file]
+    }),
+    ctx.lightningWindow!,
+  )
 
 /** últimas n columnas del día hasta el frame; sin frame → últimas n del día */
 function windowUpTo(times: string[], volTime: string | null, n: number): string[] {
@@ -136,6 +182,20 @@ export const overlayMachine = setup({
     fetchWindGrid: fromPromise<WindGridFile, { meta: WindGridMeta }>(async () => {
       throw new Error('fetchWindGrid sin proveer (.provide)')
     }),
+    // índice de cubos de rayos del día ±900 s (/api/lightning/times) — propio
+    fetchLightningTimes: fromPromise<LightningBucketMeta[], { site: string, day: string }>(
+      async () => {
+        throw new Error('fetchLightningTimes sin proveer (.provide)')
+      },
+    ),
+    // ficheros de cubo que faltan en cache, directo de R2 (batch),
+    // validados con zLightningBucketFile → Record<r2_key, fichero>
+    fetchLightningBuckets: fromPromise<
+      Record<string, LightningBucketFile>,
+      { metas: LightningBucketMeta[] }
+    >(async () => {
+      throw new Error('fetchLightningBuckets sin proveer (.provide)')
+    }),
   },
   guards: {
     activeFromEvent: ({ event }) => {
@@ -154,6 +214,7 @@ export const overlayMachine = setup({
     site: input.site,
     day: input.day,
     volTime: null,
+    prevVolTime: null,
     layers: [],
     panel: null,
     cellId: null,
@@ -175,6 +236,11 @@ export const overlayMachine = setup({
     windGrid: null,
     windCache: {},
     windError: null,
+    lightningBuckets: null,
+    lightningWindow: null,
+    lightningStrikes: null,
+    lightningCache: {},
+    lightningError: null,
   }),
   type: 'parallel',
   states: {
@@ -191,6 +257,7 @@ export const overlayMachine = setup({
             // el frame mostrado del scope anterior no vale aquí — la página
             // reemite SET_TIME tras el cambio de ruta
             volTime: null,
+            prevVolTime: null,
             phenTimes: null,
             vwpTimes: null,
             indexError: null,
@@ -208,6 +275,11 @@ export const overlayMachine = setup({
             windGrid: null,
             windCache: {},
             windError: null,
+            lightningBuckets: null,
+            lightningWindow: null,
+            lightningStrikes: null,
+            lightningCache: {},
+            lightningError: null,
           })),
         },
         SET_ACTIVE: [
@@ -274,6 +346,8 @@ export const overlayMachine = setup({
     frame: {
       on: {
         SET_SCOPE: { target: '.idle' },
+        // esta región (primera que maneja SET_TIME) asigna los campos
+        // compartidos volTime/prevVolTime — las demás los leen ya frescos
         SET_TIME: [
           {
             guard: ({ context, event }) =>
@@ -281,14 +355,22 @@ export const overlayMachine = setup({
               && context.phenTimes !== null
               && needsPhenomena(context.layers, context.panel),
             target: '.join',
-            actions: assign({ volTime: ({ event }) => event.volTime }),
+            actions: assign({
+              volTime: ({ event }) => event.volTime,
+              prevVolTime: ({ event }) => event.prevVolTime ?? null,
+            }),
           },
           {
             guard: ({ event }) => event.volTime === null,
             target: '.idle',
-            actions: assign({ volTime: null, joined: null, phenomena: null }),
+            actions: assign({ volTime: null, prevVolTime: null, joined: null, phenomena: null }),
           },
-          { actions: assign({ volTime: ({ event }) => event.volTime }) },
+          {
+            actions: assign({
+              volTime: ({ event }) => event.volTime,
+              prevVolTime: ({ event }) => event.prevVolTime ?? null,
+            }),
+          },
         ],
         SET_ACTIVE: [
           {
@@ -610,6 +692,141 @@ export const overlayMachine = setup({
         },
         shown: {},
         // windJoined === null: nada a ≤1 h del frame (índice vacío incluido)
+        noData: {},
+        error: {},
+      },
+    },
+
+    // rayos GLM (capa animada): índice propio de cubos de 300 s
+    // (/api/lightning/times, día ±900 s) + join por VENTANA de observación
+    // (vol_time anterior, vol_time] en lugar de nearestWithin + fetch batch
+    // de los ficheros de cubo directo de R2 con cache por r2_key (D24
+    // aplicada a ventanas: fuera de ventana la capa se limpia)
+    lightning: {
+      on: {
+        SET_SCOPE: { target: '.deciding' },
+        SET_ACTIVE: [
+          {
+            // guard sobre el payload; context.layers aún es el snapshot
+            // previo. off→on estricto: no reentrar loadingIndex con un
+            // fetch en vuelo (misma regla que wind)
+            guard: ({ context, event }) =>
+              event.layers.includes('lightning')
+              && !context.layers.includes('lightning')
+              && context.lightningBuckets === null,
+            target: '.loadingIndex',
+          },
+          {
+            // reactivación con índice ya cargado (toggle off→on, cache viva)
+            guard: ({ context, event }) =>
+              event.layers.includes('lightning') && !context.layers.includes('lightning'),
+            target: '.join',
+          },
+          {
+            guard: ({ event }) => !event.layers.includes('lightning'),
+            target: '.idle',
+            actions: assign({ lightningWindow: null, lightningStrikes: null }),
+          },
+        ],
+        // volTime/prevVolTime los asigna 'frame' (anterior en orden de
+        // documento) en el mismo micropaso → el entry de join ya los lee
+        SET_TIME: [
+          {
+            guard: ({ context, event }) =>
+              event.volTime !== null
+              && context.layers.includes('lightning')
+              && context.lightningBuckets !== null,
+            target: '.join',
+          },
+          {
+            guard: ({ event }) => event.volTime === null,
+            target: '.idle',
+            actions: assign({ lightningWindow: null, lightningStrikes: null }),
+          },
+        ],
+      },
+      initial: 'idle',
+      states: {
+        idle: {},
+        // reentrada tras SET_SCOPE (índice ya limpiado por 'index'):
+        // recarga solo si la capa sigue activa
+        deciding: {
+          always: [
+            {
+              guard: ({ context }) => context.layers.includes('lightning'),
+              target: 'loadingIndex',
+            },
+            { target: 'idle' },
+          ],
+        },
+        loadingIndex: {
+          invoke: {
+            src: 'fetchLightningTimes',
+            input: ({ context }) => ({ site: context.site, day: context.day }),
+            onDone: {
+              target: 'join',
+              actions: assign({
+                lightningBuckets: ({ event }) => event.output,
+                lightningError: null,
+              }),
+            },
+            onError: {
+              target: 'error',
+              actions: assign({ lightningError: ({ event }) => errMsg(event.error) }),
+            },
+          },
+        },
+        // decisión síncrona: ventana + cubos que la tocan; cache primero
+        join: {
+          entry: assign({
+            lightningWindow: ({ context }) =>
+              context.volTime === null
+                ? null
+                : observationWindow(context.volTime, context.prevVolTime),
+            lightningError: null,
+          }),
+          always: [
+            {
+              // sin frame o ningún cubo con strikes toca la ventana —
+              // distinguible: window null vs strikes null con window puesta
+              guard: ({ context }) => lightningWanted(context).length === 0,
+              target: 'noData',
+              actions: assign({ lightningStrikes: null }),
+            },
+            {
+              guard: ({ context }) => lightningMissing(context).length === 0,
+              target: 'shown',
+              actions: assign({
+                lightningStrikes: ({ context }) =>
+                  lightningResolve(context, context.lightningCache),
+              }),
+            },
+            { target: 'fetching' },
+          ],
+        },
+        fetching: {
+          invoke: {
+            src: 'fetchLightningBuckets',
+            input: ({ context }) => ({ metas: lightningMissing(context) }),
+            onDone: {
+              target: 'shown',
+              actions: assign({
+                lightningCache: ({ context, event }) => ({
+                  ...context.lightningCache,
+                  ...event.output,
+                }),
+                lightningStrikes: ({ context, event }) =>
+                  lightningResolve(context, { ...context.lightningCache, ...event.output }),
+              }),
+            },
+            onError: {
+              target: 'error',
+              actions: assign({ lightningError: ({ event }) => errMsg(event.error) }),
+            },
+          },
+        },
+        shown: {},
+        // ventana sin cubos con strikes (índice vacío incluido) o sin frame
         noData: {},
         error: {},
       },

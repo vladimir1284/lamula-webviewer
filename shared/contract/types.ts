@@ -144,6 +144,44 @@ export interface WindGridFile {
   v: number[]
 }
 
+// ── Descargas eléctricas (GLM vía el pipeline, cubos de 300 s) ─────────
+
+/** `lightning_buckets` — una fila por (site_id, bucket_start), SIEMPRE al
+ * cerrar el cubo: `strike_count` 0 = cubo cubierto sin descargas (r2_key
+ * NULL, sin objeto); sin fila = hueco de ingesta. Contrato propuesto en
+ * docs/pipeline-rayos.md; hasta que el pipeline lo mergee el DDL vive en
+ * tests/contract/proposed/. */
+export interface LightningBucketRow {
+  site_id: string
+  /** inicio del cubo, ISO-8601 UTC naive, alineado a `bucket_s` */
+  bucket_start: string
+  /** duración del cubo en segundos (300 por contrato) */
+  bucket_s: number
+  strike_count: number
+  /** clave literal en R2 — null cuando strike_count = 0 */
+  r2_key: string | null
+  size_bytes: number | null
+  source: string
+}
+
+/** /api/lightning/times — fila + URL del JSON resuelta por el DAL. */
+export interface LightningBucketMeta extends Omit<LightningBucketRow, 'size_bytes'> {
+  /** URL pública del JSON; null si no hay objeto o el origen R2 no está configurado */
+  lightning_url: string | null
+}
+
+/** Descarga: [lon, lat, offset_s desde bucket_start]. Posiciones extra
+ * futuras se toleran (mismo espíritu que attrs). */
+export type LightningStrike = [number, number, number, ...unknown[]]
+
+/** Fichero de cubo en R2: offsets en [0, bucket_s). */
+export interface LightningBucketFile {
+  site: string
+  bucket_start: string
+  bucket_s: number
+  strikes: LightningStrike[]
+}
+
 /** Umbral de frescura: mismo criterio que FreshnessBadge. */
 export const FRESH_MAX_MINUTES = 30
 

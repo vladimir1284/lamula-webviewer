@@ -23,6 +23,12 @@ export function dayRange(day: string): { from: string, to: string } {
  * patrón phen/vwp (docs/pipeline-viento.md). */
 export const WIND_DAY_PAD_S = 7200
 
+/** Padding del índice de rayos: la ventana de observación de un frame mira
+ * hasta 600 s hacia atrás (fallback sin frame anterior), así que un frame
+ * pegado a medianoche necesita cubos del día vecino — 600 s de ventana +
+ * un cubo entero (300 s). */
+export const LIGHTNING_DAY_PAD_S = 900
+
 /** Rango [inicio − pad, fin + pad) de un día UTC. */
 export function dayRangePadded(day: string, padSeconds: number): { from: string, to: string } {
   const { from, to } = dayRange(day)

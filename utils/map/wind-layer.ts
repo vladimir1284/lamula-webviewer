@@ -15,6 +15,7 @@ import { apply as applyTransform } from 'ol/transform'
 import Layer from 'ol/layer/Layer'
 import { toLonLat } from 'ol/proj'
 import { mulberry32, WindParticles } from '../wind/particles'
+import { fromLonLat3857 } from './mercator'
 
 /** partículas ∝ área del canvas, acotado para móvil/desktop */
 const PARTICLES_PER_PX2 = 1 / 15_000
@@ -154,12 +155,12 @@ export class WindParticleLayer extends Layer {
     for (const s of this.particles.tick(dtS)) {
       const p0 = applyTransform(
         frameState.coordinateToPixelTransform,
-        fromLonLatInPlace(s.lon0, s.lat0),
+        fromLonLat3857(s.lon0, s.lat0),
       )
       ctx.moveTo(p0[0]!, p0[1]!)
       const p1 = applyTransform(
         frameState.coordinateToPixelTransform,
-        fromLonLatInPlace(s.lon1, s.lat1),
+        fromLonLat3857(s.lon1, s.lat1),
       )
       ctx.lineTo(p1[0]!, p1[1]!)
     }
@@ -185,14 +186,4 @@ export class WindParticleLayer extends Layer {
       { count, rng: this.seed !== undefined ? mulberry32(this.seed) : undefined },
     )
   }
-}
-
-// proyección inline EPSG:4326 → EPSG:3857 sin pasar por ol/proj en el hot
-// path (miles de llamadas por tick); mismas constantes que usa OL
-const R_3857 = 6378137
-function fromLonLatInPlace(lon: number, lat: number): [number, number] {
-  return [
-    (lon * Math.PI * R_3857) / 180,
-    R_3857 * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)),
-  ]
 }

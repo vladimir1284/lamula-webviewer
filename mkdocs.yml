@@ -42,6 +42,7 @@ nav:
   - Decisiones de diseño: decisiones.md
   - Contrato de datos: contrato.md
   - Spec pipeline viento: pipeline-viento.md
+  - Spec pipeline rayos: pipeline-rayos.md
   - Máquinas de estado: maquinas-estado.md
   - Plan de implementación: plan-implementacion.md
   - Estrategia de pruebas: pruebas.md

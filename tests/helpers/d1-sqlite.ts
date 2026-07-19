@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import type { D1Like } from '~/server/dal/types'
 
+import lightning from '~/server/dal/fixtures/lightning.json'
 import phenomena from '~/server/dal/fixtures/phenomena.json'
 import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
@@ -16,14 +17,24 @@ import wind from '~/server/dal/fixtures/wind.json'
 
 // vitest corre con cwd = raíz del repo. Todas las migraciones snapshoteadas
 // del pipeline, en orden (0001_init, 0003_wind_grids, …) — mismo criterio
-// que el drift check: lo que hay en schema/ ES el contrato.
+// que el drift check: lo que hay en schema/ ES el contrato. proposed/
+// contiene DDL acordado pero aún sin mergear en el pipeline (fuera del
+// drift check); se aplica después, en orden de nombre.
 const SCHEMA_DIR = join(process.cwd(), 'tests/contract/schema')
+const PROPOSED_DIR = join(process.cwd(), 'tests/contract/proposed')
 
 export function createContractDb(): Database.Database {
   const db = new Database(':memory:')
   db.pragma('foreign_keys = ON')
-  for (const name of readdirSync(SCHEMA_DIR).filter(f => f.endsWith('.sql')).sort()) {
-    db.exec(readFileSync(join(SCHEMA_DIR, name), 'utf8'))
+  for (const dir of [SCHEMA_DIR, PROPOSED_DIR]) {
+    let names: string[]
+    try {
+      names = readdirSync(dir).filter(f => f.endsWith('.sql')).sort()
+    }
+    catch {
+      continue // proposed/ puede no existir (todo mergeado)
+    }
+    for (const name of names) db.exec(readFileSync(join(dir, name), 'utf8'))
   }
   return db
 }
@@ -51,6 +62,7 @@ export function createSeededDb(): Database.Database {
   insertRows(db, 'phenomena', phenomena)
   insertRows(db, 'vwp', vwp)
   insertRows(db, 'wind_grids', wind)
+  insertRows(db, 'lightning_buckets', lightning)
   return db
 }
 

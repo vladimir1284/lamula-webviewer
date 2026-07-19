@@ -117,7 +117,7 @@ stateDiagram-v2
 ## `overlayMachine`
 
 Overlays de fenómenos + panel VWP (F4, decisiones 24/27) + capa de viento
-GFS (región `wind`). Separada de
+GFS (región `wind`) + capa de rayos GLM (región `lightning`). Separada de
 `viewerMachine` (patrón `animationMachine`): el vol_time efectivo durante la
 animación vive en la página (`times[activeFrameIndex]`), no en `viewerMachine`.
 La página la orquesta con watchers — `SET_SCOPE` (site/día), `SET_TIME` (frame
@@ -126,7 +126,7 @@ mostrado, animación o estático), `SET_ACTIVE` (toggles parseados de la URL),
 SSR y cliente por igual (la activación llega por eventos tras el mount) — sin
 mismatch de hidratación.
 
-`type: 'parallel'`, cinco regiones. **Todos los eventos se manejan a nivel de
+`type: 'parallel'`, seis regiones. **Todos los eventos se manejan a nivel de
 región** (ninguno en la raíz — la lección del ensombrecido de `viewerMachine`
 aplicada por diseño): varias regiones pueden manejar el mismo evento porque en
 XState v5 los eventos se difunden a todas las regiones activas. Dos sutilezas
@@ -204,6 +204,25 @@ stateDiagram-v2
             w_deciding --> w_loadingIndex: 'wind' sigue activo
             w_deciding --> w_idle: inactivo
         }
+        --
+        state "lightning — cubos de rayos GLM (capa 'lightning')" as L {
+            [*] --> l_idle
+            l_idle --> l_loadingIndex: SET_ACTIVE off→on con índice sin cargar
+            l_idle --> l_join: SET_ACTIVE off→on con índice cargado
+            l_loadingIndex --> l_join: fetchLightningTimes → cubos del día ±900 s
+            l_loadingIndex --> l_error: fetchLightningTimes falla
+            l_join --> l_noData: ningún cubo con strikes toca la ventana
+            l_join --> l_shown: todos los cubos de la ventana en cache
+            l_join --> l_fetching: faltan ficheros de cubo
+            l_fetching --> l_shown: fetchLightningBuckets (batch, cachea)
+            l_fetching --> l_error: fetchLightningBuckets falla
+            l_shown --> l_join: SET_TIME (nueva ventana)
+            l_noData --> l_join: SET_TIME
+            l_shown --> l_idle: SET_ACTIVE sin 'lightning' (limpia strikes)
+            l_shown --> l_deciding: SET_SCOPE
+            l_deciding --> l_loadingIndex: 'lightning' sigue activo
+            l_deciding --> l_idle: inactivo
+        }
     }
 ```
 
@@ -217,15 +236,21 @@ el de un scope anterior no vale, la página reemite `SET_TIME`), `layers`,
 `vwpProfiles` (cache por vol_time), `windTimes` (índice `WindGridMeta[]` del
 día ±2 h; `null` = sin cargar), `windJoined` (valid_time casado a ≤1 h),
 `windGrid` (JSON u/v del frame), `windCache` (por `r2_key` — el ciclo va en
-la key, inmutable de verdad), errores por región.
+la key, inmutable de verdad), `prevVolTime` (frame anterior del timeline —
+define la ventana de observación de rayos; lo asigna `frame` junto a
+`volTime`), `lightningBuckets` (índice `LightningBucketMeta[]` del día
+±900 s; `null` = sin cargar), `lightningWindow` (ventana `(prev, vol]` en
+epoch ms), `lightningStrikes` (strikes normalizados a progreso 0–1; `null`
+= capa limpia, `[]` = ventana cubierta sin descargas), `lightningCache`
+(ficheros de cubo por `r2_key`, inmutables), errores por región.
 
 | Evento | Regiones que lo manejan | Efecto |
 |---|---|---|
-| `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding`/`wind.deciding` recargan si lo suyo sigue activo |
-| `SET_TIME(volTime)` | `frame`, `vwp`, `wind` | `frame` asigna `volTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto; `wind` re-joinea con tolerancia de 1 h |
-| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp`, `wind` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp`/`wind` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba). `'wind'` NO cuenta para `needsPhenomena` (`PHENOMENA_LAYERS`): activar solo viento no fetchea fenómenos y viceversa |
+| `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding`/`wind.deciding`/`lightning.deciding` recargan si lo suyo sigue activo |
+| `SET_TIME(volTime, prevVolTime?)` | `frame`, `vwp`, `wind`, `lightning` | `frame` asigna `volTime` y `prevVolTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto; `wind` re-joinea con tolerancia de 1 h; `lightning` recalcula la ventana de observación |
+| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp`, `wind`, `lightning` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp`/`wind`/`lightning` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba). `'wind'` y `'lightning'` NO cuentan para `needsPhenomena` (`PHENOMENA_LAYERS`): activar solo viento/rayos no fetchea fenómenos y viceversa |
 | `SELECT_CELL(cellId\|null)` | `series` | carga la serie cross-volumen o la limpia |
-| `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice (`wind` no lo necesita: su índice es propio) |
+| `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice (`wind`/`lightning` no lo necesitan: su índice es propio) |
 
 **Join temporal (D24):** `joined = nearestWithin(phenTimes, volTime, 600 s)`
 (`utils/overlay/join.ts`; empate → anterior, la regla de `pickClosest`). Fuera
@@ -234,6 +259,18 @@ presentadas como actuales. El viento usa la misma función con
 `WIND_JOIN_TOLERANCE_S = 3600` (valid_times horarios GFS); por eso su índice
 se consulta con el día **±2 h** (`WIND_DAY_PAD_S`) — un frame pegado a
 medianoche debe poder casar con el valid_time del día vecino.
+
+**Join por ventana (rayos):** a diferencia del resto, los rayos de un frame
+no son "el volumen más cercano" sino **los caídos durante su intervalo de
+observación** `(prevVolTime, volTime]`
+(`utils/overlay/lightning-join.ts::observationWindow`; sin `prevVolTime`, o
+con un hueco del feed > 600 s, la ventana se recorta a 600 s — comprimir
+1 h de rayos en el bucle de 5 s los presentaría como una tormenta irreal).
+`bucketsInWindow` selecciona los cubos de 300 s que la solapan (los de
+`strike_count` 0 ni se fetchean) y `strikesInWindow` filtra y normaliza
+cada descarga a progreso 0–1 dentro de la ventana — el `progresoReal` que
+consume el bucle visual (`utils/lightning/anim.ts`). El índice se consulta
+con el día **±900 s** (`LIGHTNING_DAY_PAD_S`: ventana máxima + un cubo).
 
 **Congelado durante playback:** mientras la animación reproduce, `SET_TIME`
 no se emite por frame — la página (`pages/[site]/[product]/[[time]].vue`)
@@ -252,8 +289,11 @@ ahora directamente no corre.
 `/api/phenomena/times` + `/api/vwp/times`), `fetchPhenomena`
 (`/api/phenomena`), `fetchSeries` (`/api/phenomena/series`), `fetchVwp`
 (batch de `/api/vwp` para los vol_times sin cache), `fetchWindTimes`
-(`/api/wind/times`) y `fetchWindGrid` (JSON u/v con `fetch` directo a R2
-vía `meta.wind_url` — como los COGs — validado con `zWindGridFile`).
+(`/api/wind/times`), `fetchWindGrid` (JSON u/v con `fetch` directo a R2
+vía `meta.wind_url` — como los COGs — validado con `zWindGridFile`),
+`fetchLightningTimes` (`/api/lightning/times`) y `fetchLightningBuckets`
+(batch de ficheros de cubo con `fetch` directo a R2 vía
+`meta.lightning_url`, validados con `zLightningBucketFile`).
 
 ## `frameMachine`
 

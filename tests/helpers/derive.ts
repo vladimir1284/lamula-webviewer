@@ -8,8 +8,8 @@
 // Ambos runners corren con cwd = raíz del repo.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow, WindGridRow } from '../../shared/contract/types'
-import { dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract/time'
+import type { LightningBucketRow, PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow, WindGridRow } from '../../shared/contract/types'
+import { dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract/time'
 
 type Recorded<T> = T & { created_at: string }
 
@@ -26,6 +26,8 @@ export const phenomena = loadFixture<Recorded<PhenomenonRow>[]>('phenomena')
 export const vwp = loadFixture<Recorded<VwpRow>[]>('vwp')
 // SINTÉTICO (scripts/make-wind-fixture.mjs) hasta que el pipeline ingiera GFS
 export const windGrids = loadFixture<Recorded<WindGridRow>[]>('wind')
+// SINTÉTICO (scripts/make-lightning-fixture.mjs) hasta que el pipeline ingiera GLM
+export const lightningBuckets = loadFixture<Recorded<LightningBucketRow>[]>('lightning')
 
 function fail(msg: string): never {
   throw new Error(`fixtures insuficientes: ${msg} — re-grabar con scripts/record-fixtures.sh`)
@@ -194,6 +196,42 @@ export const windDay = (() => {
 export const windEmptySite = (() => {
   const withWind = new Set(windGrids.map(w => w.site_id))
   return siteIds.find(s => !withWind.has(s)) ?? null
+})()
+
+/**
+ * (site, día UTC) con más cubos de rayos + expectativa del índice CON
+ * padding ±900 s (contrato de listLightningBuckets). `hasNeighbor` marca
+ * si hay un cubo del día contiguo dentro del padding; `zeroBucket` es una
+ * fila con strike_count 0 (r2_key NULL) si la grabación trae alguna —
+ * ambos garantizados en la fixture sintética, opcionales en grabaciones.
+ */
+export const lightningDay = (() => {
+  const groups = new Map<string, Recorded<LightningBucketRow>[]>()
+  for (const b of lightningBuckets) {
+    const key = `${b.site_id}|${b.bucket_start.slice(0, 10)}`
+    groups.set(key, [...(groups.get(key) ?? []), b])
+  }
+  const best = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
+  if (!best) fail('no hay rayos grabados (sintético: scripts/make-lightning-fixture.mjs)')
+  const [site, day] = best[0].split('|') as [string, string]
+  const { from, to } = dayRangePadded(day, LIGHTNING_DAY_PAD_S)
+  const rows = lightningBuckets
+    .filter(b => b.site_id === site && b.bucket_start >= from && b.bucket_start < to)
+    .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start))
+  return {
+    site,
+    day,
+    rows,
+    hasNeighbor: rows.some(b => !b.bucket_start.startsWith(day)),
+    zeroBucket: rows.find(b => b.strike_count === 0) ?? null,
+  }
+})()
+
+/** Site del catálogo sin ningún cubo de rayos — índice vacío. Null si
+ * todos tienen (esperable con la ingesta real); el test se salta. */
+export const lightningEmptySite = (() => {
+  const withLightning = new Set(lightningBuckets.map(b => b.site_id))
+  return siteIds.find(s => !withLightning.has(s)) ?? null
 })()
 
 /** Instante naive-UTC desplazado n segundos respecto a un vol_time. */

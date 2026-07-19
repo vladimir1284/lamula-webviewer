@@ -1,0 +1,102 @@
+[
+  {
+    "site_id": "AMX",
+    "bucket_start": "2026-07-11T06:15:00",
+    "bucket_s": 300,
+    "strike_count": 14,
+    "r2_key": "AMX/LIGHTNING/2026/07/11/AMX_LTG_20260711_061500.json",
+    "size_bytes": 380,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T06:21:30"
+  },
+  {
+    "site_id": "AMX",
+    "bucket_start": "2026-07-11T06:20:00",
+    "bucket_s": 300,
+    "strike_count": 0,
+    "r2_key": null,
+    "size_bytes": null,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T06:26:30"
+  },
+  {
+    "site_id": "AMX",
+    "bucket_start": "2026-07-11T06:25:00",
+    "bucket_s": 300,
+    "strike_count": 17,
+    "r2_key": "AMX/LIGHTNING/2026/07/11/AMX_LTG_20260711_062500.json",
+    "size_bytes": 451,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T06:31:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-10T23:55:00",
+    "bucket_s": 300,
+    "strike_count": 5,
+    "r2_key": "BYX/LIGHTNING/2026/07/10/BYX_LTG_20260710_235500.json",
+    "size_bytes": 191,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T00:01:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T02:50:00",
+    "bucket_s": 300,
+    "strike_count": 13,
+    "r2_key": "BYX/LIGHTNING/2026/07/11/BYX_LTG_20260711_025000.json",
+    "size_bytes": 363,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T02:56:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T02:55:00",
+    "bucket_s": 300,
+    "strike_count": 17,
+    "r2_key": "BYX/LIGHTNING/2026/07/11/BYX_LTG_20260711_025500.json",
+    "size_bytes": 465,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T03:01:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T03:00:00",
+    "bucket_s": 300,
+    "strike_count": 14,
+    "r2_key": "BYX/LIGHTNING/2026/07/11/BYX_LTG_20260711_030000.json",
+    "size_bytes": 391,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T03:06:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T03:05:00",
+    "bucket_s": 300,
+    "strike_count": 35,
+    "r2_key": "BYX/LIGHTNING/2026/07/11/BYX_LTG_20260711_030500.json",
+    "size_bytes": 863,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T03:11:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T03:10:00",
+    "bucket_s": 300,
+    "strike_count": 0,
+    "r2_key": null,
+    "size_bytes": null,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T03:16:30"
+  },
+  {
+    "site_id": "BYX",
+    "bucket_start": "2026-07-11T03:15:00",
+    "bucket_s": 300,
+    "strike_count": 22,
+    "r2_key": "BYX/LIGHTNING/2026/07/11/BYX_LTG_20260711_031500.json",
+    "size_bytes": 554,
+    "source": "glm-goes19",
+    "created_at": "2026-07-11T03:21:30"
+  }
+]

@@ -4,8 +4,16 @@ import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { BaseMapId } from '#shared/basemaps'
 import { BASE_MAP_IDS, BASE_MAP_LABELS } from '#shared/basemaps'
-import type { Phenomenon, RasterMeta, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
-import { zWindGridFile } from '#shared/contract'
+import type {
+  LightningBucketFile,
+  LightningBucketMeta,
+  Phenomenon,
+  RasterMeta,
+  VwpLevel,
+  WindGridFile,
+  WindGridMeta,
+} from '#shared/contract'
+import { zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
@@ -444,6 +452,27 @@ const { snapshot: overlaySnapshot, send: overlaySend } = useActor(
         if (!res.ok) throw new Error(`viento ${meta.r2_key}: HTTP ${res.status}`)
         return zWindGridFile.parse(await res.json())
       }),
+      fetchLightningTimes: fromPromise(async ({ input }) =>
+        $fetch<LightningBucketMeta[]>('/api/lightning/times', {
+          query: { site: input.site, day: input.day },
+        }),
+      ),
+      // ficheros de cubo directo de R2 (batch) — validados antes de animar
+      fetchLightningBuckets: fromPromise(
+        async ({ input }): Promise<Record<string, LightningBucketFile>> => {
+          const entries = await Promise.all(
+            input.metas.map(async (meta: LightningBucketMeta) => {
+              if (!meta.lightning_url) {
+                throw new Error('origen R2 sin configurar (lightning_url null)')
+              }
+              const res = await fetch(meta.lightning_url)
+              if (!res.ok) throw new Error(`rayos ${meta.r2_key}: HTTP ${res.status}`)
+              return [meta.r2_key!, zLightningBucketFile.parse(await res.json())] as const
+            }),
+          )
+          return Object.fromEntries(entries)
+        },
+      ),
     },
   }),
   { input: { site: initialRoute.site, day: dayInitial } },
@@ -454,8 +483,21 @@ const displayedVolTime = computed(() =>
   animationEngaged.value ? animCurrentVolTime.value : raster.value?.vol_time ?? null,
 )
 
+// frame anterior del día al mostrado — define la ventana de observación
+// del overlay de rayos (D31); null (primer frame / fuera del día cargado)
+// → la máquina cae al fallback de 600 s
+function prevDayVolTime(volTime: string | null): string | null {
+  if (volTime === null) return null
+  const idx = dayTimes.value.indexOf(volTime)
+  return idx > 0 ? dayTimes.value[idx - 1]! : null
+}
+
 onMounted(() => {
-  overlaySend({ type: 'SET_TIME', volTime: displayedVolTime.value })
+  overlaySend({
+    type: 'SET_TIME',
+    volTime: displayedVolTime.value,
+    prevVolTime: prevDayVolTime(displayedVolTime.value),
+  })
   overlaySend({ type: 'SET_ACTIVE', layers: ctx.value.layers, panel: ctx.value.panel })
   if (ctx.value.cell !== null) overlaySend({ type: 'SELECT_CELL', cellId: ctx.value.cell })
 })
@@ -468,7 +510,7 @@ watch([() => ctx.value.site, () => ctx.value.day], ([site, day]) => {
 let overlayResumeTimer: ReturnType<typeof setTimeout> | null = null
 watch(displayedVolTime, (volTime) => {
   if (animPlaying.value) return
-  overlaySend({ type: 'SET_TIME', volTime })
+  overlaySend({ type: 'SET_TIME', volTime, prevVolTime: prevDayVolTime(volTime) })
 })
 watch(animPlaying, (playing) => {
   if (overlayResumeTimer) {
@@ -478,7 +520,11 @@ watch(animPlaying, (playing) => {
   if (playing) return
   overlayResumeTimer = setTimeout(() => {
     overlayResumeTimer = null
-    overlaySend({ type: 'SET_TIME', volTime: displayedVolTime.value })
+    overlaySend({
+      type: 'SET_TIME',
+      volTime: displayedVolTime.value,
+      prevVolTime: prevDayVolTime(displayedVolTime.value),
+    })
   }, OVERLAY_RESUME_DELAY_MS)
 })
 onBeforeUnmount(() => {
@@ -532,6 +578,28 @@ const windInfo = computed(() => {
   const cycleH = meta.cycle_time.slice(11, 13)
   const validHm = meta.valid_time.slice(11, 16)
   return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z`
+})
+
+// ── Capa de rayos (GLM) ──────────────────────────────────────────────────
+// Los strikes ya normalizados a la ventana del frame los publica la
+// máquina; null = capa limpia (off/noData).
+const lightningStrikesShown = computed(() =>
+  ctx.value.layers.includes('lightning') ? overlayCtx.value.lightningStrikes : null,
+)
+const lightningInfo = computed(() => {
+  if (!ctx.value.layers.includes('lightning')) return null
+  const s = overlaySnapshot.value
+  if (s.matches({ lightning: 'error' })) {
+    return `Error cargando rayos: ${overlayCtx.value.lightningError}`
+  }
+  if (s.matches({ lightning: 'noData' })) {
+    return 'Sin descargas registradas para este frame.'
+  }
+  const strikes = overlayCtx.value.lightningStrikes
+  if (strikes === null) return null
+  return strikes.length === 0
+    ? 'Sin descargas dentro del intervalo del frame.'
+    : `${strikes.length} descargas en el intervalo del frame.`
 })
 
 function onToggleLayer(layer: OverlayLayerId) {
@@ -872,6 +940,32 @@ function onSatOpacityInput(event: Event) {
           </p>
         </fieldset>
 
+        <fieldset class="rounded bg-slate-800 p-3 text-sm">
+          <legend class="px-1 text-slate-400">Rayos</legend>
+          <label class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              data-testid="layer-toggle-lightning"
+              :checked="ctx.layers.includes('lightning')"
+              @change="onToggleLayer('lightning')"
+            >
+            <span>Descargas eléctricas</span>
+          </label>
+          <p
+            v-if="lightningInfo"
+            data-testid="lightning-info"
+            class="mt-2 text-xs text-slate-400"
+          >
+            {{ lightningInfo }}
+          </p>
+          <p
+            v-if="ctx.layers.includes('lightning')"
+            class="mt-1 text-xs text-slate-400"
+          >
+            No se muestra durante la animación.
+          </p>
+        </fieldset>
+
         <DayPicker
           v-if="availableDays.length > 0"
           :days="availableDays"
@@ -903,6 +997,7 @@ function onSatOpacityInput(event: Event) {
             :sat-variant="ctx.satVariant"
             :sat-opacity="ctx.satOpacity"
             :wind-grid="windGridShown"
+            :lightning-strikes="lightningStrikesShown"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"

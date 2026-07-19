@@ -4,6 +4,8 @@
 // tests/unit/dal.spec.ts corre contra ambos y compara resultados (M1).
 import type {
   Health,
+  LightningBucketMeta,
+  LightningBucketRow,
   Phenomenon,
   PhenomenonRow,
   Product,
@@ -17,14 +19,15 @@ import type {
   WindGridMeta,
   WindGridRow,
 } from '../../shared/contract'
-import { dayRange, dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract'
+import { dayRange, dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract'
+import lightningJson from './fixtures/lightning.json'
 import phenomenaJson from './fixtures/phenomena.json'
 import productsJson from './fixtures/products.json'
 import radarsJson from './fixtures/radars.json'
 import rastersJson from './fixtures/rasters.json'
 import vwpJson from './fixtures/vwp.json'
 import windJson from './fixtures/wind.json'
-import { buildHealth, pickClosest, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
+import { buildHealth, pickClosest, toLightningMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { Dal, RasterLookupMode } from './types'
 
 // Las grabaciones incluyen created_at (columna NOT NULL, grabada tal cual);
@@ -37,6 +40,9 @@ const vwp = vwpJson as (VwpRow & { created_at: string })[]
 // wind es SINTÉTICO (scripts/make-wind-fixture.mjs) hasta que el pipeline
 // implemente la ingesta GFS — misma forma que la tabla propuesta.
 const wind = windJson as (WindGridRow & { created_at: string })[]
+// lightning es SINTÉTICO (scripts/make-lightning-fixture.mjs) hasta que el
+// pipeline implemente la ingesta GLM — misma forma que la tabla propuesta.
+const lightning = lightningJson as (LightningBucketRow & { created_at: string })[]
 
 const byVolTime = <T extends { vol_time: string }>(a: T, b: T) =>
   a.vol_time.localeCompare(b.vol_time)
@@ -152,6 +158,14 @@ export class FixtureDal implements Dal {
       .filter(w => w.site_id === site && w.valid_time >= from && w.valid_time < to)
       .sort((a, b) => a.valid_time.localeCompare(b.valid_time))
       .map(({ size_bytes: _size, created_at: _created, ...row }) => toWindMeta(row, this.r2BaseUrl))
+  }
+
+  async listLightningBuckets(site: string, day: string): Promise<LightningBucketMeta[]> {
+    const { from, to } = dayRangePadded(day, LIGHTNING_DAY_PAD_S)
+    return lightning
+      .filter(b => b.site_id === site && b.bucket_start >= from && b.bucket_start < to)
+      .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start))
+      .map(({ size_bytes: _size, created_at: _created, ...row }) => toLightningMeta(row, this.r2BaseUrl))
   }
 
   async health(now: Date): Promise<Health> {

@@ -41,3 +41,18 @@ re-grabación** — hasta la próxima re-grabación COMPLETA: ahí
 `record-fixtures.sh` ya graba `wind_grids` real, hay que bajar los JSON u/v
 de los valid_times cercanos a los rasters grabados (mismo flujo curl que los
 COGs golden) y el generador se retira.
+
+**Excepción: `lightning.json` es SINTÉTICO** aunque el pipeline ya ingiere
+GLM (migración `0004_lightning_buckets.sql`, 2026-07-19): misma razón que
+`wind.json` — la grabación vigente es del 2026-07-11 y re-grabar destruiría
+el caso BYX. Lo genera
+`node scripts/make-lightning-fixture.mjs` (radar-agnóstico: sitio con
+meso+raster = cubos de 300 s continuos sobre sus vol_times con clústeres
+sobre las celdas grabadas, cubos vacíos intercalados y un vecino cross-día
+para el padding; siguiente sitio = cubos fuera de toda ventana; resto =
+vacío), junto con los ficheros de strikes en
+`tests/fixtures/cogs/r2/<site>/LIGHTNING/…`. **Regenerarlo tras cada
+re-grabación** — hasta la próxima re-grabación COMPLETA: ahí
+`record-fixtures.sh` ya graba `lightning_buckets` real, hay que bajar los
+JSON de strikes de los cubos grabados (mismo flujo curl que los COGs
+golden) y el generador se retira.

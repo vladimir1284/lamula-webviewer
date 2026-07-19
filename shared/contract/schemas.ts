@@ -108,6 +108,36 @@ export const zWindGridFile = z.object({
   'u/v deben tener exactamente nx·ny valores',
 )
 
+export const zLightningBucketRow = z.object({
+  site_id: zSiteId,
+  bucket_start: zIsoNaive,
+  bucket_s: z.number().int().positive(),
+  strike_count: z.number().int().min(0),
+  r2_key: z.string().endsWith('.json').nullable(),
+  size_bytes: z.number().int().positive().nullable(),
+  source: z.string().min(1),
+})
+
+/** JSON de cubo de rayos en R2 — validación en cliente antes de animar.
+ * Posiciones extra por strike se toleran (extensión futura, como attrs);
+ * offsets fuera de [0, bucket_s) son fichero corrupto → se rechaza entero
+ * (mismo criterio estricto que zWindGridFile). */
+export const zLightningBucketFile = z.object({
+  site: zSiteId,
+  bucket_start: zIsoNaive,
+  bucket_s: z.number().int().positive(),
+  strikes: z.array(
+    z.tuple([
+      z.number().min(-180).max(180),
+      z.number().min(-90).max(90),
+      z.number().min(0),
+    ]).rest(z.unknown()),
+  ),
+}).refine(
+  f => f.strikes.every(s => s[2] < f.bucket_s),
+  'offset_s de cada strike debe caer en [0, bucket_s)',
+)
+
 // ── Parámetros de query de las server routes ───────────────────────────
 
 export const zSiteProductDay = z.object({

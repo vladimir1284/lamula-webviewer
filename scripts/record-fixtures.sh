@@ -64,5 +64,18 @@ query "SELECT site_id, valid_time, cycle_time, forecast_hour, model, r2_key, siz
        FROM wind_grids
        ORDER BY site_id, valid_time" > "$OUT/wind.json"
 
+# rayos GLM: ventana de los rasters + 30 min hacia atrás — cubre la ventana
+# de observación (600 s) y el padding ±900 s del índice sin arrastrar las
+# 72 h enteras (288 cubos/día/sitio). El caso "vecino cross-día" queda
+# condicional (derive.ts lo tolera): solo sale si la grabación cruza
+# medianoche. OJO: los JSON de strikes de los cubos grabados hay que
+# bajarlos a tests/fixtures/cogs/r2/<r2_key> para que e2e/lightning.spec.ts
+# corra offline (mismo flujo que los COGs golden y el viento).
+echo "→ lightning_buckets (ventana 30 min)"
+query "SELECT site_id, bucket_start, bucket_s, strike_count, r2_key, size_bytes, source, created_at
+       FROM lightning_buckets
+       WHERE bucket_start >= (strftime('%Y-%m-%dT%H:%M:%S', (SELECT MAX(vol_time) FROM rasters), '-30 minutes'))
+       ORDER BY site_id, bucket_start" > "$OUT/lightning.json"
+
 wc -c "$OUT"/*.json
 echo "✓ fixtures grabadas en $OUT/ — ahora: pnpm test (contract tests) y revisar el diff"

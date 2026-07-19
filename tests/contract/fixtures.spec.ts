@@ -4,6 +4,7 @@
 // esto rompe CI antes de que rompa el viewer.
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import lightning from '~/server/dal/fixtures/lightning.json'
 import phenomena from '~/server/dal/fixtures/phenomena.json'
 import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
@@ -12,6 +13,7 @@ import vwp from '~/server/dal/fixtures/vwp.json'
 import wind from '~/server/dal/fixtures/wind.json'
 import {
   zIsoNaive,
+  zLightningBucketRow,
   zPhenomenonRow,
   zProductRow,
   zRadarRow,
@@ -65,6 +67,13 @@ describe('fixtures grabadas vs schemas Zod del contrato', () => {
   it('wind: sintético hasta que el pipeline ingiera GFS (misma forma que la tabla propuesta)', () => {
     z.array(withCreatedAt(zWindGridRow)).parse(wind)
   })
+
+  it('lightning: sintético hasta que el pipeline ingiera GLM; cubo vacío ⇔ r2_key NULL', () => {
+    z.array(withCreatedAt(zLightningBucketRow)).parse(lightning)
+    for (const b of lightning) {
+      expect(b.r2_key === null, `${b.site_id} ${b.bucket_start}`).toBe(b.strike_count === 0)
+    }
+  })
 })
 
 describe('fixtures grabadas vs schema SQL real (inserción)', () => {
@@ -78,5 +87,6 @@ describe('fixtures grabadas vs schema SQL real (inserción)', () => {
     expect(count('phenomena')).toBe(phenomena.length)
     expect(count('vwp')).toBe(vwp.length)
     expect(count('wind_grids')).toBe(wind.length)
+    expect(count('lightning_buckets')).toBe(lightning.length)
   })
 })

@@ -74,6 +74,14 @@ const DEPENDED_COLUMNS: Record<string, ColumnSpec[]> = {
     { name: 'model', type: 'TEXT', notnull: true },
     { name: 'r2_key', type: 'TEXT', notnull: true },
   ],
+  lightning_buckets: [
+    { name: 'site_id', type: 'TEXT', notnull: true },
+    { name: 'bucket_start', type: 'TEXT', notnull: true },
+    { name: 'bucket_s', type: 'INTEGER', notnull: true },
+    { name: 'strike_count', type: 'INTEGER', notnull: true },
+    { name: 'r2_key', type: 'TEXT', notnull: false },
+    { name: 'source', type: 'TEXT', notnull: true },
+  ],
 }
 
 interface PragmaColumn {

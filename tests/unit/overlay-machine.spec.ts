@@ -1,6 +1,14 @@
 // overlayMachine pura: fetch inyectados como mocks — sin red. Regiones
-// paralelas index/frame/series/vwp/wind; diagrama en docs/maquinas-estado.md.
-import type { Phenomenon, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
+// paralelas index/frame/series/vwp/wind/lightning; diagrama en
+// docs/maquinas-estado.md.
+import type {
+  LightningBucketFile,
+  LightningBucketMeta,
+  Phenomenon,
+  VwpLevel,
+  WindGridFile,
+  WindGridMeta,
+} from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise, waitFor } from 'xstate'
 import { overlayMachine } from '../../machines/overlay'
@@ -10,6 +18,9 @@ const DAY = '2026-07-11'
 const PT = ['2026-07-11T02:50:38', '2026-07-11T02:55:54', '2026-07-11T03:01:02']
 const VT = ['2026-07-11T03:06:27', '2026-07-11T03:11:52']
 const WT = ['2026-07-11T02:00:00', '2026-07-11T03:00:00', '2026-07-11T04:00:00']
+// cubos de rayos de 300 s: el frame PT[2] (03:01:02) con prev PT[1]
+// (02:55:54) abre ventana (02:55:54, 03:01:02] → toca LT[0] y LT[1]
+const LT = ['2026-07-11T02:55:00', '2026-07-11T03:00:00', '2026-07-11T03:05:00']
 
 function phen(volTime: string, cellId: string): Phenomenon {
   return {
@@ -57,16 +68,41 @@ function windFile(validTime: string): WindGridFile {
   }
 }
 
+function lightningMeta(bucketStart: string, strikeCount = 10): LightningBucketMeta {
+  return {
+    site_id: SITE,
+    bucket_start: bucketStart,
+    bucket_s: 300,
+    strike_count: strikeCount,
+    r2_key: strikeCount > 0 ? `${SITE}/LIGHTNING/x_${bucketStart}.json` : null,
+    source: 'glm-goes19',
+    lightning_url: strikeCount > 0 ? `https://r2.test/${SITE}/LIGHTNING/x_${bucketStart}.json` : null,
+  }
+}
+
+function lightningFile(bucketStart: string): LightningBucketFile {
+  return {
+    site: SITE,
+    bucket_start: bucketStart,
+    bucket_s: 300,
+    // uno al inicio y otro al final del cubo — alguno cae en cada ventana
+    strikes: [[-80.5, 25.5, 30], [-80.6, 25.6, 290]],
+  }
+}
+
 function boot(opts: {
   phenTimes?: string[]
   vwpTimes?: string[]
   windTimes?: string[]
+  lightningBuckets?: LightningBucketMeta[]
   fetchTimes?: (i: { site: string, day: string }) => Promise<{ phen: string[], vwp: string[] }>
   fetchPhenomena?: (i: { site: string, volTime: string }) => Promise<Phenomenon[]>
   fetchSeries?: (i: { site: string, cellId: string }) => Promise<Phenomenon[]>
   fetchVwp?: (i: { site: string, volTimes: string[] }) => Promise<Record<string, VwpLevel[]>>
   fetchWindTimes?: (i: { site: string, day: string }) => Promise<WindGridMeta[]>
   fetchWindGrid?: (i: { meta: WindGridMeta }) => Promise<WindGridFile>
+  fetchLightningTimes?: (i: { site: string, day: string }) => Promise<LightningBucketMeta[]>
+  fetchLightningBuckets?: (i: { metas: LightningBucketMeta[] }) => Promise<Record<string, LightningBucketFile>>
 } = {}) {
   const fetchTimes = vi.fn(
     opts.fetchTimes
@@ -87,6 +123,15 @@ function boot(opts: {
   const fetchWindGrid = vi.fn(
     opts.fetchWindGrid ?? (async ({ meta }: { meta: WindGridMeta }) => windFile(meta.valid_time)),
   )
+  const fetchLightningTimes = vi.fn(
+    opts.fetchLightningTimes
+    ?? (async () => opts.lightningBuckets ?? LT.map(t => lightningMeta(t))),
+  )
+  const fetchLightningBuckets = vi.fn(
+    opts.fetchLightningBuckets
+    ?? (async ({ metas }: { metas: LightningBucketMeta[] }) =>
+      Object.fromEntries(metas.map(m => [m.r2_key!, lightningFile(m.bucket_start)]))),
+  )
   const actor = createActor(
     overlayMachine.provide({
       actors: {
@@ -96,12 +141,24 @@ function boot(opts: {
         fetchVwp: fromPromise(({ input: i }) => fetchVwp(i)),
         fetchWindTimes: fromPromise(({ input: i }) => fetchWindTimes(i)),
         fetchWindGrid: fromPromise(({ input: i }) => fetchWindGrid(i)),
+        fetchLightningTimes: fromPromise(({ input: i }) => fetchLightningTimes(i)),
+        fetchLightningBuckets: fromPromise(({ input: i }) => fetchLightningBuckets(i)),
       },
     }),
     { input: { site: SITE, day: DAY } },
   )
   actor.start()
-  return { actor, fetchTimes, fetchPhenomena, fetchSeries, fetchVwp, fetchWindTimes, fetchWindGrid }
+  return {
+    actor,
+    fetchTimes,
+    fetchPhenomena,
+    fetchSeries,
+    fetchVwp,
+    fetchWindTimes,
+    fetchWindGrid,
+    fetchLightningTimes,
+    fetchLightningBuckets,
+  }
 }
 
 const settled = (actor: ReturnType<typeof boot>['actor']) =>
@@ -111,7 +168,9 @@ const settled = (actor: ReturnType<typeof boot>['actor']) =>
     && !s.matches({ series: 'loading' })
     && !s.matches({ vwp: 'loading' })
     && !s.matches({ wind: 'loadingIndex' })
-    && !s.matches({ wind: 'fetching' }))
+    && !s.matches({ wind: 'fetching' })
+    && !s.matches({ lightning: 'loadingIndex' })
+    && !s.matches({ lightning: 'fetching' }))
 
 describe('overlayMachine — gating y arranque', () => {
   it('arranca todo idle y sin fetch (hidratación segura)', () => {
@@ -366,6 +425,133 @@ describe('overlayMachine — viento (región wind)', () => {
     expect(fetchWindTimes).toHaveBeenCalledOnce()
     expect(fetchPhenomena).toHaveBeenCalledOnce()
     expect(fetchWindGrid).toHaveBeenCalledOnce()
+  })
+})
+
+describe('overlayMachine — rayos (región lightning)', () => {
+  it('activar lightning carga SU índice y los cubos de la ventana; cero fetch de fenómenos', async () => {
+    const { actor, fetchLightningTimes, fetchLightningBuckets, fetchTimes, fetchPhenomena } = boot()
+    // ventana (02:55:54, 03:01:02] → cubos 02:55 y 03:00
+    actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'shown' })).toBe(true)
+    expect(fetchLightningTimes).toHaveBeenCalledWith({ site: SITE, day: DAY })
+    expect(fetchLightningBuckets).toHaveBeenCalledOnce()
+    const metas = fetchLightningBuckets.mock.calls[0]![0].metas
+    expect(metas.map(m => m.bucket_start)).toEqual([LT[0], LT[1]])
+    // del cubo 02:55: offset 30 (02:55:30) queda FUERA (≤ prev 02:55:54),
+    // offset 290 (02:59:50) dentro; del 03:00: offset 30 dentro, 290 fuera
+    expect(s.context.lightningStrikes!.map(x => x.progress)).toEqual(
+      [...s.context.lightningStrikes!.map(x => x.progress)].sort((a, b) => a - b),
+    )
+    expect(s.context.lightningStrikes).toHaveLength(2)
+    // 'lightning' no es capa de fenómenos
+    expect(fetchTimes).not.toHaveBeenCalled()
+    expect(fetchPhenomena).not.toHaveBeenCalled()
+    expect(s.matches({ frame: 'idle' })).toBe(true)
+  })
+
+  it('sin prevVolTime la ventana cae al fallback de 600 s', async () => {
+    const { actor } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[2]! }) // (02:51:02, 03:01:02]
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'shown' })).toBe(true)
+    expect(s.context.lightningWindow!.endMs - s.context.lightningWindow!.startMs).toBe(600_000)
+    // el cubo 02:55 entra entero: offset 30 (02:55:30) ahora sí es > 02:51:02
+    expect(s.context.lightningStrikes).toHaveLength(3)
+  })
+
+  it('ventana sin cubos con strikes → noData con capa limpia, sin fetch de ficheros', async () => {
+    const { actor, fetchLightningBuckets } = boot()
+    actor.send({ type: 'SET_TIME', volTime: '2026-07-11T08:00:00' })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'noData' })).toBe(true)
+    expect(s.context.lightningStrikes).toBeNull()
+    expect(fetchLightningBuckets).not.toHaveBeenCalled()
+  })
+
+  it('cubos vacíos (strike_count 0) no se fetchean jamás', async () => {
+    const { actor, fetchLightningBuckets } = boot({
+      lightningBuckets: [lightningMeta(LT[0]!, 0), lightningMeta(LT[1]!, 0)],
+    })
+    actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true)
+    expect(fetchLightningBuckets).not.toHaveBeenCalled()
+  })
+
+  it('cache por r2_key: otro frame sobre los mismos cubos → un solo fetch', async () => {
+    const { actor, fetchLightningBuckets } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    // frame 03:04:00 con prev 03:01:02 → ventana dentro del cubo 03:00 (ya en cache)
+    actor.send({ type: 'SET_TIME', volTime: '2026-07-11T03:04:00', prevVolTime: PT[2]! })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'shown' })).toBe(true)
+    expect(fetchLightningBuckets).toHaveBeenCalledOnce()
+  })
+
+  it('toggle off limpia strikes; on de nuevo reusa índice y cache (cero red)', async () => {
+    const { actor, fetchLightningTimes, fetchLightningBuckets } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
+    let s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'idle' })).toBe(true)
+    expect(s.context.lightningStrikes).toBeNull()
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    s = actor.getSnapshot()
+    expect(s.matches({ lightning: 'shown' })).toBe(true)
+    expect(fetchLightningTimes).toHaveBeenCalledOnce()
+    expect(fetchLightningBuckets).toHaveBeenCalledOnce()
+  })
+
+  it('índice vacío → noData visible', async () => {
+    const { actor, fetchLightningBuckets } = boot({ lightningBuckets: [] })
+    actor.send({ type: 'SET_TIME', volTime: PT[2]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true)
+    expect(fetchLightningBuckets).not.toHaveBeenCalled()
+  })
+
+  it('SET_SCOPE limpia índice/cache y recarga solo si lightning sigue activo', async () => {
+    const { actor, fetchLightningTimes } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    await settled(actor)
+    actor.send({ type: 'SET_SCOPE', site: 'BYX', day: DAY })
+    await settled(actor)
+    expect(fetchLightningTimes).toHaveBeenCalledTimes(2)
+    expect(fetchLightningTimes).toHaveBeenLastCalledWith({ site: 'BYX', day: DAY })
+    // sin frame nuevo aún (la página reemite SET_TIME): join sin volTime → noData
+    expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true)
+    expect(actor.getSnapshot().context.lightningCache).toEqual({})
+  })
+
+  it('lightning + wind + cells conviven: cada región fetchea lo suyo', async () => {
+    const { actor, fetchTimes, fetchWindTimes, fetchLightningTimes } = boot()
+    actor.send({ type: 'SET_TIME', volTime: PT[1]!, prevVolTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind', 'lightning'], panel: null })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.matches({ frame: 'shown' })).toBe(true)
+    expect(s.matches({ wind: 'shown' })).toBe(true)
+    expect(s.matches({ lightning: 'shown' })).toBe(true)
+    expect(fetchTimes).toHaveBeenCalledOnce()
+    expect(fetchWindTimes).toHaveBeenCalledOnce()
+    expect(fetchLightningTimes).toHaveBeenCalledOnce()
   })
 })
 

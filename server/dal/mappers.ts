@@ -1,6 +1,8 @@
 // Post-procesado común a ambos adaptadores: mismas filas → mismos DTOs.
 import type {
   Health,
+  LightningBucketMeta,
+  LightningBucketRow,
   Phenomenon,
   PhenomenonRow,
   RadarHealth,
@@ -21,6 +23,15 @@ export function toRasterMeta(row: Omit<RasterRow, 'size_bytes'>, r2BaseUrl: stri
 export function toWindMeta(row: Omit<WindGridRow, 'size_bytes'>, r2BaseUrl: string | null): WindGridMeta {
   const base = r2BaseUrl?.replace(/\/+$/, '')
   return { ...row, wind_url: base ? `${base}/${row.r2_key}` : null }
+}
+
+/** URL pública del JSON de strikes; cubo sin descargas (r2_key null) → null. */
+export function toLightningMeta(
+  row: Omit<LightningBucketRow, 'size_bytes'>,
+  r2BaseUrl: string | null,
+): LightningBucketMeta {
+  const base = r2BaseUrl?.replace(/\/+$/, '')
+  return { ...row, lightning_url: base && row.r2_key ? `${base}/${row.r2_key}` : null }
 }
 
 /** attrs TEXT → objeto; una fila corrupta no tumba la respuesta completa. */

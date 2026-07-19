@@ -35,8 +35,10 @@ import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
+import { LightningLayer } from '../utils/map/lightning-layer'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 import { WindParticleLayer } from '../utils/map/wind-layer'
+import type { NormalizedStrike } from '../utils/overlay/lightning-join'
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -69,6 +71,9 @@ const props = withDefaults(defineProps<{
   animPlaying?: boolean
   /** campo u/v GFS del frame casado (capa 'wind'); null = capa limpia */
   windGrid?: WindGridFile | null
+  /** strikes normalizados de la ventana del frame (capa 'lightning');
+   * null = capa limpia. Lista nueva ⇒ el bucle reinicia en fase 0 */
+  lightningStrikes?: NormalizedStrike[] | null
 }>(), {
   baseMap: 'osm',
   showCoverage: true,
@@ -85,6 +90,7 @@ const props = withDefaults(defineProps<{
   satOpacity: 0.6,
   animPlaying: false,
   windGrid: null,
+  lightningStrikes: null,
 })
 
 const emit = defineEmits<{
@@ -107,6 +113,7 @@ let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raste
 let pool: FramePool | undefined // modo animación
 let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
 let windLayer: WindParticleLayer | undefined
+let lightningLayer: LightningLayer | undefined
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
@@ -150,6 +157,16 @@ function updateWind() {
   if (!windLayer) return
   windLayer.setPaused(props.animPlaying)
   windLayer.setGrid(props.windGrid)
+}
+
+// ── Capa de rayos (bucle animado) ────────────────────────────────────────
+// Mismo contrato que viento/satélite: oculta mientras la animación
+// reproduce (el micro-bucle de 5 s no compite con frames avanzando); al
+// pausar vuelve con los strikes del frame en reposo, bucle desde cero.
+function updateLightning() {
+  if (!lightningLayer) return
+  lightningLayer.setPaused(props.animPlaying)
+  lightningLayer.setStrikes(props.lightningStrikes)
 }
 
 // ── Mapa base + labels (catálogo shared/basemaps.ts) ─────────────────────
@@ -336,6 +353,9 @@ onMounted(() => {
       (windLayer = new WindParticleLayer({ zIndex: 15, seed: 1 })),
       // nombres del mapa base por encima de todo excepto fenómenos (20)
       labelsLayer,
+      // destellos sobre los labels (19) — transitorios, no tapan nombres;
+      // las celdas de tormenta (20) siempre ganan
+      (lightningLayer = new LightningLayer({ zIndex: 19 })),
       (phenomenaLayer = new VectorLayer({
         source: phenomenaSource,
         zIndex: 20,
@@ -387,6 +407,7 @@ onMounted(() => {
   updateCoverage()
   updatePhenomena()
   updateWind()
+  updateLightning()
   if (animationMode()) initOrUpdatePool()
   else updateRasterLayer()
 })
@@ -463,6 +484,7 @@ watch(
   },
 )
 watch(() => [props.windGrid, props.animPlaying], updateWind)
+watch(() => [props.lightningStrikes, props.animPlaying], updateLightning)
 watch(() => props.satOpacity, o => satelliteLayer?.setOpacity(o))
 watch(() => props.satVariant, (v) => {
   if (satelliteLayer) setSatelliteVariant(satelliteLayer, v)
@@ -473,6 +495,8 @@ onBeforeUnmount(() => {
   teardownPool()
   windLayer?.dispose()
   windLayer = undefined
+  lightningLayer?.dispose()
+  lightningLayer = undefined
   satelliteLayer?.dispose()
   satelliteLayer = undefined
   map?.setTarget(undefined)

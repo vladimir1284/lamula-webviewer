@@ -2,6 +2,7 @@
 // los datos vienen del binding D1 real o de fixtures grabadas.
 import type {
   Health,
+  LightningBucketMeta,
   Phenomenon,
   Product,
   Radar,
@@ -39,6 +40,9 @@ export interface Dal {
   /** Grillas de viento GFS de un site en un día UTC ±2 h (WIND_DAY_PAD_S),
    * ascendente por valid_time — índice para el join temporal cliente (D24). */
   listWindTimes(site: string, day: string): Promise<WindGridMeta[]>
+  /** Cubos de rayos de un site en un día UTC ±900 s (LIGHTNING_DAY_PAD_S),
+   * ascendente por bucket_start — índice para el join por ventana cliente. */
+  listLightningBuckets(site: string, day: string): Promise<LightningBucketMeta[]>
   /** Frescura por radar desde radars.last_seen_at. */
   health(now: Date): Promise<Health>
 }

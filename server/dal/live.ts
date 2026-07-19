@@ -1,6 +1,8 @@
 // Adaptador live: binding D1 (solo SELECT — decisión 17) + URLs R2.
 import type {
   Health,
+  LightningBucketMeta,
+  LightningBucketRow,
   Phenomenon,
   PhenomenonRow,
   Product,
@@ -11,8 +13,8 @@ import type {
   WindGridMeta,
   WindGridRow,
 } from '../../shared/contract'
-import { dayRange, dayRangePadded, WIND_DAY_PAD_S } from '../../shared/contract'
-import { buildHealth, pickClosest, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
+import { dayRange, dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract'
+import { buildHealth, pickClosest, toLightningMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { D1Like, Dal, RasterLookupMode } from './types'
 
 type RasterCols = Omit<RasterRow, 'size_bytes'>
@@ -164,6 +166,19 @@ export class LiveDal implements Dal {
       .bind(site, from, to)
       .all<Omit<WindGridRow, 'size_bytes'>>()
     return results.map(row => toWindMeta(row, this.r2BaseUrl))
+  }
+
+  async listLightningBuckets(site: string, day: string): Promise<LightningBucketMeta[]> {
+    const { from, to } = dayRangePadded(day, LIGHTNING_DAY_PAD_S)
+    const { results } = await this.db
+      .prepare(
+        'SELECT site_id, bucket_start, bucket_s, strike_count, r2_key, source '
+        + 'FROM lightning_buckets '
+        + 'WHERE site_id = ? AND bucket_start >= ? AND bucket_start < ? ORDER BY bucket_start',
+      )
+      .bind(site, from, to)
+      .all<Omit<LightningBucketRow, 'size_bytes'>>()
+    return results.map(row => toLightningMeta(row, this.r2BaseUrl))
   }
 
   async health(now: Date): Promise<Health> {
