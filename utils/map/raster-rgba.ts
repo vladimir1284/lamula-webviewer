@@ -1,16 +1,15 @@
 // Suavizado opcional de la capa raster (prueba, D?? pendiente en
 // docs/decisiones.md si se confirma). Decodifica el COG por separado
-// (geotiff.js no comparte decode con ol/source/GeoTIFF, ver spike) y
-// construye una textura RGBA para que el filtrado bilineal de GPU (y,
-// opcionalmente, un blur gaussiano previo) mezcle color — no índices de
-// nivel crudos — evitando fringing de color falso en bordes nodata/
-// range-folded.
+// (geotiff.js no comparte decode con ol/source/GeoTIFF, ver spike),
+// aplica blur gaussiano en espacio de color recto (evaluado contra
+// bilineal solo — descartado, bordes seguían grano; gaussiano da forma
+// orgánica real) y entrega la textura ya premultiplicada + bilineal de
+// GPU para el resample de reproyección — no índices de nivel crudos,
+// evitando fringing de color falso en bordes nodata/range-folded.
 import { fromBlob } from 'geotiff'
 import DataTile from 'ol/source/DataTile'
 import TileGrid from 'ol/tilegrid/TileGrid'
 import type { LevelColorTable } from '#shared/products'
-
-export type SmoothMode = 'bilinear' | 'gaussian'
 
 export interface DecodedLevels {
   data: Uint8Array
@@ -77,22 +76,19 @@ export function gaussianBlurRgba(straight: Uint8ClampedArray, width: number, hei
 }
 
 /**
- * Fuente RGBA + filtrado bilineal de GPU. Un solo tile cubre el raster
- * entero (mismo esquema que ol/source/GeoTIFF con estos COGs sin
- * pirámide, ver spike). 'gaussian' aplica blur previo en espacio de
- * color recto; en ambos casos la textura final que llega a la GPU va
- * premultiplicada. Usar con smoothedRasterStyle().
+ * Fuente RGBA suavizada (blur gaussiano en color recto + bilineal de GPU
+ * al resamplear). Un solo tile cubre el raster entero (mismo esquema que
+ * ol/source/GeoTIFF con estos COGs sin pirámide, ver spike). Usar con
+ * smoothedRasterStyle().
  */
 export async function createSmoothedRasterSource(
   blob: Blob,
   table: LevelColorTable,
   projCode: string,
-  mode: SmoothMode,
-  gaussianRadiusPx = 4,
+  radiusPx = 4,
 ): Promise<DataTile> {
   const { data, width, height, extent } = await decodeLevels(blob)
-  let straight = buildStraightRgba(data, table)
-  if (mode === 'gaussian') straight = gaussianBlurRgba(straight, width, height, gaussianRadiusPx)
+  const straight = gaussianBlurRgba(buildStraightRgba(data, table), width, height, radiusPx)
   const rgba = premultiply(straight)
 
   const [minX, , maxX, maxY] = extent

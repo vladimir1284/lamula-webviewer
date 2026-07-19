@@ -2,8 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
-import type { Phenomenon, RasterMeta, VwpLevel, WindGridFile, WindGridMeta } from '#shared/contract'
-import { zWindGridFile } from '#shared/contract'
+import type { Phenomenon, RasterMeta, VwpLevel } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
@@ -40,9 +39,9 @@ definePageMeta({
 })
 
 const route = useRoute()
-// prueba manual de suavizado de raster — estado local, a propósito fuera
-// de la URL/XState: conmutar no debe navegar ni remontar el mapa (zoom intacto)
-const smoothTest = ref<'off' | 'bilinear' | 'gaussian'>('off')
+// prueba manual de suavizado gaussiano de raster — estado local, a propósito
+// fuera de la URL/XState: conmutar no debe navegar ni remontar el mapa (zoom intacto)
+const smoothTest = ref(false)
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 
@@ -432,19 +431,6 @@ const { snapshot: overlaySnapshot, send: overlaySend } = useActor(
         )
         return Object.fromEntries(entries)
       }),
-      fetchWindTimes: fromPromise(async ({ input }) =>
-        $fetch<WindGridMeta[]>('/api/wind/times', {
-          query: { site: input.site, day: input.day },
-        }),
-      ),
-      // JSON u/v directo de R2 (como los COGs) — validado antes de animar
-      fetchWindGrid: fromPromise(async ({ input }): Promise<WindGridFile> => {
-        const { meta } = input
-        if (!meta.wind_url) throw new Error('origen R2 sin configurar (wind_url null)')
-        const res = await fetch(meta.wind_url)
-        if (!res.ok) throw new Error(`viento ${meta.r2_key}: HTTP ${res.status}`)
-        return zWindGridFile.parse(await res.json())
-      }),
     },
   }),
   { input: { site: initialRoute.site, day: dayInitial } },
@@ -512,27 +498,6 @@ const overlayJoinInfo = computed(() => {
     return `Error consultando fenómenos: ${overlayCtx.value.frameError}`
   }
   return null
-})
-
-// ── Capa de viento (GFS 10 m) ────────────────────────────────────────────
-// El grid ya casado lo publica la máquina; null = capa limpia (off/noData).
-const windGridShown = computed(() =>
-  ctx.value.layers.includes('wind') ? overlayCtx.value.windGrid : null,
-)
-const windInfo = computed(() => {
-  if (!ctx.value.layers.includes('wind')) return null
-  const s = overlaySnapshot.value
-  if (s.matches({ wind: 'error' })) {
-    return `Error cargando viento: ${overlayCtx.value.windError}`
-  }
-  if (s.matches({ wind: 'noData' })) return 'Sin dato de viento para este frame.'
-  const meta = overlayCtx.value.windTimes?.find(
-    w => w.valid_time === overlayCtx.value.windJoined,
-  )
-  if (!meta) return null
-  const cycleH = meta.cycle_time.slice(11, 13)
-  const validHm = meta.valid_time.slice(11, 16)
-  return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z`
 })
 
 function onToggleLayer(layer: OverlayLayerId) {
@@ -828,32 +793,6 @@ function onSatOpacityInput(event: Event) {
           </p>
         </fieldset>
 
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">Viento</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-wind"
-              :checked="ctx.layers.includes('wind')"
-              @change="onToggleLayer('wind')"
-            >
-            <span>Viento en superficie (10 m)</span>
-          </label>
-          <p
-            v-if="windInfo"
-            data-testid="wind-info"
-            class="mt-2 text-xs text-slate-400"
-          >
-            {{ windInfo }}
-          </p>
-          <p
-            v-if="ctx.layers.includes('wind')"
-            class="mt-1 text-xs text-slate-400"
-          >
-            No se muestra durante la animación.
-          </p>
-        </fieldset>
-
         <DayPicker
           v-if="availableDays.length > 0"
           :days="availableDays"
@@ -884,7 +823,6 @@ function onSatOpacityInput(event: Event) {
             :sat-enabled="ctx.sat"
             :sat-variant="ctx.satVariant"
             :sat-opacity="ctx.satOpacity"
-            :wind-grid="windGridShown"
             :smooth="smoothTest"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
@@ -895,11 +833,11 @@ function onSatOpacityInput(event: Event) {
           />
         </ClientOnly>
 
-        <!-- prueba manual: conmutar suavizado sin navegar (zoom/vista intactos) -->
-        <div class="pointer-events-auto absolute right-3 top-3 z-10 flex gap-2 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
-          <label v-for="opt in (['off', 'bilinear', 'gaussian'] as const)" :key="opt" class="flex items-center gap-1">
-            <input v-model="smoothTest" type="radio" :value="opt" name="smooth-test">
-            {{ opt }}
+        <!-- prueba manual: conmutar suavizado gaussiano sin navegar (zoom/vista intactos) -->
+        <div class="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-2 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
+          <label class="flex items-center gap-1">
+            <input v-model="smoothTest" type="checkbox">
+            suavizado gaussiano
           </label>
         </div>
 
