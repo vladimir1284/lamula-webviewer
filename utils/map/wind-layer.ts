@@ -51,6 +51,12 @@ export class WindParticleLayer extends Layer {
   constructor(opts: WindLayerOptions) {
     super({ zIndex: opts.zIndex })
     this.seed = opts.seed
+    // Los contenedores de capa de OL son absolute SIN top/left (usan su
+    // posición estática): un canvas en flujo aquí empuja esa posición y las
+    // capas que siguen (fenómenos) se pintan fuera del viewport.
+    this.canvas.style.position = 'absolute'
+    this.canvas.style.left = '0'
+    this.canvas.style.top = '0'
     this.canvas.style.pointerEvents = 'none'
     this.canvas.classList.add('wind-particle-canvas') // hook de e2e
     document.addEventListener('visibilitychange', this.onVisibility)

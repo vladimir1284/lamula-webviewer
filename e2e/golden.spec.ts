@@ -76,6 +76,21 @@ test.describe('goldens visuales', () => {
     // fenómenos del cliente — esperar a que la capa vectorial tenga algo
     await page.waitForTimeout(1500)
 
+    // guard anti-baseline-vacío: los markers deben estar PINTADOS en el
+    // canvas de la capa vectorial (la última 2D de .ol-layers) antes del
+    // screenshot — un `--update-snapshots` sobre un overlay roto pasaba en
+    // silencio (el baseline vacío de 78f8f20 se horneó así)
+    await expect.poll(async () => page.evaluate(() => {
+      const canvases = [...document.querySelectorAll<HTMLCanvasElement>('.ol-layers canvas')]
+      const last = canvases[canvases.length - 1]
+      const ctx = last?.getContext('2d')
+      if (!ctx) return -1
+      const data = ctx.getImageData(0, 0, last!.width, last!.height).data
+      let n = 0
+      for (let i = 3; i < data.length; i += 4) if (data[i]! > 0) n++
+      return n
+    }), { timeout: 10_000 }).toBeGreaterThan(1000)
+
     await expect(map).toHaveScreenshot(`${row!.site_id}-overlay.png`, {
       maxDiffPixelRatio: 0.01,
     })
