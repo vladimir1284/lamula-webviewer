@@ -75,6 +75,15 @@ export function gaussianBlurRgba(straight: Uint8ClampedArray, width: number, hei
   return bctx.getImageData(0, 0, width, height).data
 }
 
+/** RGBA recto → data URL PNG, para ol/source/ImageStatic (variante Laplacian, ver createLaplacianImageUrl). */
+export function rgbaToDataUrl(straight: Uint8ClampedArray, width: number, height: number): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  canvas.getContext('2d')!.putImageData(new ImageData(straight as Uint8ClampedArray<ArrayBuffer>, width, height), 0, 0)
+  return canvas.toDataURL()
+}
+
 export interface SmoothedRasterSource {
   source: DataTile
   /** niveles crudos sin suavizar + geometría — para muestreo de cursor (nunca leer del RGBA difuminado). */
