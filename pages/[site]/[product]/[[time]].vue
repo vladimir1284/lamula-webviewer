@@ -42,7 +42,7 @@ const route = useRoute()
 // prueba manual de suavizado de raster (gaussiano vs ol-ext SVGFilter+Laplacian)
 // — estado local, a propósito fuera de la URL/XState: conmutar no debe
 // navegar ni remontar el mapa (zoom intacto)
-const smoothMode = ref<'off' | 'gaussian' | 'laplacian'>('off')
+const smoothMode = ref<'off' | 'interp' | 'gaussian' | 'laplacian'>('off')
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 
@@ -839,9 +839,9 @@ function onSatOpacityInput(event: Event) {
              (perf sin medir para blur/filtro por frame), deshabilitado explícito
              en vez de ignorarlo en silencio. -->
         <div class="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-3 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
-          <label v-for="mode in (['off', 'gaussian', 'laplacian'] as const)" :key="mode" class="flex items-center gap-1" :class="{ 'opacity-50': animationEngaged }">
+          <label v-for="mode in (['off', 'interp', 'gaussian', 'laplacian'] as const)" :key="mode" class="flex items-center gap-1" :class="{ 'opacity-50': animationEngaged }">
             <input v-model="smoothMode" type="radio" :value="mode" :disabled="animationEngaged">
-            {{ mode === 'off' ? 'sin suavizado' : mode === 'gaussian' ? 'gaussiano' : 'laplaciano (ol-ext)' }}
+            {{ { off: 'sin suavizado', interp: 'interpolado (GPU nativo)', gaussian: 'gaussiano', laplacian: 'laplaciano (ol-ext)' }[mode] }}
           </label>
           <span v-if="animationEngaged" class="text-slate-400">(no en animación)</span>
         </div>

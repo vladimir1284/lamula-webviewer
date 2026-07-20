@@ -43,10 +43,10 @@ import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
 import { buildStraightRgba, createSmoothedRasterSource, decodeLevels, rgbaToDataUrl, sampleRawLevel, type DecodedLevels } from '../utils/map/raster-rgba'
-import { rasterStyle, smoothedRasterStyle } from '../utils/map/raster-style'
+import { interpolatedPaletteStyle, rasterStyle, smoothedRasterStyle } from '../utils/map/raster-style'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 
-export type SmoothMode = 'off' | 'gaussian' | 'laplacian'
+export type SmoothMode = 'off' | 'interp' | 'gaussian' | 'laplacian'
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -269,7 +269,7 @@ function updateRasterLayer() {
       }
 
       let source: GeoTIFF | Awaited<ReturnType<typeof createSmoothedRasterSource>>['source']
-      let style: ReturnType<typeof rasterStyle> | ReturnType<typeof smoothedRasterStyle>
+      let style: ReturnType<typeof rasterStyle> | ReturnType<typeof smoothedRasterStyle> | ReturnType<typeof interpolatedPaletteStyle>
 
       if (props.smoothMode === 'gaussian') {
         const table = buildLevelColorTable(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
@@ -286,7 +286,10 @@ function updateRasterLayer() {
         source = new GeoTIFF({
           sources: [{ blob }],
           normalize: false,
-          interpolate: false,
+          // 'interp': bilineal nativo de OL sobre el nivel crudo — junto con
+          // interpolatedPaletteStyle() (lerp de color en vez de palette/NEAREST)
+          // da contornos suaves sin pipeline de canvas, ver raster-style.ts
+          interpolate: props.smoothMode === 'interp',
           projection: projCode,
           // sin fade de tiles: render determinista (goldens) y frames nítidos
           transition: 0,
@@ -296,7 +299,9 @@ function updateRasterLayer() {
             emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
           }
         })
-        style = rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
+        style = props.smoothMode === 'interp'
+          ? interpolatedPaletteStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
+          : rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
       }
 
       if (requestId !== rasterRequestId || !map) return // superado mientras decodificaba (modo smooth)
@@ -404,7 +409,7 @@ onMounted(() => {
     // nivel físico — el readout SIEMPRE tiene que venir de los niveles
     // crudos guardados aparte, nunca de activeLayer.getData() aquí
     let level = Number.NaN
-    if (!animationMode() && props.smoothMode !== 'off' && smoothedRawLevels && smoothedProjCode) {
+    if (!animationMode() && (props.smoothMode === 'gaussian' || props.smoothMode === 'laplacian') && smoothedRawLevels && smoothedProjCode) {
       const [x, y] = transform(evt.coordinate, map!.getView().getProjection(), smoothedProjCode)
       const raw = sampleRawLevel(smoothedRawLevels, x!, y!)
       if (raw !== null) level = raw
