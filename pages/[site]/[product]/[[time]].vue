@@ -39,10 +39,6 @@ definePageMeta({
 })
 
 const route = useRoute()
-// prueba manual de suavizado de raster (gaussiano vs ol-ext SVGFilter+Laplacian)
-// — estado local, a propósito fuera de la URL/XState: conmutar no debe
-// navegar ni remontar el mapa (zoom intacto)
-const smoothMode = ref<'off' | 'interp' | 'gaussian' | 'laplacian'>('off')
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 
@@ -197,6 +193,7 @@ onMounted(() => {
       units: prefs?.units ?? PREF_DEFAULTS.units,
       clock: prefs?.clock ?? PREF_DEFAULTS.clock,
       animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
+      smooth: prefs?.smooth ?? PREF_DEFAULTS.smooth,
     },
   })
 })
@@ -542,6 +539,9 @@ function onSelectProduct(event: Event) {
 function onOpacityInput(event: Event) {
   send({ type: 'SET_OPACITY', value: Number((event.target as HTMLInputElement).value) })
 }
+function onToggleSmooth(event: Event) {
+  send({ type: 'SET_PREF', patch: { smooth: (event.target as HTMLInputElement).checked } })
+}
 function onToggleSatellite() {
   send({ type: 'TOGGLE_SATELLITE' })
 }
@@ -651,6 +651,20 @@ function onSatOpacityInput(event: Event) {
               @input="onOpacityInput"
             >
           </label>
+
+          <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-50': animationEngaged }">
+            <input
+              type="checkbox"
+              data-testid="smooth-toggle"
+              :checked="ctx.smooth"
+              :disabled="animationEngaged"
+              @change="onToggleSmooth"
+            >
+            <span>Suavizar celdas del raster</span>
+          </label>
+          <p v-if="animationEngaged" class="text-xs text-slate-400">
+            No disponible durante la animación.
+          </p>
 
           <p class="text-sm text-slate-400">
             Valor bajo cursor:
@@ -824,7 +838,7 @@ function onSatOpacityInput(event: Event) {
             :sat-enabled="ctx.sat"
             :sat-variant="ctx.satVariant"
             :sat-opacity="ctx.satOpacity"
-            :smooth-mode="smoothMode"
+            :smooth="ctx.smooth"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"
@@ -833,18 +847,6 @@ function onSatOpacityInput(event: Event) {
             @move-end="animSend({ type: 'MOVE_END' })"
           />
         </ClientOnly>
-
-        <!-- prueba manual: conmutar suavizado sin navegar (zoom/vista intactos).
-             Solo modo estático — el pool de animación no lo implementa todavía
-             (perf sin medir para blur/filtro por frame), deshabilitado explícito
-             en vez de ignorarlo en silencio. -->
-        <div class="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-3 rounded bg-slate-800/80 p-2 text-xs text-slate-200 shadow">
-          <label v-for="mode in (['off', 'interp', 'gaussian', 'laplacian'] as const)" :key="mode" class="flex items-center gap-1" :class="{ 'opacity-50': animationEngaged }">
-            <input v-model="smoothMode" type="radio" :value="mode" :disabled="animationEngaged">
-            {{ { off: 'sin suavizado', interp: 'interpolado (GPU nativo)', gaussian: 'gaussiano', laplacian: 'laplaciano (ol-ext)' }[mode] }}
-          </label>
-          <span v-if="animationEngaged" class="text-slate-400">(no en animación)</span>
-        </div>
 
         <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
              directamente sobre el mapa — decisión explícita de la maqueta -->

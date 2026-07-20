@@ -13,28 +13,18 @@ import Map from 'ol/Map'
 import View from 'ol/View'
 import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
-import ImageLayer from 'ol/layer/Image'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
-import { fromLonLat, transform } from 'ol/proj'
+import { fromLonLat } from 'ol/proj'
 import GeoTIFF from 'ol/source/GeoTIFF'
-import ImageStatic from 'ol/source/ImageStatic'
 import OSM from 'ol/source/OSM'
 import VectorSource from 'ol/source/Vector'
 import Fill from 'ol/style/Fill'
 import Style from 'ol/style/Style'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
-// variante Laplacian (poc): sin tipos publicados, y `addFilter` lo agrega
-// Base.js a los prototipos de ol/layer/* como side-effect de este import
-// (ver util/SVGFilter.js — dibuja sobre e.context 2D, por eso esta variante
-// usa ImageLayer/canvas y NO WebGLTileLayer, que expone un WebGLRenderingContext
-// sin .save()/.drawImage() — addFilter ahí no lanza pero no pinta nada).
-import SVGFilter from 'ol-ext/filter/SVGFilter.js'
-import Laplacian from 'ol-ext/util/SVGFilter/Laplacian.js'
 import type { Phenomenon, Radar, RasterMeta } from '#shared/contract'
-import { buildLevelColorTable } from '#shared/products'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
@@ -42,11 +32,8 @@ import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
-import { buildStraightRgba, createSmoothedRasterSource, decodeLevels, rgbaToDataUrl, sampleRawLevel, type DecodedLevels } from '../utils/map/raster-rgba'
-import { interpolatedPaletteStyle, rasterStyle, smoothedRasterStyle } from '../utils/map/raster-style'
+import { interpolatedPaletteStyle, rasterStyle } from '../utils/map/raster-style'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
-
-export type SmoothMode = 'off' | 'interp' | 'gaussian' | 'laplacian'
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -76,13 +63,13 @@ const props = withDefaults(defineProps<{
   satOpacity?: number
   /** animación reproduciendo (no solo "hay frames" — pausada cuenta como no-reproduciendo) */
   animPlaying?: boolean
-  /** prueba: suavizado cliente de la capa raster estática — 'gaussian' (RGBA + blur + bilineal GPU)
-   * o 'laplacian' (ol-ext SVGFilter+Laplacian sobre ImageLayer/canvas, ver import arriba) */
-  smoothMode?: SmoothMode
+  /** suavizado cliente de la capa raster estática: bilineal nativo GPU sobre el nivel
+   * crudo + lerp de color (decisión 29) — modo estático únicamente */
+  smooth?: boolean
 }>(), {
   showBase: true,
   showCoverage: true,
-  smoothMode: 'off',
+  smooth: false,
   frames: null,
   activeFrame: 0,
   phenomena: null,
@@ -111,18 +98,10 @@ const container = ref<HTMLDivElement>()
 let map: Map | undefined
 let baseLayer: TileLayer<OSM> | undefined
 let coverageLayer: VectorLayer<VectorSource> | undefined
-let rasterLayer: WebGLTileLayer | ImageLayer<ImageStatic> | undefined // modo estático
+let rasterLayer: WebGLTileLayer | undefined // modo estático
 let rasterRequestId = 0 // descarta resoluciones de fetch superadas por un raster más nuevo
 let pool: FramePool | undefined // modo animación
 let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
-// modo suavizado (estático únicamente, ver props.smoothMode): niveles crudos +
-// geometría del raster mostrado — SIEMPRE usar esto para el readout de
-// cursor, nunca leer del RGBA difuminado (ver utils/map/raster-rgba.ts)
-let smoothedRawLevels: DecodedLevels | undefined
-let smoothedProjCode: string | undefined
-// radio de blur constante en TERRENO (no en píxeles de pantalla): mismo
-// desenfoque real sin importar la resolución nativa del producto/COG
-const GAUSSIAN_BLUR_RADIUS_M = 1000
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
@@ -222,8 +201,6 @@ function updateRasterLayer() {
   }
   emit('cursor', null)
   rasterLoaded.value = 'none'
-  smoothedRawLevels = undefined
-  smoothedProjCode = undefined
 
   const { raster, productDef, radar } = props
   if (!map || !raster?.cog_url || !productDef) return
@@ -237,74 +214,28 @@ function updateRasterLayer() {
     .then(async (blob) => {
       if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
 
-      if (props.smoothMode === 'laplacian') {
-        const table = buildLevelColorTable(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-        const decoded = await decodeLevels(blob)
-        const url = rgbaToDataUrl(buildStraightRgba(decoded.data, table), decoded.width, decoded.height)
-        if (requestId !== rasterRequestId || !map) return // superado mientras decodificaba
-
-        if (requestId === rasterRequestId) {
-          smoothedRawLevels = decoded
-          smoothedProjCode = projCode
+      // 'smooth': bilineal nativo de OL sobre el nivel crudo (fuente) + lerp de
+      // color en vez de palette/NEAREST (estilo, ver interpolatedPaletteStyle
+      // en raster-style.ts) — contornos suaves sin pipeline de canvas, mismo
+      // costo de render (decisión 29).
+      const source = new GeoTIFF({
+        sources: [{ blob }],
+        normalize: false,
+        interpolate: props.smooth,
+        projection: projCode,
+        // sin fade de tiles: render determinista (goldens) y frames nítidos
+        transition: 0,
+      })
+      source.on('change', () => {
+        if (source.getState() === 'error') {
+          emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
         }
-        const [minX, minY, maxX, maxY] = decoded.extent
-        const source = new ImageStatic({
-          url,
-          imageExtent: [minX, minY, maxX, maxY],
-          projection: projCode,
-          interpolate: true,
-        })
-        const imageLayer = new ImageLayer({ source, opacity: props.opacity, zIndex: 5 })
-        // addFilter llega al prototipo de ol/layer/Base vía side-effect del
-        // import de ol-ext/filter/SVGFilter.js — sin tipos, ver comentario arriba
-        ;(imageLayer as unknown as { addFilter: (f: unknown) => void }).addFilter(
-          new SVGFilter(new Laplacian({ alpha: true, neighbours: 4 })),
-        )
-        rasterLayer = imageLayer
-        map.addLayer(rasterLayer)
-        map.once('rendercomplete', () => {
-          rasterLoaded.value = 'true'
-        })
-        return
-      }
+      })
+      const style = props.smooth
+        ? interpolatedPaletteStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
+        : rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
 
-      let source: GeoTIFF | Awaited<ReturnType<typeof createSmoothedRasterSource>>['source']
-      let style: ReturnType<typeof rasterStyle> | ReturnType<typeof smoothedRasterStyle> | ReturnType<typeof interpolatedPaletteStyle>
-
-      if (props.smoothMode === 'gaussian') {
-        const table = buildLevelColorTable(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-        const radiusPx = Math.min(20, Math.max(1, GAUSSIAN_BLUR_RADIUS_M / raster.cell_m))
-        const smoothed = await createSmoothedRasterSource(blob, table, projCode, radiusPx)
-        source = smoothed.source
-        if (requestId === rasterRequestId) {
-          smoothedRawLevels = smoothed.decoded
-          smoothedProjCode = projCode
-        }
-        style = smoothedRasterStyle()
-      }
-      else {
-        source = new GeoTIFF({
-          sources: [{ blob }],
-          normalize: false,
-          // 'interp': bilineal nativo de OL sobre el nivel crudo — junto con
-          // interpolatedPaletteStyle() (lerp de color en vez de palette/NEAREST)
-          // da contornos suaves sin pipeline de canvas, ver raster-style.ts
-          interpolate: props.smoothMode === 'interp',
-          projection: projCode,
-          // sin fade de tiles: render determinista (goldens) y frames nítidos
-          transition: 0,
-        })
-        source.on('change', () => {
-          if (source.getState() === 'error') {
-            emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
-          }
-        })
-        style = props.smoothMode === 'interp'
-          ? interpolatedPaletteStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-          : rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
-      }
-
-      if (requestId !== rasterRequestId || !map) return // superado mientras decodificaba (modo smooth)
+      if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
 
       rasterLayer = new WebGLTileLayer({
         source,
@@ -405,21 +336,10 @@ onMounted(() => {
       emit('cursor', null)
       return
     }
-    // en modo suavizado la textura de la GPU es RGBA difuminado, no el
-    // nivel físico — el readout SIEMPRE tiene que venir de los niveles
-    // crudos guardados aparte, nunca de activeLayer.getData() aquí
-    let level = Number.NaN
-    if (!animationMode() && (props.smoothMode === 'gaussian' || props.smoothMode === 'laplacian') && smoothedRawLevels && smoothedProjCode) {
-      const [x, y] = transform(evt.coordinate, map!.getView().getProjection(), smoothedProjCode)
-      const raw = sampleRawLevel(smoothedRawLevels, x!, y!)
-      if (raw !== null) level = raw
-    }
-    else {
-      const data = activeLayer.getData(evt.pixel)
-      level = data && !(data instanceof DataView) && data.length > 0
-        ? Number(data[0])
-        : Number.NaN
-    }
+    const data = activeLayer.getData(evt.pixel)
+    const level = data && !(data instanceof DataView) && data.length > 0
+      ? Number(data[0])
+      : Number.NaN
     emit('cursor', sampleFromLevel(level, activeMeta.value_scale, activeMeta.value_offset))
   })
   map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
@@ -456,7 +376,7 @@ watch(() => props.radar.site_id, () => {
 // reasignación disparaba un rebuild completo del pool (dispose+refetch de
 // TODOS los frames) solo por pausar, con el raster desapareciendo un rato.
 watch(
-  () => [props.raster?.r2_key, props.productDef?.code, props.frames, props.smoothMode],
+  () => [props.raster?.r2_key, props.productDef?.code, props.frames, props.smooth],
   (curr, prev) => {
     const [, prodCode, frames] = curr
     const [, prevProdCode, prevFrames] = prev ?? []
@@ -468,8 +388,6 @@ watch(
         rasterLayer.dispose()
         rasterLayer = undefined
       }
-      smoothedRawLevels = undefined
-      smoothedProjCode = undefined
       initOrUpdatePool()
     }
     else {

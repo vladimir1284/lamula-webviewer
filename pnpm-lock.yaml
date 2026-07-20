@@ -23,9 +23,6 @@ importers:
       ol:
         specifier: ^10.9.0
         version: 10.9.0
-      ol-ext:
-        specifier: ^4.0.38
-        version: 4.0.38(ol@10.9.0)
       pinia:
         specifier: ^3.0.0
         version: 3.0.4(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3))
@@ -3930,11 +3927,6 @@ packages:
 
   ohash@2.0.11:
     resolution: {integrity: sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==}
-
-  ol-ext@4.0.38:
-    resolution: {integrity: sha512-fJmMcUYV8tfNhaHTl93eV1esBo1L8QHdOjJsBzapomgpmXiW7PGv91i6tmvXU4mL2z0gFrupuzs8BMLGi6T0QQ==}
-    peerDependencies:
-      ol: '>= 5.3.0'
 
   ol@10.9.0:
     resolution: {integrity: sha512-svbbgVQUmEHaKpLQ8kRySojs59Brvgl2zYIrqG9eQNXGfsbi55rQasZIDpwpQzDL6OlzrUb0H4hQaiX9wDoGmA==}
@@ -9649,10 +9641,6 @@ snapshots:
   ofetch@2.0.0-alpha.3: {}
 
   ohash@2.0.11: {}
-
-  ol-ext@4.0.38(ol@10.9.0):
-    dependencies:
-      ol: 10.9.0
 
   ol@10.9.0:
     dependencies:
