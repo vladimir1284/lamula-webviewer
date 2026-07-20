@@ -107,6 +107,7 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLDivElement>()
+let resizeObserver: ResizeObserver | undefined
 
 let map: Map | undefined
 let baseLayer: TileLayer<TileSource> | undefined
@@ -424,6 +425,13 @@ onMounted(() => {
   updateLightning()
   if (animationMode()) initOrUpdatePool()
   else updateRasterLayer()
+
+  // OL solo escucha 'resize' de window: un cambio de layout por flexbox
+  // (abrir/cerrar tab del rail derecho, D26) angosta `container` sin disparar
+  // ese evento — el canvas se queda con el tamaño viejo y se pinta por
+  // encima del borde real. ResizeObserver cubre ese caso.
+  resizeObserver = new ResizeObserver(() => map?.updateSize())
+  resizeObserver.observe(container.value!)
 })
 
 watch(() => props.radar.site_id, () => {
@@ -505,6 +513,8 @@ watch(() => props.satVariant, (v) => {
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = undefined
   rasterRequestId += 1 // invalida cualquier fetch de raster en curso
   teardownPool()
   windLayer?.dispose()
