@@ -34,7 +34,7 @@ import { getCogBlob } from '../utils/map/cog-cache'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
-import { rasterStyle } from '../utils/map/raster-style'
+import { interpolatedPaletteStyle, rasterStyle } from '../utils/map/raster-style'
 import { LightningLayer } from '../utils/map/lightning-layer'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 import { WindParticleLayer } from '../utils/map/wind-layer'
@@ -74,9 +74,13 @@ const props = withDefaults(defineProps<{
   /** strikes normalizados de la ventana del frame (capa 'lightning');
    * null = capa limpia. Lista nueva ⇒ el bucle reinicia en fase 0 */
   lightningStrikes?: NormalizedStrike[] | null
+  /** suavizado cliente de la capa raster estática: bilineal nativo GPU sobre el nivel
+   * crudo + lerp de color (decisión 32) — modo estático únicamente */
+  smooth?: boolean
 }>(), {
   baseMap: 'osm',
   showCoverage: true,
+  smooth: false,
   frames: null,
   activeFrame: 0,
   phenomena: null,
@@ -256,12 +260,17 @@ function updateRasterLayer() {
   // cacheado por r2_key (utils/map/cog-cache.ts): re-visitar un tiempo ya
   // mostrado (stepping, scrubbing) no vuelve a bajar el COG por red.
   getCogBlob(raster.r2_key, raster.cog_url)
-    .then((blob) => {
+    .then(async (blob) => {
       if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
+
+      // 'smooth': bilineal nativo de OL sobre el nivel crudo (fuente) + lerp de
+      // color en vez de palette/NEAREST (estilo, ver interpolatedPaletteStyle
+      // en raster-style.ts) — contornos suaves sin pipeline de canvas, mismo
+      // costo de render (decisión 32).
       const source = new GeoTIFF({
         sources: [{ blob }],
         normalize: false,
-        interpolate: false,
+        interpolate: props.smooth,
         projection: projCode,
         // sin fade de tiles: render determinista (goldens) y frames nítidos
         transition: 0,
@@ -271,10 +280,15 @@ function updateRasterLayer() {
           emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
         }
       })
+      const style = props.smooth
+        ? interpolatedPaletteStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
+        : rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
+
+      if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
 
       rasterLayer = new WebGLTileLayer({
         source,
-        style: rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level),
+        style,
         opacity: props.opacity,
         zIndex: 5,
       })
@@ -424,7 +438,7 @@ watch(() => props.radar.site_id, () => {
 // reasignación disparaba un rebuild completo del pool (dispose+refetch de
 // TODOS los frames) solo por pausar, con el raster desapareciendo un rato.
 watch(
-  () => [props.raster?.r2_key, props.productDef?.code, props.frames],
+  () => [props.raster?.r2_key, props.productDef?.code, props.frames, props.smooth],
   (curr, prev) => {
     const [, prodCode, frames] = curr
     const [, prevProdCode, prevFrames] = prev ?? []

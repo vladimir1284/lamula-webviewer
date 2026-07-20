@@ -204,6 +204,7 @@ onMounted(() => {
       units: prefs?.units ?? PREF_DEFAULTS.units,
       clock: prefs?.clock ?? PREF_DEFAULTS.clock,
       animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
+      smooth: prefs?.smooth ?? PREF_DEFAULTS.smooth,
     },
   })
 })
@@ -646,6 +647,9 @@ function onOpacityInput(event: Event) {
 function onSelectBase(event: Event) {
   send({ type: 'SELECT_BASE', base: (event.target as HTMLSelectElement).value as BaseMapId })
 }
+function onToggleSmooth(event: Event) {
+  send({ type: 'SET_PREF', patch: { smooth: (event.target as HTMLInputElement).checked } })
+}
 function onToggleSatellite() {
   send({ type: 'TOGGLE_SATELLITE' })
 }
@@ -771,6 +775,20 @@ function onSatOpacityInput(event: Event) {
               @input="onOpacityInput"
             >
           </label>
+
+          <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-50': animationEngaged }">
+            <input
+              type="checkbox"
+              data-testid="smooth-toggle"
+              :checked="ctx.smooth"
+              :disabled="animationEngaged"
+              @change="onToggleSmooth"
+            >
+            <span>Suavizar celdas del raster</span>
+          </label>
+          <p v-if="animationEngaged" class="text-xs text-slate-400">
+            No disponible durante la animación.
+          </p>
 
           <p class="text-sm text-slate-400">
             Valor bajo cursor:
@@ -998,6 +1016,7 @@ function onSatOpacityInput(event: Event) {
             :sat-opacity="ctx.satOpacity"
             :wind-grid="windGridShown"
             :lightning-strikes="lightningStrikesShown"
+            :smooth="ctx.smooth"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"
