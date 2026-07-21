@@ -626,10 +626,17 @@ const cursorLabel = computed(() => {
   const cursor = ctx.value.cursor
   if (!cursor) return null
   if (cursor.rangeFolded) return 'RF'
+  if (cursor.level === null) return null
   // leyenda y cursor comparten conversión (D28): mostrar km/h en uno y kt
   // en la otra sería mentir en una de las dos superficies
   const converted = convertRasterValue(cursor.value ?? 0, productDef.value?.unit ?? '', ctx.value.units)
   return `${converted.value.toFixed(1)} ${converted.unit}`
+})
+
+const cursorLatLonLabel = computed(() => {
+  const cursor = ctx.value.cursor
+  if (!cursor) return null
+  return `${cursor.lat.toFixed(4)}, ${cursor.lon.toFixed(4)}`
 })
 
 const volTimeLabel = computed(() =>
@@ -819,6 +826,13 @@ function onSatOpacityInput(event: Event) {
             Valor bajo cursor:
             <span data-testid="cursor-value" class="font-mono text-slate-100">
               {{ cursorLabel ?? '—' }}
+            </span>
+          </p>
+
+          <p class="text-sm text-slate-400">
+            Lat/lon bajo cursor:
+            <span data-testid="cursor-latlon" class="font-mono text-slate-100">
+              {{ cursorLatLonLabel ?? '—' }}
             </span>
           </p>
         </template>

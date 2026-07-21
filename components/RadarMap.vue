@@ -16,7 +16,7 @@ import Polygon, { circular } from 'ol/geom/Polygon'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
 import WebGLTileLayer from 'ol/layer/WebGLTile'
-import { fromLonLat } from 'ol/proj'
+import { fromLonLat, toLonLat } from 'ol/proj'
 import GeoTIFF from 'ol/source/GeoTIFF'
 import type TileSource from 'ol/source/Tile'
 import VectorSource from 'ol/source/Vector'
@@ -413,17 +413,19 @@ onMounted(() => {
       emit('cursor', null)
       return
     }
+    const [lon, lat] = toLonLat(evt.coordinate)
     const activeLayer = animationMode() ? pool?.getActiveLayer() : rasterLayer
     const activeMeta = animationMode() ? props.frames?.[props.activeFrame] : props.raster
     if (!activeLayer || !activeMeta) {
-      emit('cursor', null)
+      emit('cursor', { lon, lat, level: null, value: null, rangeFolded: false })
       return
     }
     const data = activeLayer.getData(evt.pixel)
     const level = data && !(data instanceof DataView) && data.length > 0
       ? Number(data[0])
       : Number.NaN
-    emit('cursor', sampleFromLevel(level, activeMeta.value_scale, activeMeta.value_offset))
+    const sample = sampleFromLevel(level, activeMeta.value_scale, activeMeta.value_offset)
+    emit('cursor', { lon, lat, level: sample?.level ?? null, value: sample?.value ?? null, rangeFolded: sample?.rangeFolded ?? false })
   })
   map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
   map.on('moveend', () => {
