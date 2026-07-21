@@ -430,7 +430,17 @@ onMounted(() => {
     const level = data && !(data instanceof DataView) && data.length > 0
       ? Number(data[0])
       : Number.NaN
-    const sample = sampleFromLevel(level, activeMeta.value_scale, activeMeta.value_offset)
+    // Halo de suavizado en dBZ (D33): solo con smooth activo Y unidad dBZ —
+    // el degradé nodata↔real de la interpolación puede leerse en cualquier
+    // producto, pero solo en dBZ (value_offset muy negativo) da un "valor
+    // físico" que parece plausible y confunde. Ground truth (smooth off)
+    // nunca se filtra.
+    const sample = sampleFromLevel(
+      level,
+      activeMeta.value_scale,
+      activeMeta.value_offset,
+      props.smooth && props.productDef?.unit === 'dBZ',
+    )
     emit('cursor', { lon, lat, level: sample?.level ?? null, value: sample?.value ?? null, rangeFolded: sample?.rangeFolded ?? false })
   })
   map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))

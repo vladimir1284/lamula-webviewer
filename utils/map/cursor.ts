@@ -14,6 +14,15 @@ export function sampleFromLevel(
   level: number,
   valueScale: number,
   valueOffset: number,
+  // Halo de suavizado (decisión 33, hallazgo del usuario en producción): con
+  // 'smooth' activo, TODO el degradé entre nodata (0) y el nivel real de una
+  // celda es interpolación de GPU, no dato — para dBZ (value_offset típico
+  // muy negativo) ese degradé completo pasa por valores físicos ≤ 0 que
+  // parecen reales pero rodean cualquier zona con reflectividad, no solo el
+  // borde 0↔1. `clampNonPositive` (solo el llamador sabe si el producto es
+  // dBZ y si `smooth` está activo) trata esos como nodata — ground truth
+  // (smooth off) nunca pasa por acá, sigue mostrando dBZ bajo/negativo real.
+  clampNonPositive = false,
 ): { level: number, value: number | null, rangeFolded: boolean } | null {
   if (!Number.isFinite(level)) return null
   // Con 'smooth' (decisión 32/33) el nivel bajo el cursor puede llegar
@@ -25,5 +34,7 @@ export function sampleFromLevel(
   const rounded = Math.round(level)
   if (rounded <= 0) return null
   if (rounded === 1) return { level: rounded, value: null, rangeFolded: true }
-  return { level: rounded, value: rounded * valueScale + valueOffset, rangeFolded: false }
+  const value = rounded * valueScale + valueOffset
+  if (clampNonPositive && value <= 0) return null
+  return { level: rounded, value, rangeFolded: false }
 }
