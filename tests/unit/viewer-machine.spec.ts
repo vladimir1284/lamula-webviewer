@@ -410,7 +410,7 @@ describe('viewerMachine — eventos de UI', () => {
   it('SET_OPACITY / CURSOR_MOVE / COG_ERROR actualizan contexto', () => {
     const { actor } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'SET_OPACITY', value: 0.4 })
-    actor.send({ type: 'CURSOR_MOVE', sample: { level: 91, value: 12.5, rangeFolded: false } })
+    actor.send({ type: 'CURSOR_MOVE', sample: { lon: -60, lat: -34, level: 91, value: 12.5, rangeFolded: false } })
     actor.send({ type: 'COG_ERROR', message: 'no COG' })
     const ctx = actor.getSnapshot().context
     expect(ctx.opacity).toBe(0.4)
