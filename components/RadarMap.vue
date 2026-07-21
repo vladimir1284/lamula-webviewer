@@ -421,6 +421,11 @@ onMounted(() => {
       emit('cursor', { lon, lat, level: null, value: null, rangeFolded: false })
       return
     }
+    // getData() lee la superficie YA renderizada, no el pixel crudo del COG:
+    // con 'smooth' (D32/D33) el nivel viene interpolado por GPU (radio 1) o
+    // ya remuestreado antes de tocar la GPU (radio > 1) — el readout puede
+    // diferir del dato fuente en ese punto exacto, sobre todo en bordes de
+    // celda. sampleFromLevel() redondea antes de clasificar (ver su comentario).
     const data = activeLayer.getData(evt.pixel)
     const level = data && !(data instanceof DataView) && data.length > 0
       ? Number(data[0])
