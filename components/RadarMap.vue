@@ -31,7 +31,7 @@ import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
 import { createBaseMapSources } from '../utils/map/base-layers'
 import { getCogBlob } from '../utils/map/cog-cache'
-import { buildDownsampledDataTile } from '../utils/map/downsample-source'
+import { buildDownsampledCogBlob } from '../utils/map/downsample-source'
 import { FramePool } from '../utils/map/frame-pool'
 import { buildPhenomenaFeatures, overlayStyle } from '../utils/map/phenomena-layer'
 import { registerRadarProjection } from '../utils/map/projection'
@@ -274,13 +274,14 @@ function updateRasterLayer() {
       // color en vez de palette/NEAREST (estilo, ver interpolatedPaletteStyle
       // en raster-style.ts) — contornos suaves sin pipeline de canvas, mismo
       // costo de render (decisión 32). 'smoothRadius' > 1 (decisión 33):
-      // además remuestrea el nivel crudo a una grilla más gruesa (geotiff.js)
-      // antes de ese mismo lerp — radio de curvatura mayor, un decode extra
-      // una vez por raster/cambio de radio, no por frame.
-      let source: GeoTIFF | Awaited<ReturnType<typeof buildDownsampledDataTile>>
+      // el blob que entra a la MISMA fuente GeoTIFF es un COG re-muestreado a
+      // grilla más gruesa (geotiff.js, un decode/encode extra por raster o
+      // cambio de radio, no por frame) — radio de curvatura mayor con el
+      // pipeline de reproyección de OL intacto (no un source/tileGrid a mano).
+      let cogBlob = blob
       if (props.smooth && props.smoothRadius > 1) {
         try {
-          source = await buildDownsampledDataTile(blob, props.smoothRadius, projCode)
+          cogBlob = await buildDownsampledCogBlob(blob, props.smoothRadius)
         }
         catch {
           if (requestId !== rasterRequestId) return
@@ -288,21 +289,21 @@ function updateRasterLayer() {
           return
         }
       }
-      else {
-        source = new GeoTIFF({
-          sources: [{ blob }],
-          normalize: false,
-          interpolate: props.smooth,
-          projection: projCode,
-          // sin fade de tiles: render determinista (goldens) y frames nítidos
-          transition: 0,
-        })
-        source.on('change', () => {
-          if (source.getState() === 'error') {
-            emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
-          }
-        })
-      }
+      if (requestId !== rasterRequestId || !map) return // superado por un raster más nuevo
+
+      const source = new GeoTIFF({
+        sources: [{ blob: cogBlob }],
+        normalize: false,
+        interpolate: props.smooth,
+        projection: projCode,
+        // sin fade de tiles: render determinista (goldens) y frames nítidos
+        transition: 0,
+      })
+      source.on('change', () => {
+        if (source.getState() === 'error') {
+          emit('rasterError', `No se pudo cargar el COG (${raster.r2_key})`)
+        }
+      })
       const style = props.smooth
         ? interpolatedPaletteStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
         : rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
