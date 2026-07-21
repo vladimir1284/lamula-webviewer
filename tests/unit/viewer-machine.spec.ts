@@ -589,7 +589,7 @@ describe('viewerMachine — preferencias de display (D28)', () => {
   it('PREFS_LOADED asigna sin persistir (write-on-read prohibido)', () => {
     const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
     actor.start()
-    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'si', clock: 'local', animationFrames: 12, smooth: false } })
+    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'si', clock: 'local', animationFrames: 12, smooth: false, smoothRadius: 1 } })
     expect(actor.getSnapshot().context).toMatchObject({ coverage: false, units: 'si', clock: 'local' })
     expect(persistPrefs).not.toHaveBeenCalled()
   })
@@ -607,7 +607,7 @@ describe('viewerMachine — preferencias de display (D28)', () => {
     // este test detecta si un refactor futuro lo introduce sin querer
     const { actor } = boot({ initialRaster: meta(T0) })
     actor.start()
-    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'imperial', clock: 'utc', animationFrames: 12, smooth: false } })
+    actor.send({ type: 'PREFS_LOADED', prefs: { coverage: false, units: 'imperial', clock: 'utc', animationFrames: 12, smooth: false, smoothRadius: 1 } })
     expect(actor.getSnapshot().context.coverage).toBe(false)
     actor.send({ type: 'SET_PREF', patch: { coverage: true } })
     expect(actor.getSnapshot().context.coverage).toBe(true)

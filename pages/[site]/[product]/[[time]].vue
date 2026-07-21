@@ -205,6 +205,7 @@ onMounted(() => {
       clock: prefs?.clock ?? PREF_DEFAULTS.clock,
       animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
       smooth: prefs?.smooth ?? PREF_DEFAULTS.smooth,
+      smoothRadius: prefs?.smoothRadius ?? PREF_DEFAULTS.smoothRadius,
     },
   })
 })
@@ -650,6 +651,9 @@ function onSelectBase(event: Event) {
 function onToggleSmooth(event: Event) {
   send({ type: 'SET_PREF', patch: { smooth: (event.target as HTMLInputElement).checked } })
 }
+function onSelectSmoothRadius(event: Event) {
+  send({ type: 'SET_PREF', patch: { smoothRadius: Number((event.target as HTMLSelectElement).value) as 1 | 2 | 4 | 8 } })
+}
 function onToggleSatellite() {
   send({ type: 'TOGGLE_SATELLITE' })
 }
@@ -786,6 +790,27 @@ function onSatOpacityInput(event: Event) {
             >
             <span>Suavizar celdas del raster</span>
           </label>
+
+          <label
+            v-if="ctx.smooth"
+            class="block text-sm"
+            :class="{ 'opacity-50': animationEngaged }"
+          >
+            <span class="mb-1 block text-slate-400">Radio de suavizado</span>
+            <select
+              data-testid="smooth-radius-select"
+              :value="ctx.smoothRadius"
+              :disabled="animationEngaged"
+              class="w-full rounded bg-slate-800 text-slate-100"
+              @change="onSelectSmoothRadius"
+            >
+              <option value="1">1× (sin remuestreo)</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="8">8×</option>
+            </select>
+          </label>
+
           <p v-if="animationEngaged" class="text-xs text-slate-400">
             No disponible durante la animación.
           </p>
@@ -1017,6 +1042,7 @@ function onSatOpacityInput(event: Event) {
             :wind-grid="windGridShown"
             :lightning-strikes="lightningStrikesShown"
             :smooth="ctx.smooth"
+            :smooth-radius="ctx.smoothRadius"
             @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
             @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
             @raster-error="send({ type: 'COG_ERROR', message: $event })"

@@ -50,7 +50,7 @@ export interface NavigateParams {
 export type PrefsParams = Partial<Omit<ViewerPrefs, 'v'>>
 
 /** preferencias de display del usuario (no compartibles — nunca en la URL) */
-export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames' | 'smooth'>
+export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames' | 'smooth' | 'smoothRadius'>
 
 export interface ViewerInput {
   radars: Radar[]
@@ -127,6 +127,8 @@ interface ViewerContext {
   animationFrames: number
   /** suavizado de la capa raster estática (decisión 32) */
   smooth: boolean
+  /** radio de suavizado, 1/2/4/8 (decisión 33) — sin efecto si smooth es false */
+  smoothRadius: 1 | 2 | 4 | 8
 }
 
 /** query params de configuración de display (opacity/base/satélite) — un solo syncQuery debounced */
@@ -274,6 +276,7 @@ export const viewerMachine = setup({
     clock: 'utc',
     animationFrames: 12,
     smooth: false,
+    smoothRadius: 1,
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },

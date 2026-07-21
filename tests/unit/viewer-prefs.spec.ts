@@ -11,7 +11,7 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
   it('roundtrip save/load', () => {
     savePrefs({ site: 'AMX', product: 153, opacity: 0.6, base: 'off' })
     expect(loadPrefs()).toEqual({
-      v: 3,
+      v: 4,
       site: 'AMX',
       product: 153,
       opacity: 0.6,
@@ -21,13 +21,14 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       clock: 'local',
       animationFrames: 12,
       smooth: false,
+      smoothRadius: 1,
     })
   })
 
   it('save parcial conserva el resto', () => {
     savePrefs({ site: 'AMX', product: 153, opacity: 0.8, base: 'osm', units: 'si' })
     savePrefs({ opacity: 0.3 })
-    expect(loadPrefs()).toMatchObject({ v: 3, site: 'AMX', product: 153, opacity: 0.3, base: 'osm', units: 'si' })
+    expect(loadPrefs()).toMatchObject({ v: 4, site: 'AMX', product: 153, opacity: 0.3, base: 'osm', units: 'si' })
   })
 
   it('JSON corrupto → null', () => {
@@ -36,22 +37,30 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
   })
 
   it('versión desconocida → null', () => {
-    localStorage.setItem('lamula:prefs', JSON.stringify({ v: 4, site: 'AMX' }))
+    localStorage.setItem('lamula:prefs', JSON.stringify({ v: 5, site: 'AMX' }))
     expect(loadPrefs()).toBeNull()
   })
 
   it('shape inválido (tipos incorrectos) → null', () => {
     localStorage.setItem(
       'lamula:prefs',
-      JSON.stringify({ v: 3, site: 'AMX', product: '153', opacity: 0.8, base: 'osm', coverage: true, units: 'imperial', clock: 'utc', animationFrames: 12, smooth: false }),
+      JSON.stringify({ v: 4, site: 'AMX', product: '153', opacity: 0.8, base: 'osm', coverage: true, units: 'imperial', clock: 'utc', animationFrames: 12, smooth: false, smoothRadius: 1 }),
     )
     expect(loadPrefs()).toBeNull()
   })
 
-  it('v3 con enum fuera de rango → null', () => {
+  it('v4 con enum fuera de rango → null', () => {
     localStorage.setItem(
       'lamula:prefs',
-      JSON.stringify({ v: 3, site: 'AMX', product: 153, opacity: 0.8, base: 'osm', coverage: true, units: 'metric', clock: 'utc', animationFrames: 12, smooth: false }),
+      JSON.stringify({ v: 4, site: 'AMX', product: 153, opacity: 0.8, base: 'osm', coverage: true, units: 'metric', clock: 'utc', animationFrames: 12, smooth: false, smoothRadius: 1 }),
+    )
+    expect(loadPrefs()).toBeNull()
+  })
+
+  it('v4 con smoothRadius fuera de rango → null', () => {
+    localStorage.setItem(
+      'lamula:prefs',
+      JSON.stringify({ v: 4, site: 'AMX', product: 153, opacity: 0.8, base: 'osm', coverage: true, units: 'imperial', clock: 'utc', animationFrames: 12, smooth: false, smoothRadius: 3 }),
     )
     expect(loadPrefs()).toBeNull()
   })
@@ -72,7 +81,7 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       JSON.stringify({ v: 1, site: 'BYX', product: 94, opacity: 0.5, base: 'off' }),
     )
     expect(loadPrefs()).toEqual({
-      v: 3,
+      v: 4,
       site: 'BYX',
       product: 94,
       opacity: 0.5,
@@ -82,6 +91,7 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       clock: 'local',
       animationFrames: 12,
       smooth: false,
+      smoothRadius: 1,
     })
   })
 
@@ -93,14 +103,14 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
     expect(loadPrefs()).toBeNull()
   })
 
-  it('save parcial sobre storage v1 → escribe v3 completo conservando lo viejo', () => {
+  it('save parcial sobre storage v1 → escribe v4 completo conservando lo viejo', () => {
     localStorage.setItem(
       'lamula:prefs',
       JSON.stringify({ v: 1, site: 'BYX', product: 94, opacity: 0.5, base: 'off' }),
     )
     savePrefs({ units: 'si' })
     expect(JSON.parse(localStorage.getItem('lamula:prefs')!)).toEqual({
-      v: 3,
+      v: 4,
       site: 'BYX',
       product: 94,
       opacity: 0.5,
@@ -110,16 +120,17 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       clock: 'local',
       animationFrames: 12,
       smooth: false,
+      smoothRadius: 1,
     })
   })
 
-  it('v2 válido (pre-smooth) → migra con smooth:false, conserva lo viejo', () => {
+  it('v2 válido (pre-smooth) → migra con smooth:false y smoothRadius:1, conserva lo viejo', () => {
     localStorage.setItem(
       'lamula:prefs',
       JSON.stringify({ v: 2, site: 'BYX', product: 94, opacity: 0.5, base: 'off', coverage: false, units: 'si', clock: 'utc', animationFrames: 20 }),
     )
     expect(loadPrefs()).toEqual({
-      v: 3,
+      v: 4,
       site: 'BYX',
       product: 94,
       opacity: 0.5,
@@ -129,17 +140,18 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       clock: 'utc',
       animationFrames: 20,
       smooth: false,
+      smoothRadius: 1,
     })
   })
 
-  it('save parcial sobre storage v2 → escribe v3 completo conservando lo viejo', () => {
+  it('save parcial sobre storage v2 → escribe v4 completo conservando lo viejo', () => {
     localStorage.setItem(
       'lamula:prefs',
       JSON.stringify({ v: 2, site: 'BYX', product: 94, opacity: 0.5, base: 'off', coverage: false, units: 'si', clock: 'utc', animationFrames: 20 }),
     )
     savePrefs({ smooth: true })
     expect(JSON.parse(localStorage.getItem('lamula:prefs')!)).toEqual({
-      v: 3,
+      v: 4,
       site: 'BYX',
       product: 94,
       opacity: 0.5,
@@ -149,6 +161,48 @@ describe('useViewerPrefs (localStorage, nunca el time)', () => {
       clock: 'utc',
       animationFrames: 20,
       smooth: true,
+      smoothRadius: 1,
+    })
+  })
+
+  it('v3 válido (pre-smoothRadius) → migra con smoothRadius:1, conserva lo viejo incl. smooth', () => {
+    localStorage.setItem(
+      'lamula:prefs',
+      JSON.stringify({ v: 3, site: 'BYX', product: 94, opacity: 0.5, base: 'off', coverage: false, units: 'si', clock: 'utc', animationFrames: 20, smooth: true }),
+    )
+    expect(loadPrefs()).toEqual({
+      v: 4,
+      site: 'BYX',
+      product: 94,
+      opacity: 0.5,
+      base: 'off',
+      coverage: false,
+      units: 'si',
+      clock: 'utc',
+      animationFrames: 20,
+      smooth: true,
+      smoothRadius: 1,
+    })
+  })
+
+  it('save parcial sobre storage v3 → escribe v4 completo conservando lo viejo', () => {
+    localStorage.setItem(
+      'lamula:prefs',
+      JSON.stringify({ v: 3, site: 'BYX', product: 94, opacity: 0.5, base: 'off', coverage: false, units: 'si', clock: 'utc', animationFrames: 20, smooth: true }),
+    )
+    savePrefs({ smoothRadius: 4 })
+    expect(JSON.parse(localStorage.getItem('lamula:prefs')!)).toEqual({
+      v: 4,
+      site: 'BYX',
+      product: 94,
+      opacity: 0.5,
+      base: 'off',
+      coverage: false,
+      units: 'si',
+      clock: 'utc',
+      animationFrames: 20,
+      smooth: true,
+      smoothRadius: 4,
     })
   })
 })
