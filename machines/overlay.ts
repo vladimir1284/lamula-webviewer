@@ -29,7 +29,9 @@ import type {
   VwpLevel,
   WindGridFile,
   WindGridMeta,
+  WindLevel,
 } from '#shared/contract'
+import { DEFAULT_WIND_LEVEL } from '#shared/contract'
 import { assign, fromPromise, raise, setup } from 'xstate'
 import { nearestWithin, WIND_JOIN_TOLERANCE_S } from '../utils/overlay/join'
 import type { NormalizedStrike, ObservationWindow } from '../utils/overlay/lightning-join'
@@ -58,7 +60,7 @@ export type OverlayEvent =
   /** prevVolTime = frame raster anterior en el timeline (ventana de
    * observación del overlay de rayos); null/ausente → fallback de 600 s */
   | { type: 'SET_TIME', volTime: string | null, prevVolTime?: string | null }
-  | { type: 'SET_ACTIVE', layers: OverlayLayerId[], panel: PanelId | null }
+  | { type: 'SET_ACTIVE', layers: OverlayLayerId[], panel: PanelId | null, windLevel: WindLevel }
   | { type: 'SELECT_CELL', cellId: string | null }
   | { type: 'INDEX_READY' }
 
@@ -89,6 +91,8 @@ interface OverlayContext {
   vwpJoined: string | null
   vwpProfiles: Record<string, VwpLevel[]>
   vwpError: string | null
+  /** nivel de altura seleccionado (0005_wind_levels.sql — un nivel a la vez) */
+  windLevel: WindLevel
   /** índice de grillas de viento del día ±2 h (null = sin cargar) */
   windTimes: WindGridMeta[] | null
   /** valid_time casado con el frame (null = fuera de tolerancia de 1 h) */
@@ -175,9 +179,11 @@ export const overlayMachine = setup({
     ),
     // índice del día ±2 h (/api/wind/times) — propio, no va en fetchTimes:
     // activar viento no debe fetchear índices de fenómenos/VWP ni viceversa
-    fetchWindTimes: fromPromise<WindGridMeta[], { site: string, day: string }>(async () => {
-      throw new Error('fetchWindTimes sin proveer (.provide)')
-    }),
+    fetchWindTimes: fromPromise<WindGridMeta[], { site: string, day: string, level: WindLevel }>(
+      async () => {
+        throw new Error('fetchWindTimes sin proveer (.provide)')
+      },
+    ),
     // JSON u/v directo de R2 (como los COGs), validado con zWindGridFile
     fetchWindGrid: fromPromise<WindGridFile, { meta: WindGridMeta }>(async () => {
       throw new Error('fetchWindGrid sin proveer (.provide)')
@@ -231,6 +237,7 @@ export const overlayMachine = setup({
     vwpJoined: null,
     vwpProfiles: {},
     vwpError: null,
+    windLevel: DEFAULT_WIND_LEVEL,
     windTimes: null,
     windJoined: null,
     windGrid: null,
@@ -572,6 +579,22 @@ export const overlayMachine = setup({
         SET_SCOPE: { target: '.deciding' },
         SET_ACTIVE: [
           {
+            // nivel distinto del vigente mientras la capa está o queda activa:
+            // el índice/cache del nivel anterior no sirven para el nuevo —
+            // recarga sin importar si ya estaba activa (dropdown) u off→on
+            guard: ({ context, event }) =>
+              event.layers.includes('wind') && event.windLevel !== context.windLevel,
+            target: '.loadingIndex',
+            actions: assign({
+              windLevel: ({ event }) => event.windLevel,
+              windTimes: null,
+              windJoined: null,
+              windGrid: null,
+              windCache: {},
+              windError: null,
+            }),
+          },
+          {
             // guard sobre el payload; context.layers aún es el snapshot previo.
             // off→on estricto: un SET_ACTIVE con viento ya activo no debe
             // reentrar loadingIndex (cancelaría el fetch en vuelo)
@@ -590,7 +613,11 @@ export const overlayMachine = setup({
           {
             guard: ({ event }) => !event.layers.includes('wind'),
             target: '.idle',
-            actions: assign({ windJoined: null, windGrid: null }),
+            actions: assign({
+              windJoined: null,
+              windGrid: null,
+              windLevel: ({ event }) => event.windLevel,
+            }),
           },
         ],
         // el assign de volTime corre en 'frame' (anterior en orden de
@@ -624,7 +651,7 @@ export const overlayMachine = setup({
         loadingIndex: {
           invoke: {
             src: 'fetchWindTimes',
-            input: ({ context }) => ({ site: context.site, day: context.day }),
+            input: ({ context }) => ({ site: context.site, day: context.day, level: context.windLevel }),
             onDone: {
               target: 'join',
               actions: assign({

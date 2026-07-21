@@ -187,7 +187,12 @@ export const windDay = (() => {
   const rows = windGrids
     .filter(w => w.site_id === site && w.valid_time >= from && w.valid_time < to)
     .sort((a, b) => a.valid_time.localeCompare(b.valid_time))
-  return { site, day, rows, hasNeighbor: rows.some(w => !w.valid_time.startsWith(day)) }
+  // hoy solo se ingiere '10m' en producción (0005_wind_levels.sql, rollout de
+  // 850/700/500 hPa pendiente) — todas las filas del grupo comparten nivel;
+  // una re-grabación con varios niveles activos necesitaría agrupar por
+  // (site, day, level) en vez de (site, day)
+  const level = rows[0]!.level
+  return { site, day, level, rows, hasNeighbor: rows.some(w => !w.valid_time.startsWith(day)) }
 })()
 
 /** Site del catálogo sin ninguna grilla de viento — índice vacío. Null si

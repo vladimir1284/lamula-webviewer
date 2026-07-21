@@ -9,6 +9,7 @@ import type {
   RasterMeta,
   VwpLevel,
   WindGridMeta,
+  WindLevel,
 } from '../../shared/contract'
 
 export type RasterLookupMode = 'closest' | 'next' | 'prev'
@@ -37,9 +38,11 @@ export interface Dal {
   listVwpTimes(site: string, day: string): Promise<string[]>
   /** Niveles del perfil de viento de un volumen, por altura ascendente. */
   listVwp(site: string, volTime: string): Promise<VwpLevel[]>
-  /** Grillas de viento GFS de un site en un día UTC ±2 h (WIND_DAY_PAD_S),
-   * ascendente por valid_time — índice para el join temporal cliente (D24). */
-  listWindTimes(site: string, day: string): Promise<WindGridMeta[]>
+  /** Grillas de viento GFS de un site/nivel en un día UTC ±2 h
+   * (WIND_DAY_PAD_S), ascendente por valid_time — índice para el join
+   * temporal cliente (D24). Nivel forma parte de la PK desde
+   * 0005_wind_levels.sql — un nivel a la vez, no se traen los 4 juntos. */
+  listWindTimes(site: string, day: string, level: WindLevel): Promise<WindGridMeta[]>
   /** Cubos de rayos de un site en un día UTC ±900 s (LIGHTNING_DAY_PAD_S),
    * ascendente por bucket_start — índice para el join por ventana cliente. */
   listLightningBuckets(site: string, day: string): Promise<LightningBucketMeta[]>

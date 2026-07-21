@@ -101,15 +101,31 @@ export interface Phenomenon extends Omit<PhenomenonRow, 'attrs'> {
 
 export type VwpLevel = VwpRow
 
-// ── Viento en grilla (GFS 10 m, ingerido por el pipeline) ──────────────
+// ── Viento en grilla (GFS 0.25°, ingerido por el pipeline) ─────────────
 
-/** `wind_grids` — una fila por (site_id, valid_time). Contrato propuesto
- * en docs/pipeline-viento.md; hasta que el pipeline lo mergee el DDL vive
- * en tests/contract/proposed/. */
+/** Niveles de altura del selector (0005_wind_levels.sql, fase 2). Solo
+ * '10m' se ingiere en producción por ahora — 850/700/500 hPa devuelven
+ * 0 filas hasta que el pipeline habilite el rollout (ver docs/pipeline-viento.md). */
+export const WIND_LEVELS = ['10m', '850hPa', '700hPa', '500hPa'] as const
+export type WindLevel = (typeof WIND_LEVELS)[number]
+
+export const WIND_LEVEL_LABELS: Record<WindLevel, string> = {
+  '10m': 'Superficie (10 m)',
+  '850hPa': '850 hPa',
+  '700hPa': '700 hPa',
+  '500hPa': '500 hPa',
+}
+
+export const DEFAULT_WIND_LEVEL: WindLevel = '10m'
+
+/** `wind_grids` — una fila por (site_id, valid_time, level) desde
+ * 0005_wind_levels.sql (PK original: site_id, valid_time — filas viejas
+ * backfilleadas con level='10m'). */
 export interface WindGridRow {
   site_id: string
   /** momento al que aplica el campo, ISO-8601 UTC naive (como vol_time) */
   valid_time: string
+  level: WindLevel
   /** ciclo del modelo, ISO-8601 UTC naive */
   cycle_time: string
   forecast_hour: number

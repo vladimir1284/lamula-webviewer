@@ -2,6 +2,26 @@
 
 **Estado: implementado en el pipeline (`db/migrations/0003_wind_grids.sql`, jul-2026) e ingesta activa.** El snapshot vive en `tests/contract/schema/0003_wind_grids.sql` (vigilado por el drift check). Verificado contra producción (2026-07-18): filas horarias en D1 para todos los sitios, JSON en R2 conforme a esta spec (nx·ny exacto, 2 decimales, `lo1` en [-180,180)), CORS con `localhost:3000` y gzip + `immutable` desde el edge. Las fixtures del viewer siguen siendo **sintéticas** hasta la próxima re-grabación completa (la grabación vigente del 2026-07-11 contiene el caso meso irreproducible — ver README de fixtures).
 
+## Fase 2: niveles de altura (`0005_wind_levels.sql`, jul-2026)
+
+**Estado: migración mergeada y snapshoteada (`tests/contract/schema/0005_wind_levels.sql`); viewer implementado (contrato, DAL, API, `overlayMachine`, selector de UI). Ingesta de 850/700/500 hPa aún NO habilitada del lado del pipeline** — solo `10m` produce filas hoy; el selector de altura muestra las otras tres opciones pero devuelven `[]` hasta que el pipeline active el rollout (no es bug del viewer).
+
+La PK pasó de `(site_id, valid_time)` a `(site_id, valid_time, level)` — SQLite/D1 no soportan `ALTER` de PK, la migración reconstruye la tabla (`wind_grids_new` → drop → rename) y backfillea las filas existentes con `level='10m'`. Columna nueva:
+
+```sql
+level TEXT NOT NULL DEFAULT '10m', -- '10m' | '850hPa' | '700hPa' | '500hPa'
+```
+
+El viewer consulta un nivel a la vez (el selector nunca muestra más de uno simultáneo, así que no hace falta traer los 4 juntos):
+
+```sql
+WHERE site_id = ? AND level = ? AND valid_time >= ? AND valid_time < ?
+```
+
+`GET /api/wind/times` gana el query param `level` (ausente → `10m`, para no romper URLs viejas). El formato del fichero JSON u/v (`header`/`u`/`v`) es idéntico para los 4 niveles — sin cambios ahí.
+
+**Cuando el pipeline habilite 850/700/500 hPa:** avisar para retirar la nota de "0 filas esperadas" de `WIND_LEVELS`/`WIND_LEVEL_LABELS` (`shared/contract/types.ts`) y considerar traer un JSON real de cada nivel a `tests/fixtures/cogs/r2/` para reemplazar `server/dal/fixtures/wind.json` (sigue sintético, un solo nivel `10m`, misma razón que siempre: re-grabar hoy destruiría el caso BYX 03:08:18).
+
 ## Contexto
 
 El viewer añade una capa opcional de viento animado (partículas) sobre el mapa de cada radar. Necesita viento u/v 10 m en grilla, por sitio, alineado temporalmente con los rasters (ventana de 72 h). El pipeline es el dueño del contrato: migración D1, job de ingesta y retención van allá; el viewer solo hace `SELECT` sobre la tabla nueva y `GET` de los JSON en R2.

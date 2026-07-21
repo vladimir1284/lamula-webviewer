@@ -3,6 +3,7 @@
 // invoca vía la acción 'navigate'.
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { isBaseMapId } from '#shared/basemaps'
+import { DEFAULT_WIND_LEVEL, WIND_LEVELS } from '#shared/contract'
 import { isoToPath, pathToIso } from '#shared/url/time-path'
 import type { OverlayLayerId, PanelId } from '../machines/overlay'
 import { OVERLAY_LAYERS, PANELS } from '../machines/overlay'
@@ -46,6 +47,10 @@ export function parseViewerRoute(
     : null
   const rawCell = route.query.cell
   const cell = typeof rawCell === 'string' && CELL_ID_RE.test(rawCell) ? rawCell : null
+  const rawWindLevel = route.query.windLevel
+  const windLevel = typeof rawWindLevel === 'string' && (WIND_LEVELS as readonly string[]).includes(rawWindLevel)
+    ? rawWindLevel as (typeof WIND_LEVELS)[number]
+    : DEFAULT_WIND_LEVEL
 
   // overrides individuales de trayectoria, independientes de trackPast/trackFuture en `layers`
   const pastCells = [...new Set(
@@ -72,6 +77,7 @@ export function parseViewerRoute(
     layers,
     panel,
     cell,
+    windLevel,
     pastCells,
     futureCells,
     sat,
@@ -86,6 +92,7 @@ export function overlayQueryPatch(params: OverlayQueryParams): Record<string, st
     layers: params.layers.length > 0 ? params.layers.join(',') : undefined,
     panel: params.panel ?? undefined,
     cell: params.cell ?? undefined,
+    windLevel: params.windLevel !== DEFAULT_WIND_LEVEL ? params.windLevel : undefined,
     pastCells: params.pastCells.length > 0 ? params.pastCells.join(',') : undefined,
     futureCells: params.futureCells.length > 0 ? params.futureCells.join(',') : undefined,
   }

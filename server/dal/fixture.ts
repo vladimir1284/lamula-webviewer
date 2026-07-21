@@ -18,6 +18,7 @@ import type {
   VwpRow,
   WindGridMeta,
   WindGridRow,
+  WindLevel,
 } from '../../shared/contract'
 import { dayRange, dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract'
 import lightningJson from './fixtures/lightning.json'
@@ -152,10 +153,12 @@ export class FixtureDal implements Dal {
       .map(({ created_at: _created, ...row }) => row)
   }
 
-  async listWindTimes(site: string, day: string): Promise<WindGridMeta[]> {
+  async listWindTimes(site: string, day: string, level: WindLevel): Promise<WindGridMeta[]> {
     const { from, to } = dayRangePadded(day, WIND_DAY_PAD_S)
     return wind
-      .filter(w => w.site_id === site && w.valid_time >= from && w.valid_time < to)
+      .filter(w =>
+        w.site_id === site && w.level === level && w.valid_time >= from && w.valid_time < to,
+      )
       .sort((a, b) => a.valid_time.localeCompare(b.valid_time))
       .map(({ size_bytes: _size, created_at: _created, ...row }) => toWindMeta(row, this.r2BaseUrl))
   }

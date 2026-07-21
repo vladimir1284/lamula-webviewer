@@ -8,6 +8,7 @@ import type {
   VwpLevel,
   WindGridFile,
   WindGridMeta,
+  WindLevel,
 } from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise, waitFor } from 'xstate'
@@ -48,15 +49,16 @@ function vwpLevel(volTime: string, heightFt: number): VwpLevel {
   }
 }
 
-function windMeta(validTime: string): WindGridMeta {
+function windMeta(validTime: string, level: WindLevel = '10m'): WindGridMeta {
   return {
     site_id: SITE,
     valid_time: validTime,
+    level,
     cycle_time: '2026-07-11T00:00:00',
     forecast_hour: Number(validTime.slice(11, 13)),
     model: 'gfs0p25',
-    r2_key: `${SITE}/WIND/x_${validTime}.json`,
-    wind_url: `https://r2.test/${SITE}/WIND/x_${validTime}.json`,
+    r2_key: `${SITE}/WIND/x_${level}_${validTime}.json`,
+    wind_url: `https://r2.test/${SITE}/WIND/x_${level}_${validTime}.json`,
   }
 }
 
@@ -99,7 +101,7 @@ function boot(opts: {
   fetchPhenomena?: (i: { site: string, volTime: string }) => Promise<Phenomenon[]>
   fetchSeries?: (i: { site: string, cellId: string }) => Promise<Phenomenon[]>
   fetchVwp?: (i: { site: string, volTimes: string[] }) => Promise<Record<string, VwpLevel[]>>
-  fetchWindTimes?: (i: { site: string, day: string }) => Promise<WindGridMeta[]>
+  fetchWindTimes?: (i: { site: string, day: string, level: WindLevel }) => Promise<WindGridMeta[]>
   fetchWindGrid?: (i: { meta: WindGridMeta }) => Promise<WindGridFile>
   fetchLightningTimes?: (i: { site: string, day: string }) => Promise<LightningBucketMeta[]>
   fetchLightningBuckets?: (i: { metas: LightningBucketMeta[] }) => Promise<Record<string, LightningBucketFile>>
@@ -118,7 +120,7 @@ function boot(opts: {
       Object.fromEntries(volTimes.map(t => [t, [vwpLevel(t, 1000)]]))),
   )
   const fetchWindTimes = vi.fn(
-    opts.fetchWindTimes ?? (async () => (opts.windTimes ?? WT).map(windMeta)),
+    opts.fetchWindTimes ?? (async () => (opts.windTimes ?? WT).map(t => windMeta(t))),
   )
   const fetchWindGrid = vi.fn(
     opts.fetchWindGrid ?? (async ({ meta }: { meta: WindGridMeta }) => windFile(meta.valid_time)),
@@ -193,7 +195,7 @@ describe('overlayMachine — gating y arranque', () => {
   it('activar una capa carga índice y resuelve el frame pendiente', async () => {
     const { actor, fetchTimes, fetchPhenomena } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
     expect(fetchTimes).toHaveBeenCalledOnce()
     expect(fetchPhenomena).toHaveBeenCalledWith({ site: SITE, volTime: PT[1] })
@@ -205,9 +207,9 @@ describe('overlayMachine — gating y arranque', () => {
   it('desactivar todo vuelve el frame a idle', async () => {
     const { actor } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null, windLevel: '10m' })
     expect(actor.getSnapshot().matches({ frame: 'idle' })).toBe(true)
   })
 })
@@ -215,7 +217,7 @@ describe('overlayMachine — gating y arranque', () => {
 describe('overlayMachine — join temporal (D24)', () => {
   it('frame sin volumen exacto casa con el vecino dentro de tolerancia', async () => {
     const { actor, fetchPhenomena } = boot()
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await waitFor(actor, s => s.matches({ index: 'ready' }))
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T02:57:00' }) // a 66 s de PT[1]
     await settled(actor)
@@ -225,7 +227,7 @@ describe('overlayMachine — join temporal (D24)', () => {
 
   it('frame fuera de tolerancia → noData con joined null, sin fetch', async () => {
     const { actor, fetchPhenomena } = boot()
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await waitFor(actor, s => s.matches({ index: 'ready' }))
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T06:00:00' })
     await settled(actor)
@@ -238,7 +240,7 @@ describe('overlayMachine — join temporal (D24)', () => {
   it('volumen casado con 0 filas → noData con joined presente (distinguible)', async () => {
     const { actor } = boot({ fetchPhenomena: async () => [] })
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ frame: 'noData' })).toBe(true)
@@ -249,7 +251,7 @@ describe('overlayMachine — join temporal (D24)', () => {
   it('índice vacío (JUA) → noData visible, sin fetch de fenómenos', async () => {
     const { actor, fetchPhenomena } = boot({ phenTimes: [], vwpTimes: [] })
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ frame: 'noData' })).toBe(true)
     expect(fetchPhenomena).not.toHaveBeenCalled()
@@ -258,7 +260,7 @@ describe('overlayMachine — join temporal (D24)', () => {
   it('cache por vol_time: dos frames que casan al mismo volumen → un solo fetch', async () => {
     const { actor, fetchPhenomena } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T02:57:00' }) // mismo joined
     await settled(actor)
@@ -280,7 +282,7 @@ describe('overlayMachine — join temporal (D24)', () => {
         return [phen(volTime, 'B1'), phen(volTime, 'B2')]
       },
     })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await waitFor(actor, s => s.matches({ index: 'ready' }))
     actor.send({ type: 'SET_TIME', volTime: PT[0]! }) // fetch 1 queda colgado
     actor.send({ type: 'SET_TIME', volTime: PT[2]! }) // reentra: cancela fetch 1
@@ -297,7 +299,7 @@ describe('overlayMachine — SET_SCOPE', () => {
   it('cambiar de site limpia caches e índices y recarga si sigue activo', async () => {
     const { actor, fetchTimes } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: null, windLevel: '10m' })
     await settled(actor)
     actor.send({ type: 'SET_SCOPE', site: 'BYX', day: DAY })
     await settled(actor)
@@ -336,13 +338,13 @@ describe('overlayMachine — viento (región wind)', () => {
   it('activar wind carga SU índice y el grid del frame; cero fetch de fenómenos', async () => {
     const { actor, fetchWindTimes, fetchWindGrid, fetchTimes, fetchPhenomena } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[0]! }) // 02:50:38 → casa con 03:00
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ wind: 'shown' })).toBe(true)
     expect(s.context.windJoined).toBe(WT[1])
     expect(s.context.windGrid).toEqual(windFile(WT[1]!))
-    expect(fetchWindTimes).toHaveBeenCalledWith({ site: SITE, day: DAY })
+    expect(fetchWindTimes).toHaveBeenCalledWith({ site: SITE, day: DAY, level: '10m' })
     expect(fetchWindGrid).toHaveBeenCalledOnce()
     // 'wind' no es capa de fenómenos: ni índice phen/vwp ni filas
     expect(fetchTimes).not.toHaveBeenCalled()
@@ -353,7 +355,7 @@ describe('overlayMachine — viento (región wind)', () => {
   it('frame a >1 h de todo valid_time → noData con grid limpio, sin fetch del JSON', async () => {
     const { actor, fetchWindGrid } = boot()
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T08:00:00' })
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ wind: 'noData' })).toBe(true)
@@ -365,7 +367,7 @@ describe('overlayMachine — viento (región wind)', () => {
   it('cache por r2_key: dos frames que casan al mismo valid_time → un solo fetch del JSON', async () => {
     const { actor, fetchWindGrid } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     actor.send({ type: 'SET_TIME', volTime: PT[2]! }) // 03:01:02 → mismo 03:00
     await settled(actor)
@@ -376,13 +378,13 @@ describe('overlayMachine — viento (región wind)', () => {
   it('toggle off limpia join y grid; on de nuevo reusa índice y cache (cero red)', async () => {
     const { actor, fetchWindTimes, fetchWindGrid } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null, windLevel: '10m' })
     let s = actor.getSnapshot()
     expect(s.matches({ wind: 'idle' })).toBe(true)
     expect(s.context.windGrid).toBeNull()
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     s = actor.getSnapshot()
     expect(s.matches({ wind: 'shown' })).toBe(true)
@@ -393,7 +395,7 @@ describe('overlayMachine — viento (región wind)', () => {
   it('índice vacío → noData visible', async () => {
     const { actor, fetchWindGrid } = boot({ windTimes: [] })
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ wind: 'noData' })).toBe(true)
     expect(fetchWindGrid).not.toHaveBeenCalled()
@@ -402,12 +404,12 @@ describe('overlayMachine — viento (región wind)', () => {
   it('SET_SCOPE limpia índice/cache y recarga solo si wind sigue activo', async () => {
     const { actor, fetchWindTimes } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     actor.send({ type: 'SET_SCOPE', site: 'BYX', day: DAY })
     await settled(actor)
     expect(fetchWindTimes).toHaveBeenCalledTimes(2)
-    expect(fetchWindTimes).toHaveBeenLastCalledWith({ site: 'BYX', day: DAY })
+    expect(fetchWindTimes).toHaveBeenLastCalledWith({ site: 'BYX', day: DAY, level: '10m' })
     // sin frame nuevo aún (la página reemite SET_TIME): join sin volTime → noData
     expect(actor.getSnapshot().matches({ wind: 'noData' })).toBe(true)
     expect(actor.getSnapshot().context.windCache).toEqual({})
@@ -416,7 +418,7 @@ describe('overlayMachine — viento (región wind)', () => {
   it('wind + cells conviven: cada región fetchea lo suyo', async () => {
     const { actor, fetchWindGrid, fetchPhenomena, fetchTimes, fetchWindTimes } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ frame: 'shown' })).toBe(true)
@@ -426,6 +428,36 @@ describe('overlayMachine — viento (región wind)', () => {
     expect(fetchPhenomena).toHaveBeenCalledOnce()
     expect(fetchWindGrid).toHaveBeenCalledOnce()
   })
+
+  it('cambiar de nivel con wind activo invalida índice/cache y recarga (0005_wind_levels.sql)', async () => {
+    const { actor, fetchWindTimes, fetchWindGrid } = boot({
+      fetchWindTimes: async ({ level }) => WT.map(t => windMeta(t, level)),
+    })
+    actor.send({ type: 'SET_TIME', volTime: PT[0]! })
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '10m' })
+    await settled(actor)
+    expect(actor.getSnapshot().matches({ wind: 'shown' })).toBe(true)
+    expect(fetchWindTimes).toHaveBeenCalledTimes(1)
+    expect(fetchWindGrid).toHaveBeenCalledTimes(1)
+
+    actor.send({ type: 'SET_ACTIVE', layers: ['wind'], panel: null, windLevel: '850hPa' })
+    await settled(actor)
+    const s = actor.getSnapshot()
+    expect(s.context.windLevel).toBe('850hPa')
+    expect(fetchWindTimes).toHaveBeenCalledTimes(2)
+    expect(fetchWindTimes).toHaveBeenLastCalledWith({ site: SITE, day: DAY, level: '850hPa' })
+    // el grid del nivel anterior no sirve — nuevo fetch, no cache stale reusada
+    expect(fetchWindGrid).toHaveBeenCalledTimes(2)
+    expect(s.matches({ wind: 'shown' })).toBe(true)
+    expect(s.context.windGrid).toEqual(windFile(WT[1]!))
+  })
+
+  it('cambiar de nivel con wind apagado solo actualiza el contexto, sin fetch', async () => {
+    const { actor, fetchWindTimes } = boot()
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null, windLevel: '700hPa' })
+    expect(actor.getSnapshot().context.windLevel).toBe('700hPa')
+    expect(fetchWindTimes).not.toHaveBeenCalled()
+  })
 })
 
 describe('overlayMachine — rayos (región lightning)', () => {
@@ -433,7 +465,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
     const { actor, fetchLightningTimes, fetchLightningBuckets, fetchTimes, fetchPhenomena } = boot()
     // ventana (02:55:54, 03:01:02] → cubos 02:55 y 03:00
     actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ lightning: 'shown' })).toBe(true)
@@ -456,7 +488,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('sin prevVolTime la ventana cae al fallback de 600 s', async () => {
     const { actor } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[2]! }) // (02:51:02, 03:01:02]
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ lightning: 'shown' })).toBe(true)
@@ -468,7 +500,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('ventana sin cubos con strikes → noData con capa limpia, sin fetch de ficheros', async () => {
     const { actor, fetchLightningBuckets } = boot()
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T08:00:00' })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ lightning: 'noData' })).toBe(true)
@@ -481,7 +513,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
       lightningBuckets: [lightningMeta(LT[0]!, 0), lightningMeta(LT[1]!, 0)],
     })
     actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true)
     expect(fetchLightningBuckets).not.toHaveBeenCalled()
@@ -490,7 +522,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('cache por r2_key: otro frame sobre los mismos cubos → un solo fetch', async () => {
     const { actor, fetchLightningBuckets } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     // frame 03:04:00 con prev 03:01:02 → ventana dentro del cubo 03:00 (ya en cache)
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T03:04:00', prevVolTime: PT[2]! })
@@ -503,13 +535,13 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('toggle off limpia strikes; on de nuevo reusa índice y cache (cero red)', async () => {
     const { actor, fetchLightningTimes, fetchLightningBuckets } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null, windLevel: '10m' })
     let s = actor.getSnapshot()
     expect(s.matches({ lightning: 'idle' })).toBe(true)
     expect(s.context.lightningStrikes).toBeNull()
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     s = actor.getSnapshot()
     expect(s.matches({ lightning: 'shown' })).toBe(true)
@@ -520,7 +552,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('índice vacío → noData visible', async () => {
     const { actor, fetchLightningBuckets } = boot({ lightningBuckets: [] })
     actor.send({ type: 'SET_TIME', volTime: PT[2]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true)
     expect(fetchLightningBuckets).not.toHaveBeenCalled()
@@ -529,7 +561,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('SET_SCOPE limpia índice/cache y recarga solo si lightning sigue activo', async () => {
     const { actor, fetchLightningTimes } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[2]!, prevVolTime: PT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     actor.send({ type: 'SET_SCOPE', site: 'BYX', day: DAY })
     await settled(actor)
@@ -543,7 +575,7 @@ describe('overlayMachine — rayos (región lightning)', () => {
   it('lightning + wind + cells conviven: cada región fetchea lo suyo', async () => {
     const { actor, fetchTimes, fetchWindTimes, fetchLightningTimes } = boot()
     actor.send({ type: 'SET_TIME', volTime: PT[1]!, prevVolTime: PT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind', 'lightning'], panel: null })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells', 'wind', 'lightning'], panel: null, windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ frame: 'shown' })).toBe(true)
@@ -559,7 +591,7 @@ describe('overlayMachine — VWP', () => {
   it('panel vwp carga la ventana de perfiles hasta el frame', async () => {
     const { actor, fetchVwp } = boot()
     actor.send({ type: 'SET_TIME', volTime: VT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp' })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp', windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ vwp: 'shown' })).toBe(true)
@@ -572,10 +604,10 @@ describe('overlayMachine — VWP', () => {
   it('cache: reabrir el panel con la misma ventana no refetchea', async () => {
     const { actor, fetchVwp } = boot()
     actor.send({ type: 'SET_TIME', volTime: VT[1]! })
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp' })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp', windLevel: '10m' })
     await settled(actor)
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null })
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp' })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: null, windLevel: '10m' })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp', windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ vwp: 'shown' })).toBe(true)
     expect(fetchVwp).toHaveBeenCalledOnce()
@@ -584,7 +616,7 @@ describe('overlayMachine — VWP', () => {
   it('día sin perfiles hasta el frame → empty', async () => {
     const { actor, fetchVwp } = boot()
     actor.send({ type: 'SET_TIME', volTime: '2026-07-11T01:00:00' }) // antes del primer perfil
-    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp' })
+    actor.send({ type: 'SET_ACTIVE', layers: [], panel: 'vwp', windLevel: '10m' })
     await settled(actor)
     expect(actor.getSnapshot().matches({ vwp: 'empty' })).toBe(true)
     expect(fetchVwp).not.toHaveBeenCalled()
@@ -593,7 +625,7 @@ describe('overlayMachine — VWP', () => {
   it('la señal de fenómenos y la de VWP son independientes (JUA: sin celdas, con perfil)', async () => {
     const { actor } = boot({ phenTimes: [] })
     actor.send({ type: 'SET_TIME', volTime: VT[0]! })
-    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: 'vwp' })
+    actor.send({ type: 'SET_ACTIVE', layers: ['cells'], panel: 'vwp', windLevel: '10m' })
     await settled(actor)
     const s = actor.getSnapshot()
     expect(s.matches({ frame: 'noData' })).toBe(true)

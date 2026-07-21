@@ -12,8 +12,9 @@ import type {
   VwpLevel,
   WindGridFile,
   WindGridMeta,
+  WindLevel,
 } from '#shared/contract'
-import { zLightningBucketFile, zWindGridFile } from '#shared/contract'
+import { WIND_LEVEL_LABELS, WIND_LEVELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
@@ -443,7 +444,7 @@ const { snapshot: overlaySnapshot, send: overlaySend } = useActor(
       }),
       fetchWindTimes: fromPromise(async ({ input }) =>
         $fetch<WindGridMeta[]>('/api/wind/times', {
-          query: { site: input.site, day: input.day },
+          query: { site: input.site, day: input.day, level: input.level },
         }),
       ),
       // JSON u/v directo de R2 (como los COGs) — validado antes de animar
@@ -500,7 +501,12 @@ onMounted(() => {
     volTime: displayedVolTime.value,
     prevVolTime: prevDayVolTime(displayedVolTime.value),
   })
-  overlaySend({ type: 'SET_ACTIVE', layers: ctx.value.layers, panel: ctx.value.panel })
+  overlaySend({
+    type: 'SET_ACTIVE',
+    layers: ctx.value.layers,
+    panel: ctx.value.panel,
+    windLevel: ctx.value.windLevel,
+  })
   if (ctx.value.cell !== null) overlaySend({ type: 'SELECT_CELL', cellId: ctx.value.cell })
 })
 watch([() => ctx.value.site, () => ctx.value.day], ([site, day]) => {
@@ -532,9 +538,12 @@ watch(animPlaying, (playing) => {
 onBeforeUnmount(() => {
   if (overlayResumeTimer) clearTimeout(overlayResumeTimer)
 })
-watch([() => ctx.value.layers, () => ctx.value.panel], ([layers, panel]) => {
-  overlaySend({ type: 'SET_ACTIVE', layers, panel })
-})
+watch(
+  [() => ctx.value.layers, () => ctx.value.panel, () => ctx.value.windLevel],
+  ([layers, panel, windLevel]) => {
+    overlaySend({ type: 'SET_ACTIVE', layers, panel, windLevel })
+  },
+)
 watch(() => ctx.value.cell, cellId => overlaySend({ type: 'SELECT_CELL', cellId }))
 
 // filas del volumen casado, filtradas por capas activas (el mapa no decide)
@@ -579,7 +588,10 @@ const windInfo = computed(() => {
   if (!meta) return null
   const cycleH = meta.cycle_time.slice(11, 13)
   const validHm = meta.valid_time.slice(11, 16)
-  return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z`
+  // '10m' es el nivel por defecto (único ingerido en producción) — no se
+  // repite en la etiqueta, que ya se lee en el <select> de nivel
+  const levelSuffix = meta.level === '10m' ? '' : ` · ${WIND_LEVEL_LABELS[meta.level]}`
+  return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z${levelSuffix}`
 })
 
 // ── Capa de rayos (GLM) ──────────────────────────────────────────────────
@@ -606,6 +618,10 @@ const lightningInfo = computed(() => {
 
 function onToggleLayer(layer: OverlayLayerId) {
   send({ type: 'TOGGLE_LAYER', layer })
+}
+
+function onSelectWindLevel(event: Event) {
+  send({ type: 'SELECT_WIND_LEVEL', level: (event.target as HTMLSelectElement).value as WindLevel })
 }
 
 function onToggleCellTrack(cellId: string, kind: 'past' | 'future') {
@@ -980,7 +996,23 @@ function onSatOpacityInput(event: Event) {
               :checked="ctx.layers.includes('wind')"
               @change="onToggleLayer('wind')"
             >
-            <span>Viento en superficie (10 m)</span>
+            <span>Viento ({{ WIND_LEVEL_LABELS[ctx.windLevel] }})</span>
+          </label>
+          <label
+            v-if="ctx.layers.includes('wind')"
+            class="mt-2 block text-sm"
+          >
+            <span class="mb-1 block text-slate-400">Nivel de altura</span>
+            <select
+              :value="ctx.windLevel"
+              data-testid="wind-level-select"
+              class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+              @change="onSelectWindLevel"
+            >
+              <option v-for="level in WIND_LEVELS" :key="level" :value="level">
+                {{ WIND_LEVEL_LABELS[level] }}
+              </option>
+            </select>
           </label>
           <p
             v-if="windInfo"

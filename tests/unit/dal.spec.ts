@@ -183,8 +183,8 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     expect(await dal.listVwp(vwpVolume.site, '2000-01-01T00:00:00')).toEqual([])
   })
 
-  it('listWindTimes: grillas del día ±2 h, ascendentes, wind_url resuelta', async () => {
-    const grids = await dal.listWindTimes(windDay.site, windDay.day)
+  it('listWindTimes: grillas del día ±2 h de un nivel, ascendentes, wind_url resuelta', async () => {
+    const grids = await dal.listWindTimes(windDay.site, windDay.day, windDay.level)
     const expected = windDay.rows.map(({ size_bytes: _s, created_at: _c, ...row }) => ({
       ...row,
       wind_url: `${R2_BASE}/${row.r2_key}`,
@@ -196,11 +196,14 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     }
   })
 
-  it('listWindTimes: día sin datos y site sin viento → []', async () => {
-    expect(await dal.listWindTimes(windDay.site, '2000-01-01')).toEqual([])
+  it('listWindTimes: día sin datos, site sin viento, o nivel sin ingerir → []', async () => {
+    expect(await dal.listWindTimes(windDay.site, '2000-01-01', windDay.level)).toEqual([])
     if (windEmptySite !== null) {
-      expect(await dal.listWindTimes(windEmptySite, windDay.day)).toEqual([])
+      expect(await dal.listWindTimes(windEmptySite, windDay.day, windDay.level)).toEqual([])
     }
+    // 850/700/500 hPa: rollout pendiente del lado del pipeline (spec jul-2026)
+    const otherLevel = windDay.level === '10m' ? '850hPa' : '10m'
+    expect(await dal.listWindTimes(windDay.site, windDay.day, otherLevel)).toEqual([])
   })
 
   it('listLightningBuckets: cubos del día ±900 s, ascendentes, lightning_url resuelta', async () => {
@@ -267,7 +270,7 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['listVwpTimes', d => d.listVwpTimes(vwpDay.site, vwpDay.day)],
     ['listPhenomenaByCell', d => d.listPhenomenaByCell(trackedCell.site, trackedCell.cellId)],
     ['listVwp', d => d.listVwp(vwpVolume.site, vwpVolume.volTime)],
-    ['listWindTimes', d => d.listWindTimes(windDay.site, windDay.day)],
+    ['listWindTimes', d => d.listWindTimes(windDay.site, windDay.day, windDay.level)],
     ['listLightningBuckets', d => d.listLightningBuckets(lightningDay.site, lightningDay.day)],
     ['health', d => d.health(healthNow)],
   ]

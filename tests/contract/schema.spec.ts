@@ -69,6 +69,7 @@ const DEPENDED_COLUMNS: Record<string, ColumnSpec[]> = {
   wind_grids: [
     { name: 'site_id', type: 'TEXT', notnull: true },
     { name: 'valid_time', type: 'TEXT', notnull: true },
+    { name: 'level', type: 'TEXT', notnull: true },
     { name: 'cycle_time', type: 'TEXT', notnull: true },
     { name: 'forecast_hour', type: 'INTEGER', notnull: true },
     { name: 'model', type: 'TEXT', notnull: true },
@@ -155,20 +156,25 @@ describe('contrato: índices y constraints que asume el viewer', () => {
     ).toThrow(/UNIQUE/)
   })
 
-  it('wind_grids: PK (site_id, valid_time) — el upsert del pipeline depende de esto', () => {
+  it('wind_grids: PK (site_id, valid_time, level) — el upsert del pipeline depende de esto (0005_wind_levels.sql)', () => {
     const db = createContractDb()
     insertRows(db, 'radars', [{
       site_id: 'TST', icao: null, lat: 0, lon: 0, height_m: 0,
       proj4: '+proj=aeqd', first_seen_at: '2026-01-01T00:00:00', last_seen_at: '2026-01-01T00:00:00',
     }])
     const grid = {
-      site_id: 'TST', valid_time: '2026-01-01T00:00:00', cycle_time: '2026-01-01T00:00:00',
+      site_id: 'TST', valid_time: '2026-01-01T00:00:00', level: '10m', cycle_time: '2026-01-01T00:00:00',
       forecast_hour: 0, model: 'gfs0p25', r2_key: 'TST/WIND/a.json', size_bytes: 1,
       created_at: '2026-01-01T00:01:00',
     }
     insertRows(db, 'wind_grids', [grid])
+    // mismo (site_id, valid_time), otro nivel: legal desde que level entró a la PK
     expect(() =>
-      insertRows(db, 'wind_grids', [{ ...grid, r2_key: 'TST/WIND/b.json' }]),
+      insertRows(db, 'wind_grids', [{ ...grid, level: '850hPa', r2_key: 'TST/WIND/b.json' }]),
+    ).not.toThrow()
+    // mismo (site_id, valid_time, level): sigue siendo el upsert del pipeline
+    expect(() =>
+      insertRows(db, 'wind_grids', [{ ...grid, r2_key: 'TST/WIND/c.json' }]),
     ).toThrow(/UNIQUE|PRIMARY/)
   })
 

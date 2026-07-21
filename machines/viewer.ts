@@ -5,7 +5,7 @@
 // red. Regiones paralelas: 'raster' (frame mostrado) y 'timeline' (rasters
 // del día). Diagrama: docs/maquinas-estado.md (actualizar en el mismo commit).
 import type { BaseMapId } from '#shared/basemaps'
-import type { Product, Radar, RasterMeta } from '#shared/contract'
+import type { Product, Radar, RasterMeta, WindLevel } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
 import type { ViewerPrefs } from '../composables/useViewerPrefs'
 import type { CursorSample } from '../utils/map/cursor'
@@ -25,6 +25,9 @@ export interface ViewerRouteState {
   panel: PanelId | null
   /** celda seleccionada (?cell=D4) */
   cell: string | null
+  /** nivel de altura del viento (?windLevel=10m|850hPa|700hPa|500hPa —
+   * ausente = DEFAULT_WIND_LEVEL, no ensucia URLs de F3/F4 intactas) */
+  windLevel: WindLevel
   /** overrides individuales de trayectoria, independientes del toggle de grupo trackPast/trackFuture (?pastCells=D4,D7) */
   pastCells: string[]
   /** (?futureCells=D4,D7) */
@@ -83,6 +86,7 @@ export type ViewerEvent =
   | { type: 'TOGGLE_LAYER', layer: OverlayLayerId }
   | { type: 'SELECT_PANEL', panel: PanelId | null }
   | { type: 'SELECT_CELL', cellId: string | null }
+  | { type: 'SELECT_WIND_LEVEL', level: WindLevel }
   | { type: 'TOGGLE_CELL_TRACK', cellId: string, kind: 'past' | 'future' }
   | { type: 'PREFS_LOADED', prefs: UserPrefsSlice }
   | { type: 'SET_PREF', patch: Partial<UserPrefsSlice> }
@@ -111,6 +115,7 @@ interface ViewerContext {
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
+  windLevel: WindLevel
   pastCells: string[]
   futureCells: string[]
   sat: boolean
@@ -145,6 +150,7 @@ export interface OverlayQueryParams {
   layers: OverlayLayerId[]
   panel: PanelId | null
   cell: string | null
+  windLevel: WindLevel
   pastCells: string[]
   futureCells: string[]
 }
@@ -163,6 +169,7 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
       layers: route.layers,
       panel: route.panel,
       cell: route.cell,
+      windLevel: route.windLevel,
       pastCells: route.pastCells,
       futureCells: route.futureCells,
       sat: route.sat,
@@ -264,6 +271,7 @@ export const viewerMachine = setup({
     layers: input.route.layers,
     panel: input.route.panel,
     cell: input.route.cell,
+    windLevel: input.route.windLevel,
     pastCells: input.route.pastCells,
     futureCells: input.route.futureCells,
     sat: input.route.sat,
@@ -407,6 +415,7 @@ export const viewerMachine = setup({
             layers,
             panel: context.panel,
             cell: context.cell,
+            windLevel: context.windLevel,
             pastCells: context.pastCells,
             futureCells: context.futureCells,
           },
@@ -422,6 +431,7 @@ export const viewerMachine = setup({
             layers: context.layers,
             panel: event.panel,
             cell: context.cell,
+            windLevel: context.windLevel,
             pastCells: context.pastCells,
             futureCells: context.futureCells,
           },
@@ -440,6 +450,25 @@ export const viewerMachine = setup({
             layers: context.layers,
             panel,
             cell: event.cellId,
+            windLevel: context.windLevel,
+            pastCells: context.pastCells,
+            futureCells: context.futureCells,
+          },
+        })
+      }),
+    },
+    // selector de altura del viento (fase 2, 0005_wind_levels.sql): un nivel
+    // a la vez, mismo patrón shareable que layers/panel (URL, no localStorage)
+    SELECT_WIND_LEVEL: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        enqueue.assign({ windLevel: event.level })
+        enqueue({
+          type: 'syncOverlayQuery',
+          params: {
+            layers: context.layers,
+            panel: context.panel,
+            cell: context.cell,
+            windLevel: event.level,
             pastCells: context.pastCells,
             futureCells: context.futureCells,
           },
@@ -462,6 +491,7 @@ export const viewerMachine = setup({
             layers: context.layers,
             panel: context.panel,
             cell: context.cell,
+            windLevel: context.windLevel,
             pastCells: key === 'pastCells' ? next : context.pastCells,
             futureCells: key === 'futureCells' ? next : context.futureCells,
           },

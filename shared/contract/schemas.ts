@@ -1,7 +1,7 @@
 // Schemas Zod del contrato: validan filas D1 (contract/fixture tests) y
 // parámetros de query de las server routes. Espejo 1:1 de types.ts.
 import { z } from 'zod'
-import { PHENOMENON_KINDS, PRODUCT_KINDS } from './types'
+import { DEFAULT_WIND_LEVEL, PHENOMENON_KINDS, PRODUCT_KINDS, WIND_LEVELS } from './types'
 
 /** Timestamp del contrato: ISO-8601 UTC naive, comparable lexicográficamente. */
 export const ISO_NAIVE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
@@ -81,6 +81,7 @@ export const zVwpRow = z.object({
 export const zWindGridRow = z.object({
   site_id: zSiteId,
   valid_time: zIsoNaive,
+  level: z.enum(WIND_LEVELS),
   cycle_time: zIsoNaive,
   forecast_hour: z.number().int().min(0),
   model: z.string().min(1),
@@ -155,6 +156,15 @@ export const zSiteProductTime = z.object({
 export const zSiteDay = z.object({
   site: zSiteId,
   day: zDay,
+})
+
+/** /api/wind/times — ausente → DEFAULT_WIND_LEVEL (10m, back-compat con
+ * URLs sin el parámetro); el selector muestra un nivel a la vez, no hace
+ * falta traer los 4 juntos. */
+export const zSiteDayLevel = z.object({
+  site: zSiteId,
+  day: zDay,
+  level: z.enum(WIND_LEVELS).default(DEFAULT_WIND_LEVEL),
 })
 
 export const zSiteVolTime = z.object({

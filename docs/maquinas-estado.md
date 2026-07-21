@@ -98,6 +98,7 @@ stateDiagram-v2
 | `TOGGLE_LAYER(layer)` | — | añade/quita la capa en `context.layers` + `syncOverlayQuery` (replace inmediato de `?layers` — D23; sin debounce, es acción discreta). Incluye los toggles de grupo `trackPast`/`trackFuture` (trayectorias pasada/futura de TODAS las celdas, default-off como `cells`/`meso`). El cambio solo-query reentra por `ROUTE_CHANGED` y cae en `sameFrame`: el raster no reparpadea |
 | `SELECT_PANEL(panel\|null)` | — | asigna `context.panel` + `syncOverlayQuery` (`?panel`) |
 | `SELECT_CELL(cellId\|null)` | — | asigna `context.cell` (+ si el panel está cerrado, lo abre en `trend` — el gesto pide ver esa celda) + `syncOverlayQuery` (`?cell`). `RadarMap.vue` centra la vista (`view.animate`, sin cambio de zoom) sobre el marker de la celda seleccionada |
+| `SELECT_WIND_LEVEL(level)` | — | asigna `context.windLevel` + `syncOverlayQuery` (`?windLevel`, omitido si es el default `10m` — mismo patrón shareable que `layers`/`panel`/`cell`, nunca en `lamula:prefs`). Selector en el `<fieldset>` de viento, visible solo con la capa activa (`0005_wind_levels.sql`, fase 2 — spec jul-2026) |
 | `TOGGLE_CELL_TRACK(cellId, kind: 'past'\|'future')` | — | override individual de trayectoria: añade/quita `cellId` en `context.pastCells`/`futureCells` (independiente del toggle de grupo) + `syncOverlayQuery` (`?pastCells`/`?futureCells`, CSV de cell ids). Visibilidad efectiva en `phenomena-layer.ts` = toggle de grupo OR override individual — checkbox por fila en `CellTable.vue`, deshabilitado si la celda no tiene puntos de esa trayectoria |
 | `PREFS_LOADED(prefs)` | — | asigna `coverage`/`units`/`clock`/`smooth`/`smoothRadius` leídos de localStorage (post-mount). **Nunca** persiste — sería write-on-read |
 | `SET_PREF(patch)` | — | asigna el patch + `persistPrefs(patch)` (diálogo de preferencias; efecto en vivo, sin Guardar/Cancelar) |
@@ -203,6 +204,8 @@ stateDiagram-v2
             w_shown --> w_deciding: SET_SCOPE
             w_deciding --> w_loadingIndex: 'wind' sigue activo
             w_deciding --> w_idle: inactivo
+            w_shown --> w_loadingIndex: SET_ACTIVE con windLevel distinto (invalida índice/cache del nivel anterior)
+            w_noData --> w_loadingIndex: SET_ACTIVE con windLevel distinto
         }
         --
         state "lightning — cubos de rayos GLM (capa 'lightning')" as L {
@@ -233,10 +236,13 @@ el de un scope anterior no vale, la página reemite `SET_TIME`), `layers`,
 "nada en tolerancia" de "volumen sin fenómenos" — `phenomena: []`),
 `phenomena`, `phenCache` (inmutable por vol_time → cache sin invalidación),
 `series`, `vwpWindow` (≤12 columnas del día hasta el frame), `vwpJoined`,
-`vwpProfiles` (cache por vol_time), `windTimes` (índice `WindGridMeta[]` del
-día ±2 h; `null` = sin cargar), `windJoined` (valid_time casado a ≤1 h),
-`windGrid` (JSON u/v del frame), `windCache` (por `r2_key` — el ciclo va en
-la key, inmutable de verdad), `prevVolTime` (frame anterior del timeline —
+`vwpProfiles` (cache por vol_time), `windLevel` (nivel de altura elegido —
+`'10m' | '850hPa' | '700hPa' | '500hPa'`, default `'10m'` — 0005_wind_levels.sql,
+fase 2; solo 10m ingerido en producción por ahora), `windTimes` (índice
+`WindGridMeta[]` del día ±2 h **del nivel vigente**; `null` = sin cargar),
+`windJoined` (valid_time casado a ≤1 h), `windGrid` (JSON u/v del frame),
+`windCache` (por `r2_key` — el ciclo y el nivel van en la key, inmutable de
+verdad), `prevVolTime` (frame anterior del timeline —
 define la ventana de observación de rayos; lo asigna `frame` junto a
 `volTime`), `lightningBuckets` (índice `LightningBucketMeta[]` del día
 ±900 s; `null` = sin cargar), `lightningWindow` (ventana `(prev, vol]` en
@@ -248,7 +254,7 @@ epoch ms), `lightningStrikes` (strikes normalizados a progreso 0–1; `null`
 |---|---|---|
 | `SET_SCOPE(site, day)` | todas | `index` asigna scope y limpia caches/índices/serie/volTime (única región que asigna); las demás vuelven a `idle`; `index.deciding`/`wind.deciding`/`lightning.deciding` recargan si lo suyo sigue activo |
 | `SET_TIME(volTime, prevVolTime?)` | `frame`, `vwp`, `wind`, `lightning` | `frame` asigna `volTime` y `prevVolTime` y, si está activo con índice cargado, reentra `.join` (last-wins: reentrar cancela el fetch en vuelo); `vwp` recalcula ventana/joined si el panel está abierto; `wind` re-joinea con tolerancia de 1 h; `lightning` recalcula la ventana de observación |
-| `SET_ACTIVE(layers, panel)` | `index`, `frame`, `vwp`, `wind`, `lightning` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp`/`wind`/`lightning` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba). `'wind'` y `'lightning'` NO cuentan para `needsPhenomena` (`PHENOMENA_LAYERS`): activar solo viento/rayos no fetchea fenómenos y viceversa |
+| `SET_ACTIVE(layers, panel, windLevel)` | `index`, `frame`, `vwp`, `wind`, `lightning` | `index` asigna toggles y carga índices si hacen falta; `frame`/`vwp`/`wind`/`lightning` activan o vuelven a `idle` (guards sobre el payload del evento, ver arriba). `'wind'` y `'lightning'` NO cuentan para `needsPhenomena` (`PHENOMENA_LAYERS`): activar solo viento/rayos no fetchea fenómenos y viceversa. `wind` tiene un guard extra: `windLevel` distinto del vigente reinicia índice/cache y recarga sin importar si la capa ya estaba activa (dropdown) u off→on — un solo evento cubre ambos casos porque la página emite `SET_ACTIVE` completo en cada cambio de `layers`/`panel`/`windLevel` |
 | `SELECT_CELL(cellId\|null)` | `series` | carga la serie cross-volumen o la limpia |
 | `INDEX_READY` (interno, `raise`) | `frame`, `vwp` | resuelve lo que quedó pendiente mientras cargaba el índice (`wind`/`lightning` no lo necesitan: su índice es propio) |
 
@@ -289,7 +295,7 @@ ahora directamente no corre.
 `/api/phenomena/times` + `/api/vwp/times`), `fetchPhenomena`
 (`/api/phenomena`), `fetchSeries` (`/api/phenomena/series`), `fetchVwp`
 (batch de `/api/vwp` para los vol_times sin cache), `fetchWindTimes`
-(`/api/wind/times`), `fetchWindGrid` (JSON u/v con `fetch` directo a R2
+(`/api/wind/times`, con `level` del `windLevel` vigente), `fetchWindGrid` (JSON u/v con `fetch` directo a R2
 vía `meta.wind_url` — como los COGs — validado con `zWindGridFile`),
 `fetchLightningTimes` (`/api/lightning/times`) y `fetchLightningBuckets`
 (batch de ficheros de cubo con `fetch` directo a R2 vía

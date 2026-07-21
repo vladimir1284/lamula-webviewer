@@ -157,6 +157,9 @@ for (const radar of radars) {
     rows.push({
       site_id: radar.site_id,
       valid_time: validTime,
+      // '10m' es el único nivel ingerido en producción (0005_wind_levels.sql,
+      // rollout de 850/700/500 hPa pendiente) — el fixture sigue sintético
+      level: '10m',
       cycle_time: cycleTime,
       forecast_hour: forecastHour,
       model: 'gfs0p25',
