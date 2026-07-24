@@ -13,6 +13,12 @@ export default defineNuxtConfig({
     vite: {
       server: {
         allowedHosts: true,
+        // worktrees viejos de sesiones de agentes bajo .claude/worktrees traen
+        // su propio node_modules — sin excluirlos, chokidar agota
+        // fs.inotify.max_user_watches (ENOSPC) y el dev server muere
+        watch: {
+          ignored: ['**/.claude/**'],
+        },
       },
     },
   },
