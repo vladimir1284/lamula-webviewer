@@ -676,6 +676,14 @@ const volTimeLabel = computed(() =>
   raster.value ? formatFull(raster.value.vol_time, ctx.value.clock) : null,
 )
 
+// GOES no tiene vol_time propio (WMS en vivo): usa el mismo vol_time del
+// raster mostrado — coherente con currentDisplayTime() en RadarMap.vue.
+const satTimeLabel = computed(() =>
+  ctx.value.sat && !animPlaying.value && raster.value
+    ? formatFull(raster.value.vol_time, ctx.value.clock)
+    : null,
+)
+
 function onSelectSite(event: Event) {
   send({ type: 'SELECT_SITE', site: (event.target as HTMLSelectElement).value })
 }
@@ -935,6 +943,9 @@ function onSatOpacityInput(event: Event) {
             >
             <span>Mostrar capa GOES</span>
           </label>
+          <p v-if="satTimeLabel" data-testid="sat-time" class="mt-1 font-mono text-xs text-slate-400">
+            {{ satTimeLabel }}
+          </p>
           <template v-if="ctx.sat">
             <label class="mt-2 block">
               <span class="mb-1 block text-slate-400">Variante</span>
