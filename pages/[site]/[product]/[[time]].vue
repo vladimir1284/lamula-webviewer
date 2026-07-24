@@ -53,6 +53,7 @@ definePageMeta({
 const route = useRoute()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
+const vwpModal = ref<{ open: () => void, close: () => void }>()
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -212,6 +213,22 @@ onMounted(() => {
 })
 
 const ctx = computed(() => snapshot.value.context)
+
+// VWP (D35): el modal no es parte de la URL en sí, pero se abre/cierra en
+// función de ctx.panel — mismo contrato que el tab del rail de antes. El
+// watch cubre clicks en el botón del menú izquierdo y el cierre (✕/Esc,
+// que dispara onVwpModalClose → SELECT_PANEL null); onMounted cubre el
+// deep-link ?panel=vwp (el watch por sí solo no ve el valor inicial).
+onMounted(() => {
+  if (ctx.value.panel === 'vwp') vwpModal.value?.open()
+})
+watch(() => ctx.value.panel, (p) => {
+  if (p === 'vwp') vwpModal.value?.open()
+  else vwpModal.value?.close()
+})
+function onVwpModalClose() {
+  if (ctx.value.panel === 'vwp') send({ type: 'SELECT_PANEL', panel: null })
+}
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
 const rasterProducts = computed(() => ctx.value.products.filter(p => p.kind === 'raster'))
 const productDef = computed(() => rasterProductDef(ctx.value.product))
@@ -724,6 +741,18 @@ function onSatOpacityInput(event: Event) {
       @speed="onSpeedChange"
     />
 
+    <VwpModal
+      ref="vwpModal"
+      :profiles="overlayCtx.vwpProfiles"
+      :window="overlayCtx.vwpWindow"
+      :joined="overlayCtx.vwpJoined"
+      :error="overlayCtx.vwpError"
+      :empty="overlaySnapshot.matches({ vwp: 'empty' })"
+      :units="ctx.units"
+      :clock="ctx.clock"
+      @close="onVwpModalClose"
+    />
+
     <div class="flex min-h-0 flex-1">
       <aside class="w-80 shrink-0 space-y-4 overflow-y-auto border-r border-slate-700 p-4">
         <p
@@ -1055,6 +1084,17 @@ function onSatOpacityInput(event: Event) {
           </p>
         </fieldset>
 
+        <fieldset class="rounded bg-slate-800 p-3 text-sm">
+          <legend class="px-1 text-slate-400">VWP</legend>
+          <button
+            data-testid="vwp-open"
+            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-left hover:bg-slate-700"
+            @click="send({ type: 'SELECT_PANEL', panel: 'vwp' })"
+          >
+            Ver perfil de viento
+          </button>
+        </fieldset>
+
         <DayPicker
           v-if="availableDays.length > 0"
           :days="availableDays"
@@ -1156,17 +1196,6 @@ function onSatOpacityInput(event: Event) {
             :series="overlayCtx.series"
             :cell-id="ctx.cell"
             :error="overlayCtx.seriesError"
-            :units="ctx.units"
-            :clock="ctx.clock"
-          />
-        </template>
-        <template #vwp>
-          <VwpPanel
-            :profiles="overlayCtx.vwpProfiles"
-            :window="overlayCtx.vwpWindow"
-            :joined="overlayCtx.vwpJoined"
-            :error="overlayCtx.vwpError"
-            :empty="overlaySnapshot.matches({ vwp: 'empty' })"
             :units="ctx.units"
             :clock="ctx.clock"
           />

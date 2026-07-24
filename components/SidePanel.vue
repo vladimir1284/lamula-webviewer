@@ -2,6 +2,7 @@
 // Panel derecho colapsable (D26): rail de tabs siempre visible; el
 // contenido (slots por tab) solo con panel abierto. El estado vive en la
 // URL (?panel — D23): esto solo emite, viewerMachine navega.
+import { computed } from 'vue'
 import type { PanelId } from '../machines/overlay'
 
 const props = defineProps<{
@@ -12,15 +13,20 @@ const emit = defineEmits<{
   select: [panel: PanelId | null]
 }>()
 
+// VWP salió del rail (D35): vive en un botón del menú izquierdo + modal
+// (components/VwpModal.vue). 'vwp' sigue siendo un PanelId válido (lo usa
+// overlayMachine para cargar datos con el modal abierto) pero ya no tiene
+// tab ni aside aquí.
 const TABS: { id: PanelId, label: string }[] = [
   { id: 'cells', label: 'Celdas' },
   { id: 'trend', label: 'Tendencia' },
-  { id: 'vwp', label: 'VWP' },
 ]
 
 function onTab(id: PanelId) {
   emit('select', props.panel === id ? null : id)
 }
+
+const showAside = computed(() => TABS.some(t => t.id === props.panel))
 </script>
 
 <template>
@@ -40,7 +46,7 @@ function onTab(id: PanelId) {
       </button>
     </div>
     <aside
-      v-if="panel"
+      v-if="showAside"
       data-testid="side-panel"
       class="w-96 shrink-0 overflow-y-auto border-l border-slate-700 bg-slate-900 p-3"
     >

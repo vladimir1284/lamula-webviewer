@@ -90,8 +90,26 @@ test('degradación: site sin fenómenos avisa, y el VWP sigue funcionando', asyn
 
   await expect(page.locator('[data-testid=overlay-info]'))
     .toContainText('Sin datos de celdas')
+  // panel=vwp (D35) abre el modal directo en el deep-link, en el tab
+  // Gráfico por default — cambiar a Datos para ver la tabla
+  await expect(page.locator('[data-testid=vwp-modal]')).toBeVisible()
+  await page.locator('[data-testid=vwp-modal-tab-table]').click()
   const vwpRows = page.locator('[data-testid=vwp-table] tbody tr')
   await expect(vwpRows).toHaveCount(vwpOnly!.levels.length)
+})
+
+test('botón VWP del menú izquierdo abre el modal, y cerrarlo limpia ?panel', async ({ page }) => {
+  test.skip(vwpOnly === null, 'las grabaciones actuales no traen un site con VWP y sin fenómenos')
+  await gotoHydrated(page, viewerUrl(vwpOnly!.raster, 'base=off'))
+  await expect(page.locator('[data-testid=vwp-modal]')).not.toBeVisible()
+
+  await page.locator('[data-testid=vwp-open]').click()
+  await expect(page).toHaveURL(/panel=vwp/)
+  await expect(page.locator('[data-testid=vwp-modal]')).toBeVisible()
+
+  await page.locator('[data-testid=vwp-modal-close]').click()
+  await expect(page).not.toHaveURL(/panel=vwp/)
+  await expect(page.locator('[data-testid=vwp-modal]')).not.toBeVisible()
 })
 
 test('deep link completo reproduce capas + panel + celda tras hidratar', async ({ page }) => {

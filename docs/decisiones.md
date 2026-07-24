@@ -126,6 +126,12 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
     - **Rollout desacoplado del viewer**: el pipeline solo ingiere `10m` por ahora; el selector ya expone los 4 niveles pero 850/700/500 hPa devuelven `[]` hasta que el pipeline habilite esas descargas — comportamiento esperado, documentado en `pipeline-viento.md` para no confundirlo con un bug.
     - **Fixture sigue sintética, un solo nivel**: mismo motivo que siempre (re-grabar destruiría el caso BYX 03:08:18) — `scripts/make-wind-fixture.mjs` ahora escribe `level:'10m'` en cada fila, sin generar los otros tres hasta que el pipeline los ingiera de verdad.
 
+35. **VWP sale del rail derecho: botón en el menú izquierdo + modal genérico de tabs.** El tab "VWP" de `SidePanel` (Celdas/Tendencia/VWP) se reemplaza por un botón (`data-testid="vwp-open"`, fieldset propio en el menú izquierdo) que abre un modal con 2 tabs (Gráfico/Datos) — pedido explícito para reusar el mismo modal en la tendencia de una celda seleccionada (próximo cambio). Decisiones:
+    - **`TabModal.vue` genérico** (título, lista de tabs, slot por `tab.id`, `testidPrefix`) extraído como la pieza reusable — mismo patrón `<dialog>` nativo sin librería que `PrefsDialog`/`TimelineMenu` (D26/D28), no PrimeVue.
+    - **`VwpPanel.vue` se parte en `VwpChart.vue` (grid de barbas) + `VwpTable.vue` (tabla numérica)**, compuestos por `VwpModal.vue` (maneja además los estados error/empty). El gráfico sube un poco de tamaño (340×430 → 480×460, barba 14→16 px) — "un poco más espacioso" pedido por el usuario; como el ancho ya escala con la cantidad de columnas, ganar espacio real en el modal (vs. los 384px del aside viejo) ya separa las columnas sin más cambios.
+    - **Sin tocar las máquinas**: `ctx.panel==='vwp'` sigue gobernando la región `vwp` de `overlayMachine` (que solo carga datos con el panel abierto) — el modal se abre/cierra con un `watch` sobre ese mismo valor en la página, y su cierre (botón ✕ o Esc, evento nativo `close` del `<dialog>`) despacha `SELECT_PANEL` con `panel:null`. El deep-link `?panel=vwp` sigue abriendo el modal igual que abría el tab antes.
+    - **`SidePanel` queda con 2 tabs** (Celdas/Tendencia); su `<aside>` ahora solo se muestra si `panel` corresponde a uno de esos dos — evita un panel vacío si `ctx.panel` queda en `'vwp'` mientras el modal está abierto.
+
 ## Qué murió del plan original (y por qué)
 
 | Ítem del plan original | Destino | Motivo |
