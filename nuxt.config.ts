@@ -14,10 +14,11 @@ export default defineNuxtConfig({
       server: {
         allowedHosts: true,
         // worktrees viejos de sesiones de agentes bajo .claude/worktrees traen
-        // su propio node_modules — sin excluirlos, chokidar agota
+        // su propio node_modules, y .nuxt/dist es build output propio de Nuxt
+        // (no código fuente) — sin excluirlos, chokidar agota
         // fs.inotify.max_user_watches (ENOSPC) y el dev server muere
         watch: {
-          ignored: ['**/.claude/**'],
+          ignored: ['**/.claude/**', '**/.nuxt/dist/**'],
         },
       },
     },
