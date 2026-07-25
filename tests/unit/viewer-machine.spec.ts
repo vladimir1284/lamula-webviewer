@@ -2,7 +2,7 @@
 // ni red (decisión 18). Regiones paralelas 'raster' y 'timeline'; el
 // diagrama vive en docs/maquinas-estado.md.
 import type { RasterMeta } from '#shared/contract'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise, waitFor } from 'xstate'
 import type { ViewerInput, ViewerRouteState } from '../../machines/viewer'
 import { viewerMachine } from '../../machines/viewer'
@@ -272,47 +272,73 @@ describe('viewerMachine — SELECT_DAY', () => {
   })
 })
 
-describe('viewerMachine — REFRESH_TIMELINE (botón refrescar)', () => {
-  it('a diferencia de SELECT_DAY, siempre refetchea el mismo día (sin guard de "ya activo")', async () => {
-    const { actor, fetchDay } = boot({
-      initialTimes: [meta(T0)],
-      fetchDay: async () => [meta(T0)],
-    })
-    actor.send({ type: 'REFRESH_TIMELINE' })
-    expect(actor.getSnapshot().matches({ timeline: 'refreshing' })).toBe(true)
-    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
-    expect(fetchDay).toHaveBeenCalledWith({ site: 'AMX', product: 153, day: DAY })
+describe('viewerMachine — checkbox "en vivo" (liveRefresh) y su loop de polling', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('arranca en true por defecto', () => {
+    const { actor } = boot({ initialTimes: [meta(T0)] })
+    expect(actor.getSnapshot().context.liveRefresh).toBe(true)
   })
 
-  it('si estaba en el último frame, salta (replace) al nuevo último tras refrescar', async () => {
-    const { actor, navigate } = boot({
+  it('SET_LIVE_REFRESH togglea el flag directamente', () => {
+    const { actor } = boot({ initialTimes: [meta(T0)] })
+    actor.send({ type: 'SET_LIVE_REFRESH', value: false })
+    expect(actor.getSnapshot().context.liveRefresh).toBe(false)
+    actor.send({ type: 'SET_LIVE_REFRESH', value: true })
+    expect(actor.getSnapshot().context.liveRefresh).toBe(true)
+  })
+
+  it('SELECT_TIME (tocar la barra) apaga liveRefresh', () => {
+    const { actor } = boot({ initialRaster: meta(T0), initialTimes: [meta(T0)] })
+    actor.send({ type: 'SELECT_TIME', time: T1 })
+    expect(actor.getSnapshot().context.liveRefresh).toBe(false)
+  })
+
+  it('con liveRefresh true, cada LIVE_REFRESH_INTERVAL refetchea el día y salta (replace) al nuevo último', async () => {
+    const { actor, navigate, fetchDay } = boot({
       route: routeAt({ time: T0 }),
       initialTimes: [meta(T0)],
       fetchDay: async () => [meta(T0), meta(T2)],
     })
-    actor.send({ type: 'REFRESH_TIMELINE' })
-    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchDay).toHaveBeenCalledWith({ site: 'AMX', product: 153, day: DAY })
     expect(navigate).toHaveBeenCalledWith({ patch: { time: T2 }, mode: 'replace' })
     expect(actor.getSnapshot().context.time).toBe(T2)
+    expect(actor.getSnapshot().matches({ timeline: 'ready' })).toBe(true)
   })
 
-  it('si estaba en medio, conserva la posición tras refrescar (no navega)', async () => {
-    const { actor, navigate } = boot({
-      route: routeAt({ time: T1 }),
-      initialTimes: [meta(T1), meta(T0)],
-      fetchDay: async () => [meta(T1), meta(T0), meta(T2)],
+  it('si no hay vol_time nuevo, no navega', async () => {
+    const { actor, navigate, fetchDay } = boot({
+      route: routeAt({ time: T0 }),
+      initialTimes: [meta(T0)],
+      fetchDay: async () => [meta(T0)],
     })
-    actor.send({ type: 'REFRESH_TIMELINE' })
-    await waitFor(actor, s => s.matches({ timeline: 'ready' }))
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchDay).toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
-    expect(actor.getSnapshot().context.time).toBe(T1)
-    expect(actor.getSnapshot().context.times).toHaveLength(3)
+    expect(actor.getSnapshot().context.time).toBe(T0)
   })
 
-  it('día sin datos tras refrescar: queda empty', async () => {
+  it('con liveRefresh apagado (a mano), el tick no refetchea', async () => {
+    const { actor, fetchDay } = boot({ initialTimes: [meta(T0)], fetchDay: async () => [meta(T0), meta(T2)] })
+    actor.send({ type: 'SET_LIVE_REFRESH', value: false })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchDay).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().matches({ timeline: 'ready' })).toBe(true)
+  })
+
+  it('el loop sigue corriendo tras un tick sin cambios (segundo tick vuelve a refetchear)', async () => {
+    const { fetchDay } = boot({ initialTimes: [meta(T0)], fetchDay: async () => [meta(T0)] })
+    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(fetchDay).toHaveBeenCalledTimes(2)
+  })
+
+  it('día sin datos tras un tick: queda empty', async () => {
     const { actor } = boot({ initialTimes: [meta(T0)], fetchDay: async () => [] })
-    actor.send({ type: 'REFRESH_TIMELINE' })
-    await waitFor(actor, s => s.matches({ timeline: 'empty' }))
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(actor.getSnapshot().matches({ timeline: 'empty' })).toBe(true)
   })
 })
 

@@ -75,8 +75,10 @@ export type ViewerEvent =
   | { type: 'SELECT_SITE', site: string }
   | { type: 'SELECT_PRODUCT', product: number }
   | { type: 'SELECT_DAY', day: string }
-  /** botón refrescar de la barra de tiempo: repide /api/rasters/day para el mismo día */
-  | { type: 'REFRESH_TIMELINE' }
+  /** checkbox "en vivo" de la barra de tiempo — true (default) mantiene un
+   * loop que repide /api/rasters/day y salta siempre al último frame; se
+   * apaga solo al mover el tiempo a mano o arrancar una animación */
+  | { type: 'SET_LIVE_REFRESH', value: boolean }
   | { type: 'SELECT_TIME', time: string }
   | { type: 'STEP', dir: 1 | -1 }
   | { type: 'SET_OPACITY', value: number }
@@ -107,6 +109,8 @@ interface ViewerContext {
   day: string
   times: RasterMeta[]
   timelineError: string | null
+  /** checkbox "en vivo" — ver SET_LIVE_REFRESH */
+  liveRefresh: boolean
   /** ya se confirmó (404) que no hay frame anterior/siguiente en la serie — deshabilita el botón */
   atStart: boolean
   atEnd: boolean
@@ -158,8 +162,11 @@ export interface OverlayQueryParams {
 const dayOf = (iso: string) => iso.slice(0, 10)
 
 const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, never>(
-  ({ event }) => {
+  ({ context, event }) => {
     const { route } = event as Extract<ViewerEvent, { type: 'ROUTE_CHANGED' }>
+    // cambiar de radar/producto es una sesión nueva: el checkbox "en vivo"
+    // vuelve a su default (true) en vez de arrastrar un apagado de la sesión anterior
+    const identityChanged = route.site !== context.site || route.product !== context.product
     return {
       site: route.site,
       product: route.product,
@@ -175,6 +182,7 @@ const assignRoute = assign<ViewerContext, ViewerEvent, undefined, ViewerEvent, n
       sat: route.sat,
       satVariant: route.satVariant,
       satOpacity: route.satOpacity,
+      ...(identityChanged ? { liveRefresh: true } : {}),
     }
   },
 )
@@ -250,6 +258,11 @@ export const viewerMachine = setup({
       && dayOf(route.time ?? context.nowT) === context.day,
     sameDaySelected: ({ context }, day: string) => day === context.day,
   },
+  delays: {
+    // cadencia del loop "en vivo" — /api/rasters/day cachea 30s (max-age),
+    // pollear más seguido solo pegaría contra el edge cache sin datos nuevos
+    LIVE_REFRESH_INTERVAL: 30_000,
+  },
 }).createMachine({
   id: 'viewer',
   context: ({ input }) => ({
@@ -264,6 +277,7 @@ export const viewerMachine = setup({
     day: dayOf(input.route.time ?? input.nowT),
     times: input.initialTimes,
     timelineError: input.initialTimelineError,
+    liveRefresh: true,
     atStart: false,
     atEnd: false,
     opacity: input.route.opacity,
@@ -288,6 +302,9 @@ export const viewerMachine = setup({
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },
+    // toggle manual del checkbox — el auto-apagado por SELECT_TIME/animación
+    // vive en sus respectivos handlers, no acá
+    SET_LIVE_REFRESH: { actions: assign({ liveRefresh: ({ event }) => event.value }) },
     SET_OPACITY: {
       actions: [
         assign({ opacity: ({ event }) => event.value }),
@@ -518,7 +535,9 @@ export const viewerMachine = setup({
     // un test e2e de stepping rápido por teclado.
     SELECT_TIME: {
       actions: [
-        assign({ time: ({ event }) => event.time }),
+        // tocar la barra de tiempo a mano apaga "en vivo" (D-checkbox): el
+        // usuario está mirando un instante específico, el loop no debe pisarlo
+        assign({ time: ({ event }) => event.time, liveRefresh: false }),
         {
           type: 'navigate',
           params: ({ event }) => ({ patch: { time: event.time }, mode: 'replace' as const }),
@@ -753,7 +772,6 @@ export const viewerMachine = setup({
           { guard: { type: 'sameDaySelected', params: ({ event }) => event.day } },
           { target: '.jumping', actions: assign({ day: ({ event }) => event.day }) },
         ],
-        REFRESH_TIMELINE: '.refreshing',
       },
       initial: 'init',
       states: {
@@ -820,14 +838,27 @@ export const viewerMachine = setup({
             },
           },
         },
-        ready: {},
+        // checkbox "en vivo" (default true): mientras estemos acá, un `after`
+        // repite el poll cada LIVE_REFRESH_INTERVAL — reenter:true en ambas
+        // ramas es lo que lo hace un loop (un `after` no reentrante solo
+        // dispara una vez). Con liveRefresh apagado no navega a
+        // 'refreshingTick', solo se reprograma a sí mismo sin hacer nada.
+        ready: {
+          after: {
+            LIVE_REFRESH_INTERVAL: [
+              { guard: ({ context }) => context.liveRefresh, target: 'refreshingTick' },
+              { target: 'ready', reenter: true },
+            ],
+          },
+        },
         empty: {},
         error: {},
-        // botón refrescar: repide fetchDay del MISMO día. Si el usuario
-        // estaba en el último frame, salta al nuevo último (más volúmenes
-        // llegaron); si estaba en medio, conserva su posición — a
-        // diferencia de 'jumping' (DayPicker) que siempre salta al último.
-        refreshing: {
+        // tick del loop "en vivo": repide fetchDay del MISMO día y, si hay un
+        // vol_time nuevo al final, salta ahí (replace) — a diferencia del
+        // viejo botón, siempre sigue al más reciente mientras el checkbox
+        // esté encendido (no conserva posición intermedia: si el usuario
+        // quería ver un instante fijo, ya apagó el checkbox al tocar la barra)
+        refreshingTick: {
           invoke: {
             src: 'fetchDay',
             input: ({ context }) => ({ site: context.site, product: context.product, day: context.day }),
@@ -836,12 +867,12 @@ export const viewerMachine = setup({
                 guard: ({ event }) => event.output.length > 0,
                 target: 'ready',
                 actions: enqueueActions(({ context, event, enqueue }) => {
-                  const wasAtLast = context.times.length > 0 && context.time === context.times.at(-1)!.vol_time
+                  const prevLast = context.times.at(-1)?.vol_time ?? null
+                  const nextLast = event.output.at(-1)!.vol_time
                   enqueue.assign({ times: event.output, timelineError: null })
-                  if (wasAtLast) {
-                    const time = event.output.at(-1)!.vol_time
-                    enqueue.assign({ time })
-                    enqueue({ type: 'navigate', params: { patch: { time }, mode: 'replace' } })
+                  if (nextLast !== prevLast) {
+                    enqueue.assign({ time: nextLast })
+                    enqueue({ type: 'navigate', params: { patch: { time: nextLast }, mode: 'replace' } })
                   }
                 }),
               },

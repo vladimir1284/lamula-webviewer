@@ -15,6 +15,7 @@ const BASE_PROPS = {
   canPrev: true,
   canNext: true,
   playing: false,
+  liveRefresh: true,
 }
 
 describe('TimelineStrip', () => {
@@ -69,12 +70,21 @@ describe('TimelineStrip', () => {
     expect(wrapper.get('[data-testid="anim-play"]').attributes('aria-label')).toBe('Pausar')
   })
 
-  it('emite refresh y menu al clickear sus botones', async () => {
+  it('emite menu al clickear su botón', async () => {
     const wrapper = mount(TimelineStrip, { props: BASE_PROPS })
-    await wrapper.get('[data-testid="timeline-refresh"]').trigger('click')
     await wrapper.get('[data-testid="timeline-menu"]').trigger('click')
-    expect(wrapper.emitted('refresh')).toHaveLength(1)
     expect(wrapper.emitted('menu')).toHaveLength(1)
+  })
+
+  it('el checkbox "en vivo" refleja la prop y emite set-live-refresh al des/marcar', async () => {
+    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, liveRefresh: true } })
+    const checkbox = wrapper.get('[data-testid="live-refresh-toggle"] input')
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+    await checkbox.setValue(false)
+    expect(wrapper.emitted('set-live-refresh')?.at(-1)).toEqual([false])
+
+    await wrapper.setProps({ liveRefresh: false })
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
   })
 
   it('el selector de velocidad solo aparece mientras reproduce y emite el valor clicado', async () => {

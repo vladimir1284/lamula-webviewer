@@ -29,13 +29,14 @@ const props = withDefaults(defineProps<{
   playing: boolean
   speed?: number
   speeds?: number[]
+  liveRefresh: boolean
 }>(), { clock: 'utc', speed: 1, speeds: () => [0.5, 1, 2] })
 
 const emit = defineEmits<{
   select: [iso: string]
   step: [dir: 1 | -1]
   toggle: []
-  refresh: []
+  'set-live-refresh': [value: boolean]
   menu: []
   speed: [value: number]
 }>()
@@ -210,16 +211,21 @@ const tickLabels = computed(() => {
          hacia arriba respecto a los botones redondos). -->
     <div class="flex items-center" style="overflow: visible;">
       <div class="flex items-center gap-1">
-        <button
-          type="button"
-          data-testid="timeline-refresh"
-          aria-label="Refrescar"
-          class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow"
-          :style="{ background: SLATE }"
-          @click="emit('refresh')"
+        <label
+          data-testid="live-refresh-toggle"
+          class="grid h-11 w-11 flex-none cursor-pointer place-items-center rounded-full text-lg text-white shadow"
+          :style="{ background: liveRefresh ? PRIMARY_BLUE : SLATE }"
+          :title="liveRefresh ? 'En vivo: siguiendo el dato más reciente' : 'En vivo apagado'"
         >
-          ⟳
-        </button>
+          <input
+            type="checkbox"
+            class="sr-only"
+            :checked="liveRefresh"
+            aria-label="En vivo"
+            @change="emit('set-live-refresh', ($event.target as HTMLInputElement).checked)"
+          >
+          <span aria-hidden="true">{{ liveRefresh ? '●' : '○' }}</span>
+        </label>
         <button
           type="button"
           data-testid="timeline-menu"

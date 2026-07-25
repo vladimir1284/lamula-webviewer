@@ -375,6 +375,9 @@ const activeFrameIndex = computed(() => {
 
 function engageAnimation() {
   animationEngaged.value = true
+  // arrancar una animación apaga el checkbox "en vivo" — el loop de refresco
+  // no debe pisar el frame que la animación está reproduciendo
+  send({ type: 'SET_LIVE_REFRESH', value: false })
   if (animSnapshot.value.matches('paused')) {
     animSend({ type: 'PLAY' })
   } else {
@@ -1177,11 +1180,12 @@ function onSatOpacityInput(event: Event) {
               :clock="ctx.clock"
               :playing="animPlaying"
               :speed="animSpeed"
+              :live-refresh="ctx.liveRefresh"
               @select="onTimelineSelect"
               @step="onTimelineStep"
               @toggle="onToggleAnimation"
               @speed="onSpeedChange"
-              @refresh="send({ type: 'REFRESH_TIMELINE' })"
+              @set-live-refresh="value => send({ type: 'SET_LIVE_REFRESH', value })"
               @menu="timelineMenu?.open()"
             />
           </div>
