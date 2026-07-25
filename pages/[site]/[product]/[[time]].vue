@@ -718,7 +718,8 @@ function onSatOpacityInput(event: Event) {
 
 <template>
   <div class="flex h-screen flex-col bg-slate-900 text-slate-100">
-    <header class="flex items-baseline gap-4 border-b border-slate-700 px-4 py-2">
+    <header class="flex items-center gap-2.5 border-b border-slate-700 px-4 py-2">
+      <AppLogo :size="20" class="shrink-0 text-teal-400" />
       <h1 class="text-lg font-bold">LAMULA WebViewer</h1>
       <p v-if="radar" class="text-sm text-slate-400">
         <span class="font-mono">{{ radar.icao ?? radar.site_id }}</span>

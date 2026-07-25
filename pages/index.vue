@@ -33,7 +33,8 @@ onMounted(() => {
 
 <template>
   <div class="flex h-screen flex-col bg-slate-900 text-slate-100">
-    <header class="flex items-baseline gap-4 border-b border-slate-700 px-4 py-2">
+    <header class="flex items-center gap-2.5 border-b border-slate-700 px-4 py-2">
+      <AppLogo :size="22" class="text-teal-400" />
       <h1 class="text-lg font-bold">LAMULA WebViewer</h1>
     </header>
     <main class="flex flex-1 items-center justify-center">
