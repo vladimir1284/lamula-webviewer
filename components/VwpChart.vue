@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Grid altura × tiempo de barbas WMO del VWP (F4), extraído de VwpPanel
-// (D35 — ahora vive en el tab "Gráfico" de VwpModal). ≤12 perfiles del día
-// hasta el frame, columna del volumen casado resaltada. SVG propio (D25).
+// (D35/D36 — ahora vive en el sub-tab "Gráfico" del tab VWP de DataModal).
+// ≤12 perfiles del día hasta el frame, columna del volumen casado
+// resaltada. SVG propio (D25).
 // Color de barba por calidad: rms_kt alto → ámbar, null → gris.
 // Un poco más espacioso que la versión del aside (D35): el ancho ya escala
 // con window.length vía xOf, así que en el modal (más ancho que los 384px

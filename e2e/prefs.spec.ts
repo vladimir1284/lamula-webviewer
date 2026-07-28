@@ -119,6 +119,8 @@ test('migración: un v2 guardado (pre-smooth) arranca con smooth off y el primer
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
+  // D36: smooth-toggle se mudó al menú de capas (antes siempre visible en el aside)
+  await page.getByTestId('layers-menu-toggle').click()
   await expect(page.getByTestId('smooth-toggle')).not.toBeChecked()
 
   await page.getByTestId('smooth-toggle').click() // único click (toggle con efecto)
@@ -144,6 +146,8 @@ test('migración: un v3 guardado (pre-smoothRadius) arranca con radio 1 y el sel
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
+  // D36: smooth-radius-select se mudó al menú de capas
+  await page.getByTestId('layers-menu-toggle').click()
   const select = page.getByTestId('smooth-radius-select')
   await expect(select).toHaveValue('1')
 
@@ -163,6 +167,8 @@ test('selector de mapa base: refleja ?base= en la URL y persiste en prefs', asyn
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
+  // D36: base-select se mudó al menú de capas
+  await page.getByTestId('layers-menu-toggle').click()
   // <select>: acción idempotente — reintento seguro ante la carrera de hidratación
   await expect(async () => {
     await page.getByTestId('base-select').selectOption('carto-voyager')

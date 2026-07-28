@@ -2,11 +2,11 @@
 // Barra de tiempo flotante estilo nowCOAST (maqueta de referencia): sin
 // panel contenedor, transparente sobre el mapa — por eso los botones son
 // círculos semi-opacos y las etiquetas llevan halo blanco (únicas técnicas
-// que garantizan legibilidad sobre cualquier color de fondo). Reemplaza
-// TimelineStrip+AnimationControls como un único bloque (refrescar/menú —
-// track — anterior/play/siguiente), con el selector de velocidad flotando
-// aparte por encima. Paleta de 3 colores nada más (ver maqueta): azul
-// primario, gris pizarra (controles inactivos) y gris medio (track futuro).
+// que garantizan legibilidad sobre cualquier color de fondo). Reproducción
+// (prev/play/next) — track — ☰ (D36: reordenado, play primero y agrandado;
+// la velocidad vive solo en TimelineMenu, dejó de duplicarse acá como popup
+// flotante). Paleta de 3 colores nada más (ver maqueta): azul primario,
+// gris pizarra (controles inactivos) y gris medio (track futuro).
 import { computed, ref } from 'vue'
 import { naiveUtcToEpochMs } from '#shared/contract'
 import type { ClockPref } from '../utils/time-display'
@@ -27,10 +27,8 @@ const props = withDefaults(defineProps<{
   canNext: boolean
   clock?: ClockPref
   playing: boolean
-  speed?: number
-  speeds?: number[]
   liveRefresh: boolean
-}>(), { clock: 'utc', speed: 1, speeds: () => [0.5, 1, 2] })
+}>(), { clock: 'utc' })
 
 const emit = defineEmits<{
   select: [iso: string]
@@ -38,7 +36,6 @@ const emit = defineEmits<{
   toggle: []
   'set-live-refresh': [value: boolean]
   menu: []
-  speed: [value: number]
 }>()
 
 const range = computed(() => {
@@ -204,17 +201,60 @@ const tickLabels = computed(() => {
 
 <template>
   <div data-testid="timeline" class="flex flex-col gap-0.2" style="overflow: visible;">
-    <!-- fila de controles: todos botones h-11 + el track (línea fina) como
-         único elemento sin esa altura — items-center los centra a TODOS
-         contra el mismo eje, en vez de contra la columna track+etiquetas+
-         buffer (que antes vivía acá y corría el centro visual del track
-         hacia arriba respecto a los botones redondos). -->
+    <!-- fila de controles (D36): reproducción a la izquierda (play grande +
+         prev/next pegados, orden de reproductor de medios), track al medio,
+         ☰ solo a la derecha — "en vivo" ya no es un botón más del grupo
+         izquierdo: es una pastilla que flota SOBRE el track, en la posición
+         del handle (ver más abajo), y el selector de velocidad flotante se
+         eliminó (quedaba redundante con el fieldset "Velocidad" de
+         TimelineMenu, que ya cubre lo mismo con menos protagonismo visual).
+         items-center centra todo contra el mismo eje que el track. -->
     <div class="flex items-center" style="overflow: visible;">
       <div class="flex items-center gap-1">
+        <button
+          type="button"
+          data-testid="timeline-prev"
+          :disabled="!canPrev"
+          aria-label="Volumen anterior"
+          class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
+          :style="{ background: SLATE }"
+          @click="emit('step', -1)"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          data-testid="anim-play"
+          :aria-label="playing ? 'Pausar' : 'Reproducir'"
+          class="grid h-14 w-14 flex-none place-items-center rounded-full shadow"
+          :style="{ background: SLATE }"
+          @click="emit('toggle')"
+        >
+          <svg v-if="playing" viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+          <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+        </button>
+        <button
+          type="button"
+          data-testid="timeline-next"
+          :disabled="!canNext"
+          aria-label="Volumen siguiente"
+          class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
+          :style="{ background: SLATE }"
+          @click="emit('step', 1)"
+        >
+          ›
+        </button>
+      </div>
+
+      <!-- wrapper del track: overflow visible porque el tooltip de scrub se
+           sale hacia arriba y la pastilla "en vivo" flota sobre el handle.
+           ml-3: separación fija respecto al grupo de reproducción. -->
+      <div class="relative min-w-0 flex-1 ml-3" style="overflow: visible;">
         <label
           data-testid="live-refresh-toggle"
-          class="grid h-11 w-11 flex-none cursor-pointer place-items-center rounded-full text-lg text-white shadow"
-          :style="{ background: liveRefresh ? PRIMARY_BLUE : SLATE }"
+          class="absolute flex -translate-x-1/2 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold text-white shadow"
+          style="bottom: 100%; margin-bottom: 6px;"
+          :style="{ left: `${handlePct}%`, background: liveRefresh ? PRIMARY_BLUE : SLATE }"
           :title="liveRefresh ? 'En vivo: siguiendo el dato más reciente' : 'En vivo apagado'"
         >
           <input
@@ -225,44 +265,8 @@ const tickLabels = computed(() => {
             @change="emit('set-live-refresh', ($event.target as HTMLInputElement).checked)"
           >
           <span aria-hidden="true">{{ liveRefresh ? '●' : '○' }}</span>
+          <span>EN VIVO</span>
         </label>
-        <button
-          type="button"
-          data-testid="timeline-menu"
-          aria-label="Menú"
-          class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow"
-          :style="{ background: SLATE }"
-          @click="emit('menu')"
-        >
-          ☰
-        </button>
-      </div>
-
-      <!-- wrapper del track: el selector de velocidad flota alineado a SU
-           borde izquierdo (no al de refrescar/menú) — decisión explícita de
-           la maqueta. overflow visible: el tooltip se sale del track hacia
-           arriba y el selector de velocidad flota ~64px por encima. ml-3:
-           separación fija respecto al grupo refrescar/menú (gap-1 entre
-           ellos, más juntos). -->
-      <div class="relative min-w-0 flex-1 ml-3" style="overflow: visible;">
-        <div
-          v-if="playing"
-          class="absolute flex items-center gap-2"
-          style="bottom: 100%; margin-bottom: 64px; left: 0;"
-        >
-          <button
-            v-for="s in speeds"
-            :key="s"
-            type="button"
-            :data-testid="`anim-speed-${s}`"
-            class="grid h-11 w-11 place-items-center rounded-full text-sm font-bold text-white shadow"
-            :style="{ background: s === speed ? PRIMARY_BLUE : SLATE }"
-            :aria-pressed="s === speed"
-            @click="emit('speed', s)"
-          >
-            {{ s }}x
-          </button>
-        </div>
 
         <div
           ref="trackEl"
@@ -328,50 +332,26 @@ const tickLabels = computed(() => {
         </div>
       </div>
 
-      <!-- ml-5: más separación del track que la del grupo refrescar/menú
-           (gap-1 entre prev/play/next, más juntos entre sí) -->
-      <div class="flex items-center gap-1 ml-5">
+      <!-- ml-5: más separación del track que la del grupo de reproducción -->
+      <div class="ml-5 flex items-center">
         <button
           type="button"
-          data-testid="timeline-prev"
-          :disabled="!canPrev"
-          aria-label="Volumen anterior"
-          class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow disabled:opacity-30"
+          data-testid="timeline-menu"
+          aria-label="Menú"
+          class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow"
           :style="{ background: SLATE }"
-          @click="emit('step', -1)"
+          @click="emit('menu')"
         >
-          ‹
-        </button>
-        <button
-          type="button"
-          data-testid="anim-play"
-          :aria-label="playing ? 'Pausar' : 'Reproducir'"
-          class="grid h-11 w-11 flex-none place-items-center rounded-full shadow"
-          :style="{ background: SLATE }"
-          @click="emit('toggle')"
-        >
-          <svg v-if="playing" viewBox="0 0 24 24" width="18" height="18" fill="white" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="white" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-        </button>
-        <button
-          type="button"
-          data-testid="timeline-next"
-          :disabled="!canNext"
-          aria-label="Volumen siguiente"
-          class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow disabled:opacity-30"
-          :style="{ background: SLATE }"
-          @click="emit('step', 1)"
-        >
-          ›
+          ☰
         </button>
       </div>
     </div>
 
     <!-- etiquetas + buffer bajo el track: fila propia (no comparte cross-axis
          con los botones, ver arriba) con padding igual al ancho de los
-         botones+gaps que flanquean el track arriba, para no meterse debajo
-         de refrescar/menú/prev/play/next. -->
-    <div :style="{ paddingLeft: 'calc(2 * 2.75rem + 0.25rem + 0.75rem)', paddingRight: 'calc(3 * 2.75rem + 2 * 0.25rem + 1.25rem)' }">
+         botones+gaps que flanquean el track arriba (prev+play+next a la
+         izquierda, ☰ a la derecha), para no meterse debajo de ellos. -->
+    <div :style="{ paddingLeft: 'calc(2 * 2.25rem + 3.5rem + 2 * 0.25rem + 0.75rem)', paddingRight: 'calc(2.75rem + 1.25rem)' }">
       <div class="relative h-8">
         <span
           v-for="label in tickLabels"

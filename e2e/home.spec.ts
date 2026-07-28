@@ -10,9 +10,17 @@ const VIEWER_URL_RE = /\/[A-Z0-9]{3}\/\d+\/\d{8}T\d{6}$/
 // Chromium para la misma IANA tz)
 const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 
+// D36: el <header>/<h1> fijo desapareció (mapa a pantalla completa); el
+// chip flotante de radar/producto es lo primero que renderiza el shell.
+async function gotoHydrated(page: import('@playwright/test').Page, url: string) {
+  await page.goto(url)
+  await page.waitForLoadState('networkidle')
+}
+
 test('el shell renderiza servido por el runtime de Pages', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'LAMULA WebViewer' })).toBeVisible()
+  await expect(page).toHaveTitle(/LAMULA WebViewer/)
+  await expect(page.getByTestId('radar-chip-toggle')).toBeVisible()
 })
 
 test('/ redirige al viewer y materializa el vol_time resuelto en la URL', async ({ page }) => {
@@ -25,7 +33,11 @@ test('/ redirige al viewer y materializa el vol_time resuelto en la URL', async 
 })
 
 test('el selector de radares se puebla desde el DAL (modo fixture)', async ({ page }) => {
-  await page.goto('/')
+  await gotoHydrated(page, '/')
+  // abrir el chip es un toggle con efecto real (D36) — un solo click tras
+  // networkidle, no reintentos (mismo hallazgo que el <select> de abajo,
+  // pero acá reintentar podría cerrar el chip si el primer click sí pegó)
+  await page.getByTestId('radar-chip-toggle').click()
   const select = page.getByTestId('radar-select')
   await expect(select).toBeVisible()
   for (const radar of radars) {
@@ -57,7 +69,9 @@ test('deep link reproduce el frame exacto (puerta M3)', async ({ page }) => {
 test('day picker: ventana de 72h, día activo marcado, día vacío no navega', async ({ page }) => {
   const t = series.times[1]
   const url = `/${series.site}/${series.product}/${isoToPath(t)}`
-  await page.goto(url)
+  await gotoHydrated(page, url)
+  // D36: el DayPicker se mudó al menú de capas (antes siempre visible en el aside)
+  await page.getByTestId('layers-menu-toggle').click()
 
   const active = page.getByTestId(`day-option-${series.day}`)
   await expect(active).toHaveAttribute('aria-pressed', 'true')
@@ -126,8 +140,13 @@ test('radar sin datos: degradación visible, sin errores de consola (puerta M3)'
 
 test('cambiar radar navega con push (URL manda)', async ({ page }) => {
   const t = series.times[1]
-  await page.goto(`/${series.site}/${series.product}/${isoToPath(t)}`)
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
   const otherSite = radars.find(r => r.site_id !== series.site)!.site_id
+  // D36: el <select> vive detrás del toggle del chip — abrirlo es un click
+  // aparte (toggle con efecto, un solo intento tras networkidle) ANTES del
+  // toPass de abajo; reintentar el toggle dentro del toPass lo cerraría de
+  // nuevo si el primer click sí pegó.
+  await page.getByTestId('radar-chip-toggle').click()
   // La app SSR es una página async (varios useFetch top-level): justo tras
   // el goto, la hidratación puede seguir en curso y el 'change' nativo
   // llega antes de que Vue adjunte su listener (se pierde sin error, y la

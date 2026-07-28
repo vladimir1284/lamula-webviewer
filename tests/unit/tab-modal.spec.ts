@@ -1,7 +1,7 @@
-// TabModal (D35): modal genérico con tabs, reusado por VwpModal hoy y
-// pensado para la tendencia de celda seleccionada. Mismo patrón de test que
-// prefs-dialog.spec.ts — happy-dom no implementa el top-layer real, así que
-// el contenido se testea con el atributo `open` puesto a mano.
+// TabModal (D35/D36): modal genérico con tabs, reusado por DataModal (tabs
+// Celdas/Tendencia/VWP). Mismo patrón de test que prefs-dialog.spec.ts —
+// happy-dom no implementa el top-layer real, así que el contenido se
+// testea con el atributo `open` puesto a mano.
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import TabModal from '~/components/TabModal.vue'
@@ -45,5 +45,24 @@ describe('TabModal', () => {
     const closeSpy = vi.spyOn(w.get('dialog').element as HTMLDialogElement, 'close')
     await w.get('[data-testid=test-modal-close]').trigger('click')
     expect(closeSpy).toHaveBeenCalled()
+  })
+
+  it('active controlado (D36): open() respeta el valor bindeado, no resetea a tabs[0]', () => {
+    const w = mount(TabModal, {
+      props: { title: 'Título', tabs: TABS, testidPrefix: 'test-modal', active: 'b' },
+      slots: { a: '<p data-testid=content-a>contenido A</p>', b: '<p data-testid=content-b>contenido B</p>' },
+    })
+    ;(w.vm as { open: () => void }).open()
+    expect(w.find('[data-testid=content-a]').exists()).toBe(false)
+    expect(w.find('[data-testid=content-b]').exists()).toBe(true)
+  })
+
+  it('active controlado: click en un tab emite update:active en vez de cambiar solo internamente', async () => {
+    const w = mount(TabModal, {
+      props: { title: 'Título', tabs: TABS, testidPrefix: 'test-modal', active: 'a' },
+      slots: { a: '<p data-testid=content-a>contenido A</p>', b: '<p data-testid=content-b>contenido B</p>' },
+    })
+    await w.get('[data-testid=test-modal-tab-b]').trigger('click')
+    expect(w.emitted('update:active')?.at(-1)).toEqual(['b'])
   })
 })

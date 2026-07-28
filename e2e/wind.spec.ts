@@ -73,6 +73,8 @@ async function paintedPixels(page: Page): Promise<number> {
 test('deep link ?layers=wind: toggle marcado, ciclo GFS visible y partículas pintando', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined.raster, 'base=off&layers=wind'))
 
+  // D36: layer-toggle-wind/wind-info se mudaron al menú de capas
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=layer-toggle-wind]')).toBeChecked()
   const cycleH = joined.wind.cycle_time.slice(11, 13)
   const fff = String(joined.wind.forecast_hour).padStart(3, '0')
@@ -88,6 +90,7 @@ test('deep link ?layers=wind: toggle marcado, ciclo GFS visible y partículas pi
 test('toggle: activa → ?layers=wind y pinta; desactiva → URL limpia y canvas vacío', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined.raster, 'base=off'))
 
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await page.locator('[data-testid=layer-toggle-wind]').click()
   await expect(page).toHaveURL(/layers=wind/)
   await expect(page).toHaveURL(new RegExp(isoToPath(joined.raster.vol_time))) // path intacto
@@ -104,6 +107,7 @@ test('frame a >1 h de todo valid_time: capa limpia y mensaje explícito (D24)', 
   test.skip(stale === null, 'las fixtures no traen un site con viento fuera de tolerancia')
   await gotoHydrated(page, viewerUrl(stale!, 'base=off&layers=wind'))
 
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=wind-info]'))
     .toHaveText('Sin dato de viento para este frame.')
   await expect.poll(() => paintedPixels(page), { timeout: 5_000 }).toBe(0)
@@ -111,6 +115,8 @@ test('frame a >1 h de todo valid_time: capa limpia y mensaje explícito (D24)', 
 
 test('viento solo no arrastra fenómenos: sin tabla ni markers de celdas', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined.raster, 'base=off&layers=wind'))
-  await expect(page.locator('[data-testid=side-panel]')).toHaveCount(0)
+  // D36: SidePanel se reemplazó por DataModal (native <dialog>, siempre en
+  // el DOM pero cerrado sin ?panel=)
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
   await expect(page.locator('[data-testid^=cell-row-]')).toHaveCount(0)
 })

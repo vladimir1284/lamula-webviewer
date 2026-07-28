@@ -87,17 +87,9 @@ describe('TimelineStrip', () => {
     expect((checkbox.element as HTMLInputElement).checked).toBe(false)
   })
 
-  it('el selector de velocidad solo aparece mientras reproduce y emite el valor clicado', async () => {
-    const idle = mount(TimelineStrip, { props: BASE_PROPS })
-    expect(idle.find('[data-testid="anim-speed-2"]').exists()).toBe(false)
-
-    const paused = mount(TimelineStrip, { props: { ...BASE_PROPS, playing: false, speed: 1 } })
-    expect(paused.find('[data-testid="anim-speed-2"]').exists()).toBe(false)
-
-    const wrapper = mount(TimelineStrip, { props: { ...BASE_PROPS, playing: true, speed: 1 } })
-    const btn2x = wrapper.get('[data-testid="anim-speed-2"]')
-    expect(btn2x.attributes('aria-pressed')).toBe('false')
-    await btn2x.trigger('click')
-    expect(wrapper.emitted('speed')?.[0]).toEqual([2])
-  })
+  // El popup flotante de velocidad se eliminó (D36): quedaba redundante con
+  // el fieldset "Velocidad" de TimelineMenu — esa selección se cubre ahora
+  // en tests/unit/timeline-menu.spec.ts. "en vivo" ahora es una pastilla
+  // sobre el track en vez de un botón más del grupo izquierdo — cubierto
+  // arriba.
 })

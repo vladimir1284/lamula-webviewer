@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { BaseMapId } from '#shared/basemaps'
-import { BASE_MAP_IDS, BASE_MAP_LABELS } from '#shared/basemaps'
 import type {
   LightningBucketFile,
   LightningBucketMeta,
@@ -14,12 +13,12 @@ import type {
   WindGridMeta,
   WindLevel,
 } from '#shared/contract'
-import { WIND_LEVEL_LABELS, WIND_LEVELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
+import { WIND_LEVEL_LABELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
 import { overlayMachine } from '../../../machines/overlay'
-import type { OverlayLayerId } from '../../../machines/overlay'
+import type { OverlayLayerId, PanelId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 import { formatFull } from '../../../utils/time-display'
@@ -53,7 +52,7 @@ definePageMeta({
 const route = useRoute()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
-const vwpModal = ref<{ open: () => void, close: () => void }>()
+const dataModal = ref<{ open: () => void, close: () => void }>()
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -214,20 +213,26 @@ onMounted(() => {
 
 const ctx = computed(() => snapshot.value.context)
 
-// VWP (D35): el modal no es parte de la URL en sí, pero se abre/cierra en
-// función de ctx.panel — mismo contrato que el tab del rail de antes. El
-// watch cubre clicks en el botón del menú izquierdo y el cierre (✕/Esc,
-// que dispara onVwpModalClose → SELECT_PANEL null); onMounted cubre el
-// deep-link ?panel=vwp (el watch por sí solo no ve el valor inicial).
+// DataModal (D36): no es parte de la URL en sí, pero se abre/cierra en
+// función de ctx.panel (cells|trend|vwp|null) — mismo contrato que el rail
+// derecho + el modal VWP de antes, ahora consolidados en un solo modal con
+// tabs. El watch cubre clicks en el menú de capas y el cierre (✕/Esc, que
+// dispara onDataModalClose → SELECT_PANEL null); onMounted cubre el
+// deep-link ?panel=cells|trend|vwp (el watch por sí solo no ve el valor
+// inicial). Cambiar de tab CON el modal abierto no pasa por este watch —
+// DataModal emite update:panel directo (ver onDataModalUpdatePanel).
 onMounted(() => {
-  if (ctx.value.panel === 'vwp') vwpModal.value?.open()
+  if (ctx.value.panel !== null) dataModal.value?.open()
 })
 watch(() => ctx.value.panel, (p) => {
-  if (p === 'vwp') vwpModal.value?.open()
-  else vwpModal.value?.close()
+  if (p !== null) dataModal.value?.open()
+  else dataModal.value?.close()
 })
-function onVwpModalClose() {
-  if (ctx.value.panel === 'vwp') send({ type: 'SELECT_PANEL', panel: null })
+function onDataModalClose() {
+  if (ctx.value.panel !== null) send({ type: 'SELECT_PANEL', panel: null })
+}
+function onDataModalUpdatePanel(panel: PanelId) {
+  send({ type: 'SELECT_PANEL', panel })
 }
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
 const rasterProducts = computed(() => ctx.value.products.filter(p => p.kind === 'raster'))
@@ -717,26 +722,7 @@ function onSatOpacityInput(event: Event) {
 </script>
 
 <template>
-  <div class="flex h-screen flex-col bg-slate-900 text-slate-100">
-    <header class="flex items-center gap-2.5 border-b border-slate-700 px-4 py-2">
-      <AppLogo :size="20" class="shrink-0 text-teal-400" />
-      <h1 class="text-lg font-bold">LAMULA WebViewer</h1>
-      <p v-if="radar" class="text-sm text-slate-400">
-        <span class="font-mono">{{ radar.icao ?? radar.site_id }}</span>
-        <FreshnessBadge :last-seen-at="radar.last_seen_at" class="ml-2" />
-      </p>
-      <!-- leading-none + sin padding vertical: no debe crecer el header — el
-           mapa se encogería y los goldens comparan su render píxel a píxel -->
-      <button
-        data-testid="prefs-open"
-        aria-label="Preferencias"
-        class="ml-auto self-center rounded px-2 leading-none text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-        @click="prefsDialog?.open()"
-      >
-        ⚙
-      </button>
-    </header>
-
+  <div class="relative h-screen w-screen overflow-hidden bg-slate-900 text-slate-100">
     <PrefsDialog
       ref="prefsDialog"
       :coverage="ctx.coverage"
@@ -753,470 +739,195 @@ function onSatOpacityInput(event: Event) {
       @speed="onSpeedChange"
     />
 
-    <VwpModal
-      ref="vwpModal"
-      :profiles="overlayCtx.vwpProfiles"
-      :window="overlayCtx.vwpWindow"
-      :joined="overlayCtx.vwpJoined"
-      :error="overlayCtx.vwpError"
-      :empty="overlaySnapshot.matches({ vwp: 'empty' })"
+    <DataModal
+      ref="dataModal"
+      :panel="ctx.panel"
+      :phenomena="overlayCtx.phenomena"
+      :joined="overlayCtx.joined"
+      :selected-cell="ctx.cell"
+      :past-cell-ids="ctx.pastCells"
+      :future-cell-ids="ctx.futureCells"
+      :series="overlayCtx.series"
+      :series-error="overlayCtx.seriesError"
+      :vwp-profiles="overlayCtx.vwpProfiles"
+      :vwp-window="overlayCtx.vwpWindow"
+      :vwp-joined="overlayCtx.vwpJoined"
+      :vwp-error="overlayCtx.vwpError"
+      :vwp-empty="overlaySnapshot.matches({ vwp: 'empty' })"
       :units="ctx.units"
       :clock="ctx.clock"
-      @close="onVwpModalClose"
+      @close="onDataModalClose"
+      @update:panel="onDataModalUpdatePanel"
+      @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
+      @toggle-past-track="onToggleCellTrack($event, 'past')"
+      @toggle-future-track="onToggleCellTrack($event, 'future')"
     />
 
-    <div class="flex min-h-0 flex-1">
-      <aside class="w-80 shrink-0 space-y-4 overflow-y-auto border-r border-slate-700 p-4">
-        <p
-          v-if="radarsError"
-          data-testid="radars-error"
-          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
-        >
-          D1 no disponible: {{ radarsError.statusMessage ?? radarsError.message }}
+    <ClientOnly>
+      <RadarMap
+        v-if="radar"
+        :radar="radar"
+        :raster="raster"
+        :frames="animFrames"
+        :active-frame="activeFrameIndex"
+        :anim-playing="animPlaying"
+        :product-def="productDef"
+        :opacity="ctx.opacity"
+        :base-map="ctx.base"
+        :show-coverage="ctx.coverage"
+        :phenomena="overlayPhenomena"
+        :selected-cell="ctx.cell"
+        :show-past-all="ctx.layers.includes('trackPast')"
+        :show-future-all="ctx.layers.includes('trackFuture')"
+        :past-cell-ids="ctx.pastCells"
+        :future-cell-ids="ctx.futureCells"
+        :sat-enabled="ctx.sat"
+        :sat-variant="ctx.satVariant"
+        :sat-opacity="ctx.satOpacity"
+        :wind-grid="windGridShown"
+        :lightning-strikes="lightningStrikesShown"
+        :smooth="ctx.smooth"
+        :smooth-radius="ctx.smoothRadius"
+        @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
+        @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
+        @raster-error="send({ type: 'COG_ERROR', message: $event })"
+        @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"
+        @frame-error="(i, message) => animSend({ type: 'FRAME_FAILED', index: i, message })"
+        @move-end="animSend({ type: 'MOVE_END' })"
+      />
+    </ClientOnly>
+
+    <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
+         + el primer bloque del aside izquierdo -->
+    <RadarProductChip
+      :radars="ctx.radars"
+      :site="ctx.site"
+      :raster-products="rasterProducts"
+      :product="ctx.product"
+      :product-def="productDef"
+      :radar="radar"
+      :radars-error="radarsError"
+      :raster-fetch-error="rasterFetchError"
+      :raster-empty="rasterEmpty"
+      :raster="raster"
+      :vol-time-label="volTimeLabel"
+      :cog-error="ctx.cogError"
+      @select-site="onSelectSite"
+      @select-product="onSelectProduct"
+    />
+
+    <!-- todo lo que se dibuja ENCIMA del mapa (D36): reemplaza el resto del
+         aside izquierdo + el botón VWP + el rail derecho -->
+    <LayersMenu
+      :base="ctx.base"
+      :has-palette="!!productDef"
+      :opacity="ctx.opacity"
+      :smooth="ctx.smooth"
+      :smooth-radius="ctx.smoothRadius"
+      :animation-engaged="animationEngaged"
+      :sat="ctx.sat"
+      :sat-variant="ctx.satVariant"
+      :sat-opacity="ctx.satOpacity"
+      :sat-time-label="satTimeLabel"
+      :layers="ctx.layers"
+      :wind-level="ctx.windLevel"
+      :wind-info="windInfo"
+      :lightning-info="lightningInfo"
+      :overlay-join-info="overlayJoinInfo"
+      :available-days="availableDays"
+      :day="ctx.day"
+      @select-base="onSelectBase"
+      @opacity-input="onOpacityInput"
+      @toggle-smooth="onToggleSmooth"
+      @select-smooth-radius="onSelectSmoothRadius"
+      @toggle-satellite="onToggleSatellite"
+      @select-sat-variant="onSelectSatVariant"
+      @sat-opacity-input="onSatOpacityInput"
+      @toggle-layer="onToggleLayer"
+      @select-wind-level="onSelectWindLevel"
+      @select-day="onSelectDay"
+      @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
+    />
+
+    <!-- ⚙ preferencias: junto al menú de capas, ya no vive en un header fijo -->
+    <button
+      data-testid="prefs-open"
+      aria-label="Preferencias"
+      class="pointer-events-auto absolute right-[9.5rem] top-4 z-20 grid h-10 w-10 place-items-center rounded-lg border border-slate-700 bg-slate-900/95 text-slate-400 shadow-lg hover:text-slate-100"
+      @click="prefsDialog?.open()"
+    >
+      ⚙
+    </button>
+
+    <!-- leyenda + cuadro de puntero, flotantes esquina inferior derecha
+         (D36): antes vivían en el aside izquierdo. Oculto bajo md: en una
+         pantalla angosta no hay lugar junto al timebar sin solaparse — la
+         variante móvil compacta (leyenda inline en el timebar, como
+         mobile.png) queda pendiente; por ahora en mobile simplemente no se
+         muestra, el timebar usa el ancho completo. -->
+    <div
+      v-if="productDef"
+      class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 flex-col items-stretch gap-2 md:flex"
+    >
+      <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-xs text-slate-400 shadow-lg">
+        <p>
+          Valor bajo cursor:
+          <span data-testid="cursor-value" class="block font-mono text-sm text-slate-100">
+            {{ cursorLabel ?? '—' }}
+          </span>
         </p>
-
-        <label class="block text-sm">
-          <span class="mb-1 block text-slate-400">Radar</span>
-          <select
-            :value="ctx.site"
-            data-testid="radar-select"
-            class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-            @change="onSelectSite"
-          >
-            <option v-for="r in ctx.radars" :key="r.site_id" :value="r.site_id">
-              {{ r.icao ?? r.site_id }}
-            </option>
-          </select>
-        </label>
-
-        <label class="block text-sm">
-          <span class="mb-1 block text-slate-400">Producto</span>
-          <select
-            :value="String(ctx.product)"
-            data-testid="product-select"
-            class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-            @change="onSelectProduct"
-          >
-            <option v-for="p in rasterProducts" :key="p.code" :value="String(p.code)">
-              {{ rasterProductDef(p.code)?.name ?? p.mnemonic }} ({{ p.mnemonic }})
-            </option>
-          </select>
-        </label>
-
-        <label class="block text-sm">
-          <span class="mb-1 block text-slate-400">Mapa base</span>
-          <!-- sin opción 'off': apagar la base es cosa de e2e/goldens (?base=off),
-               no una elección de usuario; con base=off el select muestra el default -->
-          <select
-            :value="ctx.base === 'off' ? 'osm' : ctx.base"
-            data-testid="base-select"
-            class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-            @change="onSelectBase"
-          >
-            <option v-for="id in BASE_MAP_IDS" :key="id" :value="id">
-              {{ BASE_MAP_LABELS[id] }}
-            </option>
-          </select>
-        </label>
-
-        <p
-          v-if="!productDef"
-          data-testid="product-no-palette"
-          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
-        >
-          Producto sin paleta en el catálogo del viewer.
+        <p class="mt-1">
+          Lat/lon:
+          <span data-testid="cursor-latlon" class="block font-mono text-sm text-slate-100">
+            {{ cursorLatLonLabel ?? '—' }}
+          </span>
         </p>
+      </div>
+      <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 shadow-lg">
+        <MapLegend :palette="productDef.palette" :units="ctx.units" />
+      </div>
+    </div>
 
-        <template v-if="productDef">
-          <MapLegend :palette="productDef.palette" :units="ctx.units" />
-
-          <label class="block text-sm">
-            <span class="mb-1 block text-slate-400">Opacidad</span>
-            <input
-              :value="ctx.opacity"
-              data-testid="opacity-slider"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              class="w-full"
-              @input="onOpacityInput"
-            >
-          </label>
-
-          <label class="flex items-center gap-2 text-sm" :class="{ 'opacity-50': animationEngaged }">
-            <input
-              type="checkbox"
-              data-testid="smooth-toggle"
-              :checked="ctx.smooth"
-              :disabled="animationEngaged"
-              @change="onToggleSmooth"
-            >
-            <span>Suavizar celdas del raster</span>
-          </label>
-
-          <label
-            v-if="ctx.smooth"
-            class="block text-sm"
-            :class="{ 'opacity-50': animationEngaged }"
-          >
-            <span class="mb-1 block text-slate-400">Radio de suavizado</span>
-            <select
-              data-testid="smooth-radius-select"
-              :value="ctx.smoothRadius"
-              :disabled="animationEngaged"
-              class="w-full rounded bg-slate-800 text-slate-100"
-              @change="onSelectSmoothRadius"
-            >
-              <option value="1">1× (sin remuestreo)</option>
-              <option value="2">2×</option>
-              <option value="4">4×</option>
-              <option value="8">8×</option>
-            </select>
-          </label>
-
-          <p v-if="animationEngaged" class="text-xs text-slate-400">
-            No disponible durante la animación.
-          </p>
-
-          <p class="text-sm text-slate-400">
-            Valor bajo cursor:
-            <span data-testid="cursor-value" class="font-mono text-slate-100">
-              {{ cursorLabel ?? '—' }}
-            </span>
-          </p>
-
-          <p class="text-sm text-slate-400">
-            Lat/lon bajo cursor:
-            <span data-testid="cursor-latlon" class="font-mono text-slate-100">
-              {{ cursorLatLonLabel ?? '—' }}
-            </span>
-          </p>
-        </template>
-
+    <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
+         directamente sobre el mapa. En md+ deja espacio a la derecha para el
+         stack de leyenda/puntero (oculto en mobile, ver arriba — ahí el
+         timebar usa el ancho completo). -->
+    <div
+      class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8"
+      :class="productDef ? 'md:right-64' : 'md:right-8'"
+    >
+      <div class="pointer-events-auto">
         <p
-          v-if="rasterFetchError"
-          data-testid="raster-error"
-          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
+          v-if="timelineFetchError"
+          data-testid="timeline-error"
+          class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
         >
-          Error consultando rasters: {{ rasterFetchError }}
+          Error consultando la timeline: {{ timelineFetchError }}
         </p>
         <p
-          v-else-if="rasterEmpty"
-          data-testid="raster-empty"
-          class="rounded bg-slate-800 p-3 text-sm text-slate-400"
+          v-else-if="timelineEmpty"
+          data-testid="timeline-empty"
+          class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
         >
-          Sin raster para esta selección.
+          Sin volúmenes este día (UTC).
         </p>
-        <dl
-          v-else-if="raster"
-          data-testid="raster-meta"
-          class="space-y-1 rounded bg-slate-800 p-3 text-sm"
-        >
-          <div class="flex justify-between">
-            <dt class="text-slate-400">Volumen</dt>
-            <dd class="font-mono">{{ volTimeLabel }}</dd>
-          </div>
-          <div v-if="raster.vcp != null" class="flex justify-between">
-            <dt class="text-slate-400">VCP</dt>
-            <dd class="font-mono">{{ raster.vcp }}</dd>
-          </div>
-          <div v-if="raster.el_angle != null" class="flex justify-between">
-            <dt class="text-slate-400">Elevación</dt>
-            <dd class="font-mono">{{ raster.el_angle }}°</dd>
-          </div>
-        </dl>
-
-        <!-- fallo de carga del COG: aviso aparte, no oculta la metadata -->
-        <p
-          v-if="ctx.cogError"
-          data-testid="cog-error"
-          class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
-        >
-          {{ ctx.cogError }}
-        </p>
-
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">Satélite</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="sat-toggle"
-              :checked="ctx.sat"
-              @change="onToggleSatellite"
-            >
-            <span>Mostrar capa GOES</span>
-          </label>
-          <p v-if="satTimeLabel" data-testid="sat-time" class="mt-1 font-mono text-xs text-slate-400">
-            {{ satTimeLabel }}
-          </p>
-          <template v-if="ctx.sat">
-            <label class="mt-2 block">
-              <span class="mb-1 block text-slate-400">Variante</span>
-              <select
-                :value="ctx.satVariant"
-                data-testid="sat-variant-select"
-                class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-                @change="onSelectSatVariant"
-              >
-                <option value="ir">Infrarrojo</option>
-                <option value="vis">Visible</option>
-              </select>
-            </label>
-            <label class="mt-2 block">
-              <span class="mb-1 block text-slate-400">Opacidad</span>
-              <input
-                :value="ctx.satOpacity"
-                data-testid="sat-opacity-slider"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                class="w-full"
-                @input="onSatOpacityInput"
-              >
-            </label>
-            <p class="mt-1 text-xs text-slate-400">
-              No se muestra durante la animación.
-            </p>
-          </template>
-        </fieldset>
-
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">Fenómenos</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-cells"
-              :checked="ctx.layers.includes('cells')"
-              @change="onToggleLayer('cells')"
-            >
-            <span>Celdas de tormenta</span>
-          </label>
-          <template v-if="ctx.layers.includes('cells')">
-            <label class="mt-1 flex items-center gap-2 pl-4">
-              <input
-                type="checkbox"
-                data-testid="layer-toggle-track-past"
-                :checked="ctx.layers.includes('trackPast')"
-                @change="onToggleLayer('trackPast')"
-              >
-              <span>Trayectoria pasada (todas)</span>
-            </label>
-            <label class="mt-1 flex items-center gap-2 pl-4">
-              <input
-                type="checkbox"
-                data-testid="layer-toggle-track-future"
-                :checked="ctx.layers.includes('trackFuture')"
-                @change="onToggleLayer('trackFuture')"
-              >
-              <span>Trayectoria futura (todas)</span>
-            </label>
-          </template>
-          <label class="mt-1 flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-meso"
-              :checked="ctx.layers.includes('meso')"
-              @change="onToggleLayer('meso')"
-            >
-            <span>Mesociclones / TVS</span>
-          </label>
-          <p
-            v-if="overlayJoinInfo"
-            data-testid="overlay-info"
-            class="mt-2 text-xs text-slate-400"
-          >
-            {{ overlayJoinInfo }}
-          </p>
-        </fieldset>
-
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">Viento</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-wind"
-              :checked="ctx.layers.includes('wind')"
-              @change="onToggleLayer('wind')"
-            >
-            <span>Viento ({{ WIND_LEVEL_LABELS[ctx.windLevel] }})</span>
-          </label>
-          <label
-            v-if="ctx.layers.includes('wind')"
-            class="mt-2 block text-sm"
-          >
-            <span class="mb-1 block text-slate-400">Nivel de altura</span>
-            <select
-              :value="ctx.windLevel"
-              data-testid="wind-level-select"
-              class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-              @change="onSelectWindLevel"
-            >
-              <option v-for="level in WIND_LEVELS" :key="level" :value="level">
-                {{ WIND_LEVEL_LABELS[level] }}
-              </option>
-            </select>
-          </label>
-          <p
-            v-if="windInfo"
-            data-testid="wind-info"
-            class="mt-2 text-xs text-slate-400"
-          >
-            {{ windInfo }}
-          </p>
-          <p
-            v-if="ctx.layers.includes('wind')"
-            class="mt-1 text-xs text-slate-400"
-          >
-            No se muestra durante la animación.
-          </p>
-        </fieldset>
-
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">Rayos</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-lightning"
-              :checked="ctx.layers.includes('lightning')"
-              @change="onToggleLayer('lightning')"
-            >
-            <span>Descargas eléctricas</span>
-          </label>
-          <p
-            v-if="lightningInfo"
-            data-testid="lightning-info"
-            class="mt-2 text-xs text-slate-400"
-          >
-            {{ lightningInfo }}
-          </p>
-          <p
-            v-if="ctx.layers.includes('lightning')"
-            class="mt-1 text-xs text-slate-400"
-          >
-            No se muestra durante la animación.
-          </p>
-        </fieldset>
-
-        <fieldset class="rounded bg-slate-800 p-3 text-sm">
-          <legend class="px-1 text-slate-400">VWP</legend>
-          <button
-            data-testid="vwp-open"
-            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-left hover:bg-slate-700"
-            @click="send({ type: 'SELECT_PANEL', panel: 'vwp' })"
-          >
-            Ver perfil de viento
-          </button>
-        </fieldset>
-
-        <DayPicker
-          v-if="availableDays.length > 0"
-          :days="availableDays"
-          :model-value="ctx.day"
-          @update:model-value="onSelectDay"
+        <TimelineStrip
+          v-else-if="timelineReady"
+          :times="timelineTimes"
+          :current="sliderCurrent"
+          :gaps="timelineGaps"
+          :can-prev="canStepPrev"
+          :can-next="canStepNext"
+          :clock="ctx.clock"
+          :playing="animPlaying"
+          :live-refresh="ctx.liveRefresh"
+          @select="onTimelineSelect"
+          @step="onTimelineStep"
+          @toggle="onToggleAnimation"
+          @set-live-refresh="value => send({ type: 'SET_LIVE_REFRESH', value })"
+          @menu="timelineMenu?.open()"
         />
-      </aside>
-
-      <main class="relative min-w-0 flex-1">
-        <ClientOnly>
-          <RadarMap
-            v-if="radar"
-            :radar="radar"
-            :raster="raster"
-            :frames="animFrames"
-            :active-frame="activeFrameIndex"
-            :anim-playing="animPlaying"
-            :product-def="productDef"
-            :opacity="ctx.opacity"
-            :base-map="ctx.base"
-            :show-coverage="ctx.coverage"
-            :phenomena="overlayPhenomena"
-            :selected-cell="ctx.cell"
-            :show-past-all="ctx.layers.includes('trackPast')"
-            :show-future-all="ctx.layers.includes('trackFuture')"
-            :past-cell-ids="ctx.pastCells"
-            :future-cell-ids="ctx.futureCells"
-            :sat-enabled="ctx.sat"
-            :sat-variant="ctx.satVariant"
-            :sat-opacity="ctx.satOpacity"
-            :wind-grid="windGridShown"
-            :lightning-strikes="lightningStrikesShown"
-            :smooth="ctx.smooth"
-            :smooth-radius="ctx.smoothRadius"
-            @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
-            @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
-            @raster-error="send({ type: 'COG_ERROR', message: $event })"
-            @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"
-            @frame-error="(i, message) => animSend({ type: 'FRAME_FAILED', index: i, message })"
-            @move-end="animSend({ type: 'MOVE_END' })"
-          />
-        </ClientOnly>
-
-        <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
-             directamente sobre el mapa — decisión explícita de la maqueta -->
-        <div class="pointer-events-none absolute inset-x-0 bottom-6 px-8">
-          <div class="pointer-events-auto mx-auto max-w-4xl">
-            <p
-              v-if="timelineFetchError"
-              data-testid="timeline-error"
-              class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
-            >
-              Error consultando la timeline: {{ timelineFetchError }}
-            </p>
-            <p
-              v-else-if="timelineEmpty"
-              data-testid="timeline-empty"
-              class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
-            >
-              Sin volúmenes este día (UTC).
-            </p>
-            <TimelineStrip
-              v-else-if="timelineReady"
-              :times="timelineTimes"
-              :current="sliderCurrent"
-              :gaps="timelineGaps"
-              :can-prev="canStepPrev"
-              :can-next="canStepNext"
-              :clock="ctx.clock"
-              :playing="animPlaying"
-              :speed="animSpeed"
-              :live-refresh="ctx.liveRefresh"
-              @select="onTimelineSelect"
-              @step="onTimelineStep"
-              @toggle="onToggleAnimation"
-              @speed="onSpeedChange"
-              @set-live-refresh="value => send({ type: 'SET_LIVE_REFRESH', value })"
-              @menu="timelineMenu?.open()"
-            />
-          </div>
-        </div>
-      </main>
-
-      <SidePanel :panel="ctx.panel" @select="send({ type: 'SELECT_PANEL', panel: $event })">
-        <template #cells>
-          <CellTable
-            :phenomena="overlayCtx.phenomena"
-            :joined="overlayCtx.joined"
-            :selected-cell="ctx.cell"
-            :past-cell-ids="ctx.pastCells"
-            :future-cell-ids="ctx.futureCells"
-            :units="ctx.units"
-            @select="send({ type: 'SELECT_CELL', cellId: $event })"
-            @toggle-past-track="onToggleCellTrack($event, 'past')"
-            @toggle-future-track="onToggleCellTrack($event, 'future')"
-          />
-        </template>
-        <template #trend>
-          <TrendChart
-            :series="overlayCtx.series"
-            :cell-id="ctx.cell"
-            :error="overlayCtx.seriesError"
-            :units="ctx.units"
-            :clock="ctx.clock"
-          />
-        </template>
-      </SidePanel>
+      </div>
     </div>
   </div>
 </template>

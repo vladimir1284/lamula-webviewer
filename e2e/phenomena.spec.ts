@@ -88,28 +88,40 @@ test('degradación: site sin fenómenos avisa, y el VWP sigue funcionando', asyn
   test.skip(vwpOnly === null, 'las grabaciones actuales no traen un site con VWP y sin fenómenos')
   await gotoHydrated(page, viewerUrl(vwpOnly!.raster, 'base=off&layers=cells&panel=vwp'))
 
+  // panel=vwp abre DataModal directo en el deep-link (D36: VwpModal se
+  // consolidó en DataModal) — su <dialog> nativo bloquea clicks fuera de sí
+  // (backdrop cubre toda la pantalla), así que hay que cerrarlo antes de
+  // alcanzar el menú de capas (overlay-info se mudó ahí, antes siempre
+  // visible en el aside)
+  await expect(page.locator('[data-testid=data-modal]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=overlay-info]'))
     .toContainText('Sin datos de celdas')
-  // panel=vwp (D35) abre el modal directo en el deep-link, en el tab
-  // Gráfico por default — cambiar a Datos para ver la tabla
-  await expect(page.locator('[data-testid=vwp-modal]')).toBeVisible()
+
+  // reabrir VWP desde el menú (openPanel del menú lo cierra solo al hacerlo)
+  await page.locator('[data-testid=vwp-open]').click()
+  await expect(page.locator('[data-testid=data-modal]')).toBeVisible()
+  // sub-tab Gráfico por default — cambiar a Datos para ver la tabla
   await page.locator('[data-testid=vwp-modal-tab-table]').click()
   const vwpRows = page.locator('[data-testid=vwp-table] tbody tr')
   await expect(vwpRows).toHaveCount(vwpOnly!.levels.length)
 })
 
-test('botón VWP del menú izquierdo abre el modal, y cerrarlo limpia ?panel', async ({ page }) => {
+test('botón VWP del menú de capas abre el modal, y cerrarlo limpia ?panel', async ({ page }) => {
   test.skip(vwpOnly === null, 'las grabaciones actuales no traen un site con VWP y sin fenómenos')
   await gotoHydrated(page, viewerUrl(vwpOnly!.raster, 'base=off'))
-  await expect(page.locator('[data-testid=vwp-modal]')).not.toBeVisible()
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
 
+  // D36: el botón VWP se mudó del aside al menú de capas
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await page.locator('[data-testid=vwp-open]').click()
   await expect(page).toHaveURL(/panel=vwp/)
-  await expect(page.locator('[data-testid=vwp-modal]')).toBeVisible()
+  await expect(page.locator('[data-testid=data-modal]')).toBeVisible()
 
-  await page.locator('[data-testid=vwp-modal-close]').click()
+  await page.locator('[data-testid=data-modal-close]').click()
   await expect(page).not.toHaveURL(/panel=vwp/)
-  await expect(page.locator('[data-testid=vwp-modal]')).not.toBeVisible()
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
 })
 
 test('deep link completo reproduce capas + panel + celda tras hidratar', async ({ page }) => {
@@ -117,14 +129,24 @@ test('deep link completo reproduce capas + panel + celda tras hidratar', async (
     mesoRaster,
     `base=off&layers=cells,meso&panel=trend&cell=${topCell.cell_id}`,
   ))
+  // D36: SidePanel se reemplazó por DataModal (mismo panel=trend lo abre,
+  // deep-link) — verificar su contenido primero, mientras está abierto
+  await expect(page.locator('[data-testid=data-modal]')).toContainText(topCell.cell_id!)
+  await expect(page.locator('[data-testid=trend-chart]').first()).toBeVisible()
+  // el <dialog> nativo abierto bloquea clicks fuera de sí (su backdrop
+  // cubre toda la pantalla) — cerrarlo antes de alcanzar el menú de capas
+  await page.keyboard.press('Escape')
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
+  // D36: los toggles de capa se mudaron al menú de capas
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=layer-toggle-cells]')).toBeChecked()
   await expect(page.locator('[data-testid=layer-toggle-meso]')).toBeChecked()
-  await expect(page.locator('[data-testid=side-panel]')).toContainText(topCell.cell_id!)
-  await expect(page.locator('[data-testid=trend-chart]').first()).toBeVisible()
 })
 
 test('toggle de capa refleja el estado en la URL sin tocar el path', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(mesoRaster, 'base=off'))
+  // D36: layer-toggle-cells se mudó al menú de capas
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await page.locator('[data-testid=layer-toggle-cells]').click()
   await expect(page).toHaveURL(/layers=cells/)
   await expect(page).toHaveURL(new RegExp(isoToPath(mesoRaster.vol_time)))
@@ -134,7 +156,10 @@ test('toggle de capa refleja el estado en la URL sin tocar el path', async ({ pa
 
 test('params de overlay inválidos degradan al default, no rompen la ruta', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(mesoRaster, 'base=off&layers=bogus,cells&panel=nope&cell=inv@lid'))
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=layer-toggle-cells]')).toBeChecked()
   await expect(page.locator('[data-testid=layer-toggle-meso]')).not.toBeChecked()
-  await expect(page.locator('[data-testid=side-panel]')).toHaveCount(0)
+  // panel=nope no es un PanelId válido: DataModal existe en el DOM (native
+  // <dialog>, D36) pero nunca se abre
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
 })

@@ -86,6 +86,8 @@ async function paintedPixels(page: Page): Promise<number> {
 test('deep link ?layers=lightning: toggle marcado, contador visible y destellos pintando', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined, 'base=off&layers=lightning'))
 
+  // D36: layer-toggle-lightning/lightning-info se mudaron al menú de capas
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=layer-toggle-lightning]')).toBeChecked()
   await expect(page.locator('[data-testid=lightning-info]'))
     .toHaveText(/\d+ descargas en el intervalo del frame\./)
@@ -99,6 +101,7 @@ test('deep link ?layers=lightning: toggle marcado, contador visible y destellos 
 test('toggle: activa → ?layers=lightning y pinta; desactiva → URL limpia y canvas vacío', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined, 'base=off'))
 
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await page.locator('[data-testid=layer-toggle-lightning]').click()
   await expect(page).toHaveURL(/layers=lightning/)
   await expect(page).toHaveURL(new RegExp(isoToPath(joined.vol_time))) // path intacto
@@ -115,6 +118,7 @@ test('ventana sin cubos con strikes: capa limpia y mensaje explícito (D24)', as
   test.skip(stale === null, 'las fixtures no traen un site con rayos fuera de toda ventana')
   await gotoHydrated(page, viewerUrl(stale!, 'base=off&layers=lightning'))
 
+  await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=lightning-info]'))
     .toHaveText('Sin descargas registradas para este frame.')
   await expect.poll(() => paintedPixels(page), { timeout: 5_000 }).toBe(0)
@@ -122,6 +126,8 @@ test('ventana sin cubos con strikes: capa limpia y mensaje explícito (D24)', as
 
 test('rayos solo no arrastran fenómenos: sin tabla ni markers de celdas', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined, 'base=off&layers=lightning'))
-  await expect(page.locator('[data-testid=side-panel]')).toHaveCount(0)
+  // D36: SidePanel se reemplazó por DataModal (native <dialog>, siempre en
+  // el DOM pero cerrado sin ?panel=)
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
   await expect(page.locator('[data-testid^=cell-row-]')).toHaveCount(0)
 })
