@@ -23,6 +23,21 @@ const local = (t: string) => formatFull(t, 'local', 'America/New_York')
 // así que un reintento puede alcanzar al auto-play justo cuando dispara y
 // apagarlo de nuevo. Se espera 'networkidle' (hidratación completa) antes
 // del único click.
+//
+// D36 — hallazgo de la verificación, arreglado en la misma tanda: al
+// presionar play, el watcher de RadarMap.vue que engancha el pool de
+// animación (initOrUpdatePool(), disparado por el cambio null→array de
+// `frames`) podía hacer que OpenLayers emitiera un 'moveend' espurio (fin de
+// su propio ciclo de render interno tras agregar/quitar capas — moveend no
+// es un MapBrowserEvent, OL no distingue "paneó el usuario" de "se asentó un
+// render programático"). Ese moveend disparaba el MOVE_END global de
+// animationMachine — pensado para pan/zoom real — y pausaba la animación
+// recién arrancada. Preexistente (mismo mecanismo de siempre en
+// initOrUpdatePool), no introducido por este rediseño; el layout nuevo solo
+// lo hacía más fácil de gatillar. Fix de raíz en `RadarMap.vue`
+// (`armMoveEndSuppression`): descarta como mucho UN 'moveend' inmediatamente
+// después de tocar el pool, con timeout de seguridad para no suprimir un pan
+// genuino más adelante — el 500ms de acá vuelve a alcanzar.
 async function gotoAndWaitHydrated(page: Page, url: string) {
   await page.goto(url)
   await page.waitForLoadState('networkidle')
