@@ -61,14 +61,96 @@ function openPanel(panel: PanelId) {
 
 <template>
   <div>
-    <button
-      type="button"
-      data-testid="layers-menu-toggle"
-      class="pointer-events-auto absolute right-4 top-4 z-20 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-sm font-bold shadow-lg"
-      @click="open = !open"
-    >
-      <span aria-hidden="true">☰</span> Capas
-    </button>
+    <!-- Rail de pills (D36, referencia image.png): reemplaza el botón único
+         "☰ Capas". Siempre visible, no depende de `open` — cada pill es un
+         checkbox real (label + input sr-only) para no tocar semántica/
+         testids que ya usan los e2e (.toBeChecked()). Solo el on/off vive
+         acá; los parámetros de cada capa (variante, nivel, radio de
+         suavizado, info) siguen en el panel de `open` hasta que exista el
+         menú expandido tipo grilla (2026-08-02_19-46.png). -->
+    <!-- z-50 en los propios controles (no en este wrapper): deben quedar
+         por encima del backdrop del panel expandido (z-30) para poder
+         togglearse con el panel abierto (backdrop lo tapaba, ver e2e
+         wind/lightning/phenomena). El wrapper NO lleva pointer-events-auto
+         — es más ancho que el botón "Menú" (por las pills de w-56 debajo),
+         y si el wrapper entero capturara clicks tapa a prefs-open, que
+         vive en la misma fila (ver e2e prefs.spec.ts). -->
+    <div class="absolute right-4 top-4 flex flex-col items-end gap-2">
+      <button
+        type="button"
+        data-testid="layers-menu-toggle"
+        class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-1.5 text-sm font-bold shadow-lg"
+        @click="open = !open"
+      >
+        Menú
+        <span
+          class="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-base leading-none text-white"
+          aria-hidden="true"
+        >☰</span>
+      </button>
+
+      <label
+        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+      >
+        <span>Satélite</span>
+        <LayerIcon kind="sat" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <!-- overlay full-size en vez de sr-only: el clip-rect de sr-only
+             deja el checkbox sin hit-test propio (Playwright resuelve el
+             click al <label> padre, no al input — ver e2e wind/lightning/
+             phenomena). Cubrir todo el pill sí es clickeable en cualquier
+             punto Y mantiene la asociación label→input para lectores de
+             pantalla. -->
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="sat-toggle"
+          :checked="sat"
+          @change="emit('toggle-satellite')"
+        >
+      </label>
+
+      <label
+        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+      >
+        <span>Fenómenos</span>
+        <LayerIcon kind="cells" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-cells"
+          :checked="layers.includes('cells')"
+          @change="emit('toggle-layer', 'cells')"
+        >
+      </label>
+
+      <label
+        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+      >
+        <span>Viento</span>
+        <LayerIcon kind="wind" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-wind"
+          :checked="layers.includes('wind')"
+          @change="emit('toggle-layer', 'wind')"
+        >
+      </label>
+
+      <label
+        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+      >
+        <span>Rayos</span>
+        <LayerIcon kind="lightning" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-lightning"
+          :checked="layers.includes('lightning')"
+          @change="emit('toggle-layer', 'lightning')"
+        >
+      </label>
+    </div>
 
     <div
       v-if="open"
@@ -80,7 +162,7 @@ function openPanel(panel: PanelId) {
     <div
       v-if="open"
       data-testid="layers-menu"
-      class="pointer-events-auto fixed inset-0 z-40 overflow-y-auto bg-slate-900 p-4 md:absolute md:inset-auto md:right-4 md:top-16 md:w-80 md:rounded-lg md:border md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
+      class="pointer-events-auto fixed inset-0 z-40 overflow-y-auto bg-slate-900 p-4 md:absolute md:inset-auto md:right-4 md:top-72 md:w-80 md:rounded-lg md:border md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
     >
       <div class="mb-3 flex items-center justify-between md:hidden">
         <h2 class="text-sm font-bold">Capas</h2>
@@ -163,63 +245,43 @@ function openPanel(panel: PanelId) {
           </p>
         </template>
 
-        <fieldset class="rounded bg-slate-800 p-3">
+        <fieldset v-if="sat" class="rounded bg-slate-800 p-3">
           <legend class="px-1 text-slate-400">Satélite</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="sat-toggle"
-              :checked="sat"
-              @change="emit('toggle-satellite')"
-            >
-            <span>Mostrar capa GOES</span>
-          </label>
-          <p v-if="satTimeLabel" data-testid="sat-time" class="mt-1 font-mono text-xs text-slate-400">
+          <p v-if="satTimeLabel" data-testid="sat-time" class="font-mono text-xs text-slate-400">
             {{ satTimeLabel }}
           </p>
-          <template v-if="sat">
-            <label class="mt-2 block">
-              <span class="mb-1 block text-slate-400">Variante</span>
-              <select
-                :value="satVariant"
-                data-testid="sat-variant-select"
-                class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-                @change="emit('select-sat-variant', $event)"
-              >
-                <option value="ir">Infrarrojo</option>
-                <option value="vis">Visible</option>
-              </select>
-            </label>
-            <label class="mt-2 block">
-              <span class="mb-1 block text-slate-400">Opacidad</span>
-              <input
-                :value="satOpacity"
-                data-testid="sat-opacity-slider"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                class="w-full"
-                @input="emit('sat-opacity-input', $event)"
-              >
-            </label>
-            <p class="mt-1 text-xs text-slate-400">
-              No se muestra durante la animación.
-            </p>
-          </template>
+          <label class="mt-2 block">
+            <span class="mb-1 block text-slate-400">Variante</span>
+            <select
+              :value="satVariant"
+              data-testid="sat-variant-select"
+              class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+              @change="emit('select-sat-variant', $event)"
+            >
+              <option value="ir">Infrarrojo</option>
+              <option value="vis">Visible</option>
+            </select>
+          </label>
+          <label class="mt-2 block">
+            <span class="mb-1 block text-slate-400">Opacidad</span>
+            <input
+              :value="satOpacity"
+              data-testid="sat-opacity-slider"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              class="w-full"
+              @input="emit('sat-opacity-input', $event)"
+            >
+          </label>
+          <p class="mt-1 text-xs text-slate-400">
+            No se muestra durante la animación.
+          </p>
         </fieldset>
 
         <fieldset class="rounded bg-slate-800 p-3">
           <legend class="px-1 text-slate-400">Fenómenos</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-cells"
-              :checked="layers.includes('cells')"
-              @change="emit('toggle-layer', 'cells')"
-            >
-            <span>Celdas de tormenta</span>
-          </label>
           <template v-if="layers.includes('cells')">
             <label class="mt-1 flex items-center gap-2 pl-4">
               <input
@@ -258,21 +320,9 @@ function openPanel(panel: PanelId) {
           </p>
         </fieldset>
 
-        <fieldset class="rounded bg-slate-800 p-3">
-          <legend class="px-1 text-slate-400">Viento</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-wind"
-              :checked="layers.includes('wind')"
-              @change="emit('toggle-layer', 'wind')"
-            >
-            <span>Viento ({{ WIND_LEVEL_LABELS[windLevel] }})</span>
-          </label>
-          <label
-            v-if="layers.includes('wind')"
-            class="mt-2 block"
-          >
+        <fieldset v-if="layers.includes('wind')" class="rounded bg-slate-800 p-3">
+          <legend class="px-1 text-slate-400">Viento ({{ WIND_LEVEL_LABELS[windLevel] }})</legend>
+          <label class="block">
             <span class="mb-1 block text-slate-400">Nivel de altura</span>
             <select
               :value="windLevel"
@@ -292,36 +342,21 @@ function openPanel(panel: PanelId) {
           >
             {{ windInfo }}
           </p>
-          <p
-            v-if="layers.includes('wind')"
-            class="mt-1 text-xs text-slate-400"
-          >
+          <p class="mt-1 text-xs text-slate-400">
             No se muestra durante la animación.
           </p>
         </fieldset>
 
-        <fieldset class="rounded bg-slate-800 p-3">
+        <fieldset v-if="layers.includes('lightning')" class="rounded bg-slate-800 p-3">
           <legend class="px-1 text-slate-400">Rayos</legend>
-          <label class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              data-testid="layer-toggle-lightning"
-              :checked="layers.includes('lightning')"
-              @change="emit('toggle-layer', 'lightning')"
-            >
-            <span>Descargas eléctricas</span>
-          </label>
           <p
             v-if="lightningInfo"
             data-testid="lightning-info"
-            class="mt-2 text-xs text-slate-400"
+            class="text-xs text-slate-400"
           >
             {{ lightningInfo }}
           </p>
-          <p
-            v-if="layers.includes('lightning')"
-            class="mt-1 text-xs text-slate-400"
-          >
+          <p class="mt-1 text-xs text-slate-400">
             No se muestra durante la animación.
           </p>
         </fieldset>
