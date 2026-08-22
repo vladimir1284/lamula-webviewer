@@ -70,8 +70,14 @@ const trackEl = ref<HTMLElement | null>(null)
 const dragging = ref(false)
 const scrubIso = ref<string | null>(null)
 const EMIT_THROTTLE_MS = 100
+// tras soltar (drag o click simple), el tooltip queda visible este tiempo
+// extra en vez de desaparecer con el pointerup — si no, un click sin arrastre
+// lo mostraba y ocultaba en el mismo tick de Vue (parpadeo)
+const TOOLTIP_HOLD_MS = 3000
 
 let lastEmitAt = 0
+let tooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+const tooltipHeld = ref(false)
 
 const displayIso = computed(() => scrubIso.value ?? props.current)
 const handlePct = computed(() => displayIso.value ? pct(displayIso.value) : 0)
@@ -96,6 +102,11 @@ function nearestTime(clientX: number): string | null {
 
 function onPointerDown(event: PointerEvent) {
   if (props.times.length === 0) return
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer)
+    tooltipHideTimer = null
+  }
+  tooltipHeld.value = false
   dragging.value = true
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
   onPointerMove(event)
@@ -117,7 +128,12 @@ function onPointerUp() {
   if (!dragging.value) return
   dragging.value = false
   if (scrubIso.value) emit('select', scrubIso.value)
-  scrubIso.value = null
+  tooltipHeld.value = true
+  tooltipHideTimer = setTimeout(() => {
+    tooltipHeld.value = false
+    scrubIso.value = null
+    tooltipHideTimer = null
+  }, TOOLTIP_HOLD_MS)
 }
 
 // Flechas: ya cubiertas por el listener global de la página (dispara aunque
@@ -327,9 +343,9 @@ const tickLabels = computed(() => {
             :style="{ left: `${handlePct}%`, background: PRIMARY_BLUE }"
           />
           <div
-            v-if="dragging && displayIso"
+            v-if="(dragging || tooltipHeld) && displayIso"
             data-testid="timeline-tooltip"
-            class="pointer-events-none absolute bottom-full -translate-x-1/2 whitespace-nowrap rounded-md px-3.5 py-2 text-[15px] font-bold text-white"
+            class="pointer-events-none absolute bottom-full -translate-x-1/2 whitespace-nowrap rounded-full px-3.5 py-2 text-[15px] font-bold text-white"
             :style="{ left: `${handlePct}%`, background: PRIMARY_BLUE, marginBottom: '6px' }"
           >
             {{ formatScrubTooltip(displayIso) }}
