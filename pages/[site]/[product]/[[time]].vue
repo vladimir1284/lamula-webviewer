@@ -728,104 +728,178 @@ function onSatOpacityInput(event: Event) {
 </script>
 
 <template>
-  <div class="relative h-screen w-screen overflow-hidden bg-slate-900 text-slate-100">
-    <PrefsDialog
-      ref="prefsDialog"
-      :coverage="ctx.coverage"
-      :units="ctx.units"
-      :clock="ctx.clock"
-      @set-pref="send({ type: 'SET_PREF', patch: $event })"
-    />
+  <div class="relative flex h-screen w-screen overflow-hidden bg-slate-900 text-slate-100">
+    <div class="relative min-w-0 flex-1 overflow-hidden">
+      <PrefsDialog
+        ref="prefsDialog"
+        :coverage="ctx.coverage"
+        :units="ctx.units"
+        :clock="ctx.clock"
+        @set-pref="send({ type: 'SET_PREF', patch: $event })"
+      />
 
-    <TimelineMenu
-      ref="timelineMenu"
-      :animation-frames="ctx.animationFrames"
-      :speed="animSpeed"
-      @set-pref="send({ type: 'SET_PREF', patch: $event })"
-      @speed="onSpeedChange"
-    />
+      <TimelineMenu
+        ref="timelineMenu"
+        :animation-frames="ctx.animationFrames"
+        :speed="animSpeed"
+        @set-pref="send({ type: 'SET_PREF', patch: $event })"
+        @speed="onSpeedChange"
+      />
 
-    <DataModal
-      ref="dataModal"
-      :panel="ctx.panel"
-      :phenomena="overlayCtx.phenomena"
-      :joined="overlayCtx.joined"
-      :selected-cell="ctx.cell"
-      :past-cell-ids="ctx.pastCells"
-      :future-cell-ids="ctx.futureCells"
-      :series="overlayCtx.series"
-      :series-error="overlayCtx.seriesError"
-      :vwp-profiles="overlayCtx.vwpProfiles"
-      :vwp-window="overlayCtx.vwpWindow"
-      :vwp-joined="overlayCtx.vwpJoined"
-      :vwp-error="overlayCtx.vwpError"
-      :vwp-empty="overlaySnapshot.matches({ vwp: 'empty' })"
-      :units="ctx.units"
-      :clock="ctx.clock"
-      @close="onDataModalClose"
-      @update:panel="onDataModalUpdatePanel"
-      @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
-      @toggle-past-track="onToggleCellTrack($event, 'past')"
-      @toggle-future-track="onToggleCellTrack($event, 'future')"
-    />
-
-    <ClientOnly>
-      <RadarMap
-        v-if="radar"
-        :radar="radar"
-        :raster="raster"
-        :frames="animFrames"
-        :active-frame="activeFrameIndex"
-        :anim-playing="animPlaying"
-        :product-def="productDef"
-        :opacity="ctx.opacity"
-        :base-map="ctx.base"
-        :show-coverage="ctx.coverage"
-        :phenomena="overlayPhenomena"
+      <DataModal
+        ref="dataModal"
+        :panel="ctx.panel"
+        :phenomena="overlayCtx.phenomena"
+        :joined="overlayCtx.joined"
         :selected-cell="ctx.cell"
-        :show-past-all="ctx.layers.includes('trackPast')"
-        :show-future-all="ctx.layers.includes('trackFuture')"
         :past-cell-ids="ctx.pastCells"
         :future-cell-ids="ctx.futureCells"
-        :sat-enabled="ctx.sat"
-        :sat-variant="ctx.satVariant"
-        :sat-opacity="ctx.satOpacity"
-        :wind-grid="windGridShown"
-        :lightning-strikes="lightningStrikesShown"
-        :smooth="ctx.smooth"
-        :smooth-radius="ctx.smoothRadius"
+        :series="overlayCtx.series"
+        :series-error="overlayCtx.seriesError"
+        :vwp-profiles="overlayCtx.vwpProfiles"
+        :vwp-window="overlayCtx.vwpWindow"
+        :vwp-joined="overlayCtx.vwpJoined"
+        :vwp-error="overlayCtx.vwpError"
+        :vwp-empty="overlaySnapshot.matches({ vwp: 'empty' })"
+        :units="ctx.units"
+        :clock="ctx.clock"
+        @close="onDataModalClose"
+        @update:panel="onDataModalUpdatePanel"
         @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
-        @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
-        @raster-error="send({ type: 'COG_ERROR', message: $event })"
-        @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"
-        @frame-error="(i, message) => animSend({ type: 'FRAME_FAILED', index: i, message })"
-        @move-end="animSend({ type: 'MOVE_END' })"
+        @toggle-past-track="onToggleCellTrack($event, 'past')"
+        @toggle-future-track="onToggleCellTrack($event, 'future')"
       />
-    </ClientOnly>
 
-    <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
-         + el primer bloque del aside izquierdo -->
-    <RadarProductChip
-      :radars="ctx.radars"
-      :site="ctx.site"
-      :raster-products="rasterProducts"
-      :product="ctx.product"
-      :product-def="productDef"
-      :radar="radar"
-      :radars-error="radarsError"
-      :raster-fetch-error="rasterFetchError"
-      :raster-empty="rasterEmpty"
-      :raster="raster"
-      :vol-time-parts="volTimeParts"
-      :cog-error="ctx.cogError"
-      :cursor-label="cursorLabel"
-      :cursor-lat-lon-label="cursorLatLonLabel"
-      @select-site="onSelectSite"
-      @select-product="onSelectProduct"
-    />
+      <ClientOnly>
+        <RadarMap
+          v-if="radar"
+          :radar="radar"
+          :raster="raster"
+          :frames="animFrames"
+          :active-frame="activeFrameIndex"
+          :anim-playing="animPlaying"
+          :product-def="productDef"
+          :opacity="ctx.opacity"
+          :base-map="ctx.base"
+          :show-coverage="ctx.coverage"
+          :phenomena="overlayPhenomena"
+          :selected-cell="ctx.cell"
+          :show-past-all="ctx.layers.includes('trackPast')"
+          :show-future-all="ctx.layers.includes('trackFuture')"
+          :past-cell-ids="ctx.pastCells"
+          :future-cell-ids="ctx.futureCells"
+          :sat-enabled="ctx.sat"
+          :sat-variant="ctx.satVariant"
+          :sat-opacity="ctx.satOpacity"
+          :wind-grid="windGridShown"
+          :lightning-strikes="lightningStrikesShown"
+          :smooth="ctx.smooth"
+          :smooth-radius="ctx.smoothRadius"
+          @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
+          @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
+          @raster-error="send({ type: 'COG_ERROR', message: $event })"
+          @frame-ready="animSend({ type: 'FRAME_READY', index: $event })"
+          @frame-error="(i, message) => animSend({ type: 'FRAME_FAILED', index: i, message })"
+          @move-end="animSend({ type: 'MOVE_END' })"
+        />
+      </ClientOnly>
 
-    <!-- todo lo que se dibuja ENCIMA del mapa (D36): reemplaza el resto del
-         aside izquierdo + el botón VWP + el rail derecho -->
+      <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
+           + el primer bloque del aside izquierdo -->
+      <RadarProductChip
+        :radars="ctx.radars"
+        :site="ctx.site"
+        :raster-products="rasterProducts"
+        :product="ctx.product"
+        :product-def="productDef"
+        :radar="radar"
+        :radars-error="radarsError"
+        :raster-fetch-error="rasterFetchError"
+        :raster-empty="rasterEmpty"
+        :raster="raster"
+        :vol-time-parts="volTimeParts"
+        :cog-error="ctx.cogError"
+        :cursor-label="cursorLabel"
+        :cursor-lat-lon-label="cursorLatLonLabel"
+        @select-site="onSelectSite"
+        @select-product="onSelectProduct"
+      />
+
+      <!-- ⚙ preferencias: junto al menú de capas, ya no vive en un header fijo -->
+      <button
+        data-testid="prefs-open"
+        aria-label="Preferencias"
+        class="pointer-events-auto absolute right-[9.5rem] top-4 z-20 grid h-10 w-10 place-items-center rounded-lg border border-slate-700 bg-slate-900/95 text-slate-400 shadow-lg hover:text-slate-100"
+        @click="prefsDialog?.open()"
+      >
+        ⚙
+      </button>
+
+      <!-- leyenda flotante esquina inferior derecha (D36): antes vivía en el
+           aside izquierdo. Oculta bajo md: en una pantalla angosta no hay lugar
+           junto al timebar sin solaparse — la variante móvil compacta (leyenda
+           inline en el timebar, como mobile.png) queda pendiente; por ahora en
+           mobile simplemente no se muestra, el timebar usa el ancho completo.
+           Valor bajo cursor + lat/lon se movieron al chip de radar/producto,
+           junto a VCP/elevación (ver RadarProductChip.vue). -->
+      <div
+        v-if="productDef"
+        class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 md:block"
+      >
+        <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 shadow-lg">
+          <MapLegend :palette="productDef.palette" :units="ctx.units" />
+        </div>
+      </div>
+
+      <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
+           directamente sobre el mapa. En md+ deja espacio a la derecha para el
+           stack de leyenda/puntero (oculto en mobile, ver arriba — ahí el
+           timebar usa el ancho completo). -->
+      <div
+        class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8"
+        :class="productDef ? 'md:right-64' : 'md:right-8'"
+      >
+        <div class="pointer-events-auto">
+          <p
+            v-if="timelineFetchError"
+            data-testid="timeline-error"
+            class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
+          >
+            Error consultando la timeline: {{ timelineFetchError }}
+          </p>
+          <p
+            v-else-if="timelineEmpty"
+            data-testid="timeline-empty"
+            class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
+          >
+            Sin volúmenes este día (UTC).
+          </p>
+          <TimelineStrip
+            v-else-if="timelineReady"
+            :times="timelineTimes"
+            :current="sliderCurrent"
+            :gaps="timelineGaps"
+            :can-prev="canStepPrev"
+            :can-next="canStepNext"
+            :clock="ctx.clock"
+            :playing="animPlaying"
+            :live-refresh="ctx.liveRefresh"
+            @select="onTimelineSelect"
+            @step="onTimelineStep"
+            @toggle="onToggleAnimation"
+            @set-live-refresh="value => send({ type: 'SET_LIVE_REFRESH', value })"
+            @menu="timelineMenu?.open()"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- menú de capas (D36) + panel acoplado a la derecha (D37): en md+ el
+         panel es un hermano flex real (no overlay) que empuja el mapa a la
+         izquierda achicando el wrapper .flex-1 de arriba — RadarMap ya
+         resuelve el resize con su ResizeObserver (ver RadarMap.vue). En
+         mobile sigue siendo overlay full-screen (sin lugar para correr el
+         mapa en una pantalla angosta). -->
     <LayersMenu
       :base="ctx.base"
       :has-palette="!!productDef"
@@ -856,73 +930,5 @@ function onSatOpacityInput(event: Event) {
       @select-day="onSelectDay"
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
     />
-
-    <!-- ⚙ preferencias: junto al menú de capas, ya no vive en un header fijo -->
-    <button
-      data-testid="prefs-open"
-      aria-label="Preferencias"
-      class="pointer-events-auto absolute right-[9.5rem] top-4 z-20 grid h-10 w-10 place-items-center rounded-lg border border-slate-700 bg-slate-900/95 text-slate-400 shadow-lg hover:text-slate-100"
-      @click="prefsDialog?.open()"
-    >
-      ⚙
-    </button>
-
-    <!-- leyenda flotante esquina inferior derecha (D36): antes vivía en el
-         aside izquierdo. Oculta bajo md: en una pantalla angosta no hay lugar
-         junto al timebar sin solaparse — la variante móvil compacta (leyenda
-         inline en el timebar, como mobile.png) queda pendiente; por ahora en
-         mobile simplemente no se muestra, el timebar usa el ancho completo.
-         Valor bajo cursor + lat/lon se movieron al chip de radar/producto,
-         junto a VCP/elevación (ver RadarProductChip.vue). -->
-    <div
-      v-if="productDef"
-      class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 md:block"
-    >
-      <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 shadow-lg">
-        <MapLegend :palette="productDef.palette" :units="ctx.units" />
-      </div>
-    </div>
-
-    <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
-         directamente sobre el mapa. En md+ deja espacio a la derecha para el
-         stack de leyenda/puntero (oculto en mobile, ver arriba — ahí el
-         timebar usa el ancho completo). -->
-    <div
-      class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8"
-      :class="productDef ? 'md:right-64' : 'md:right-8'"
-    >
-      <div class="pointer-events-auto">
-        <p
-          v-if="timelineFetchError"
-          data-testid="timeline-error"
-          class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
-        >
-          Error consultando la timeline: {{ timelineFetchError }}
-        </p>
-        <p
-          v-else-if="timelineEmpty"
-          data-testid="timeline-empty"
-          class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
-        >
-          Sin volúmenes este día (UTC).
-        </p>
-        <TimelineStrip
-          v-else-if="timelineReady"
-          :times="timelineTimes"
-          :current="sliderCurrent"
-          :gaps="timelineGaps"
-          :can-prev="canStepPrev"
-          :can-next="canStepNext"
-          :clock="ctx.clock"
-          :playing="animPlaying"
-          :live-refresh="ctx.liveRefresh"
-          @select="onTimelineSelect"
-          @step="onTimelineStep"
-          @toggle="onToggleAnimation"
-          @set-live-refresh="value => send({ type: 'SET_LIVE_REFRESH', value })"
-          @menu="timelineMenu?.open()"
-        />
-      </div>
-    </div>
   </div>
 </template>
