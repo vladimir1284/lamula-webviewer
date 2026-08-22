@@ -295,6 +295,15 @@ const tickLabels = computed(() => {
             class="pointer-events-none absolute inset-y-0 bg-[repeating-linear-gradient(45deg,rgba(245,158,11,0.45)_0_4px,transparent_4px_8px)]"
             :style="{ left: `${band.left}%`, width: `${band.width}%` }"
           />
+          <!-- marca blanca por vol_time (D37): guía visual de dónde hay dato
+               para hacer click, aunque no se le muestre la hora en la
+               leyenda (tickLabels solo etiqueta 5-6) -->
+          <div
+            v-for="time in times"
+            :key="`mark-${time}`"
+            class="pointer-events-none absolute top-1/2 h-1.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
+            :style="{ left: `${pct(time)}%` }"
+          />
           <!-- objetivos de click invisibles, uno por vol_time: la maqueta no
                los muestra (drag/click-en-track ya alcanza el más cercano),
                pero un click exacto sobre un tick puntual es más preciso que
