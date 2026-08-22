@@ -255,7 +255,13 @@ function onSelectDay(day: string) {
   send({ type: 'SELECT_DAY', day })
 }
 
-const timelineReady = computed(() => snapshot.value.matches({ timeline: 'ready' }))
+// 'refreshingTick' (poll de en-vivo cada 30s) cuenta como ready: los `times`
+// previos siguen siendo válidos mientras se refetchea en silencio — si no,
+// la strip se desmonta/remonta en cada tick y parpadea (v-else-if cae al
+// medio sin match ni un instante).
+const timelineReady = computed(() =>
+  snapshot.value.matches({ timeline: 'ready' }) || snapshot.value.matches({ timeline: 'refreshingTick' }),
+)
 // lista completa del día, solo para gating de step en el extremo (no se renderiza)
 const dayTimes = computed(() => ctx.value.times.map(r => r.vol_time))
 // la strip renderiza la ventana de animación (animationFrames), no el día entero
