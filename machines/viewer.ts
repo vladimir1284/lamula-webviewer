@@ -772,6 +772,18 @@ export const viewerMachine = setup({
           { guard: { type: 'sameDaySelected', params: ({ event }) => event.day } },
           { target: '.jumping', actions: assign({ day: ({ event }) => event.day }) },
         ],
+        // al prender el checkbox, saltar YA al dato más reciente en vez de
+        // esperar al próximo tick del `after` de 'ready' (hasta
+        // LIVE_REFRESH_INTERVAL de retraso) — sombrea el handler de la raíz
+        // solo para esta región (nota XState v5 arriba)
+        SET_LIVE_REFRESH: [
+          {
+            guard: ({ event }) => event.value,
+            target: '.refreshingTick',
+            actions: assign({ liveRefresh: true }),
+          },
+          { actions: assign({ liveRefresh: ({ event }) => event.value }) },
+        ],
       },
       initial: 'init',
       states: {
@@ -853,11 +865,14 @@ export const viewerMachine = setup({
         },
         empty: {},
         error: {},
-        // tick del loop "en vivo": repide fetchDay del MISMO día y, si hay un
-        // vol_time nuevo al final, salta ahí (replace) — a diferencia del
-        // viejo botón, siempre sigue al más reciente mientras el checkbox
-        // esté encendido (no conserva posición intermedia: si el usuario
-        // quería ver un instante fijo, ya apagó el checkbox al tocar la barra)
+        // tick del loop "en vivo": repide fetchDay del MISMO día y, si el
+        // más reciente difiere del `time` MOSTRADO (no del último `times`
+        // cacheado — así también cubre reactivar el checkbox tras haber
+        // scrubbeado hacia atrás, donde `times` no cambió pero `time` sí),
+        // salta ahí (replace) — a diferencia del viejo botón, siempre sigue
+        // al más reciente mientras el checkbox esté encendido (no conserva
+        // posición intermedia: si el usuario quería ver un instante fijo,
+        // ya apagó el checkbox al tocar la barra)
         refreshingTick: {
           invoke: {
             src: 'fetchDay',
@@ -867,10 +882,9 @@ export const viewerMachine = setup({
                 guard: ({ event }) => event.output.length > 0,
                 target: 'ready',
                 actions: enqueueActions(({ context, event, enqueue }) => {
-                  const prevLast = context.times.at(-1)?.vol_time ?? null
                   const nextLast = event.output.at(-1)!.vol_time
                   enqueue.assign({ times: event.output, timelineError: null })
-                  if (nextLast !== prevLast) {
+                  if (nextLast !== context.time) {
                     enqueue.assign({ time: nextLast })
                     enqueue({ type: 'navigate', params: { patch: { time: nextLast }, mode: 'replace' } })
                   }
