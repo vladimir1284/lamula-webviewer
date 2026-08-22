@@ -9,11 +9,16 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { isoToPath } from '../shared/url/time-path'
-import { formatFull } from '../utils/time-display'
+import { formatFullParts } from '../utils/time-display'
 import { mesoVolume, rasters, series } from '../tests/helpers/derive'
 
 const PREFS_KEY = 'lamula:prefs'
-const local = (t: string) => formatFull(t, 'local', 'America/New_York')
+const local = (t: string) => formatFullParts(t, 'local', 'America/New_York')
+
+async function expectVolTime(page: Page, parts: { date: string, time: string }) {
+  await expect(page.getByTestId('raster-vol-time')).toContainText(parts.time)
+  await expect(page.getByTestId('raster-vol-date')).toContainText(parts.date)
+}
 
 const mesoRaster = rasters.find(
   r => r.site_id === mesoVolume.site && r.vol_time === mesoVolume.volTime,
@@ -72,13 +77,13 @@ test('prefs sembradas se aplican: unidades SI y reloj UTC (camino no-default)', 
   // tabla de celdas en SI
   await expect(page.locator('[data-testid=cell-table] thead')).toContainText('Alt (km)')
   // reloj utc: la meta del raster vuelve al sufijo Z histórico
-  await expect(page.getByTestId('raster-meta')).toContainText(`${mesoRaster.vol_time}Z`)
+  await expectVolTime(page, formatFullParts(mesoRaster.vol_time, 'utc'))
 })
 
 test('sin prefs guardadas aplica el default: hora local en la meta', async ({ page }) => {
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
-  await expect(page.getByTestId('raster-meta')).toContainText(local(t))
+  await expectVolTime(page, local(t))
 })
 
 test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio escribe v4', async ({ page }) => {
@@ -93,7 +98,7 @@ test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio 
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
   // defaults nuevos activos (clock local)
-  await expect(page.getByTestId('raster-meta')).toContainText(local(t))
+  await expectVolTime(page, local(t))
 
   // primer cambio materializa v4 conservando lo guardado en v1
   await page.getByTestId('prefs-open').click()

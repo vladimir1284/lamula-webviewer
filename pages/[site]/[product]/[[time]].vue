@@ -21,7 +21,7 @@ import { overlayMachine } from '../../../machines/overlay'
 import type { OverlayLayerId, PanelId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
-import { formatFull } from '../../../utils/time-display'
+import { formatFull, formatFullParts } from '../../../utils/time-display'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
 import { convertRasterValue } from '../../../utils/units'
@@ -680,8 +680,8 @@ const cursorLatLonLabel = computed(() => {
   return `${cursor.lat.toFixed(4)}, ${cursor.lon.toFixed(4)}`
 })
 
-const volTimeLabel = computed(() =>
-  raster.value ? formatFull(raster.value.vol_time, ctx.value.clock) : null,
+const volTimeParts = computed(() =>
+  raster.value ? formatFullParts(raster.value.vol_time, ctx.value.clock) : null,
 )
 
 // GOES no tiene vol_time propio (WMS en vivo): usa el mismo vol_time del
@@ -810,8 +810,10 @@ function onSatOpacityInput(event: Event) {
       :raster-fetch-error="rasterFetchError"
       :raster-empty="rasterEmpty"
       :raster="raster"
-      :vol-time-label="volTimeLabel"
+      :vol-time-parts="volTimeParts"
       :cog-error="ctx.cogError"
+      :cursor-label="cursorLabel"
+      :cursor-lat-lon-label="cursorLatLonLabel"
       @select-site="onSelectSite"
       @select-product="onSelectProduct"
     />
@@ -859,30 +861,17 @@ function onSatOpacityInput(event: Event) {
       ⚙
     </button>
 
-    <!-- leyenda + cuadro de puntero, flotantes esquina inferior derecha
-         (D36): antes vivían en el aside izquierdo. Oculto bajo md: en una
-         pantalla angosta no hay lugar junto al timebar sin solaparse — la
-         variante móvil compacta (leyenda inline en el timebar, como
-         mobile.png) queda pendiente; por ahora en mobile simplemente no se
-         muestra, el timebar usa el ancho completo. -->
+    <!-- leyenda flotante esquina inferior derecha (D36): antes vivía en el
+         aside izquierdo. Oculta bajo md: en una pantalla angosta no hay lugar
+         junto al timebar sin solaparse — la variante móvil compacta (leyenda
+         inline en el timebar, como mobile.png) queda pendiente; por ahora en
+         mobile simplemente no se muestra, el timebar usa el ancho completo.
+         Valor bajo cursor + lat/lon se movieron al chip de radar/producto,
+         junto a VCP/elevación (ver RadarProductChip.vue). -->
     <div
       v-if="productDef"
-      class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 flex-col items-stretch gap-2 md:flex"
+      class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 md:block"
     >
-      <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 text-xs text-slate-400 shadow-lg">
-        <p>
-          Valor bajo cursor:
-          <span data-testid="cursor-value" class="block font-mono text-sm text-slate-100">
-            {{ cursorLabel ?? '—' }}
-          </span>
-        </p>
-        <p class="mt-1">
-          Lat/lon:
-          <span data-testid="cursor-latlon" class="block font-mono text-sm text-slate-100">
-            {{ cursorLatLonLabel ?? '—' }}
-          </span>
-        </p>
-      </div>
       <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 shadow-lg">
         <MapLegend :palette="productDef.palette" :units="ctx.units" />
       </div>

@@ -19,8 +19,10 @@ defineProps<{
   rasterFetchError: string | null
   rasterEmpty: boolean
   raster: RasterMeta | null
-  volTimeLabel: string | null
+  volTimeParts: { date: string, time: string } | null
   cogError: string | null
+  cursorLabel: string | null
+  cursorLatLonLabel: string | null
 }>()
 
 defineEmits<{
@@ -29,6 +31,7 @@ defineEmits<{
 }>()
 
 const expanded = ref(false)
+const vcpInfoModal = ref<{ open: () => void }>()
 </script>
 
 <template>
@@ -86,17 +89,44 @@ const expanded = ref(false)
         data-testid="raster-meta"
         class="space-y-1 rounded bg-slate-900/95 p-3 text-sm shadow-lg"
       >
+        <div v-if="volTimeParts || raster.vcp != null || raster.el_angle != null" class="flex justify-between gap-4">
+          <div v-if="volTimeParts" class="flex flex-col">
+            <dd data-testid="raster-vol-time" class="font-mono text-lg font-semibold leading-tight">
+              {{ volTimeParts.time }}
+            </dd>
+            <dd data-testid="raster-vol-date" class="font-mono text-xs text-slate-400">
+              {{ volTimeParts.date }}
+            </dd>
+          </div>
+          <div v-if="raster.vcp != null || raster.el_angle != null" class="flex flex-col items-start gap-0.5">
+            <div v-if="raster.vcp != null" class="flex items-center gap-4">
+              <dt class="text-slate-400">VCP</dt>
+              <span class="flex items-center gap-1">
+                <dd class="font-mono">{{ raster.vcp }}</dd>
+                <button
+                  type="button"
+                  data-testid="vcp-help-button"
+                  aria-label="Qué es este VCP"
+                  class="grid h-4 w-4 shrink-0 -translate-y-px place-items-center rounded-full bg-[#1565A8] text-[10px] font-bold leading-none text-white hover:brightness-110"
+                  @click="vcpInfoModal?.open()"
+                >
+                  ?
+                </button>
+              </span>
+            </div>
+            <div v-if="raster.el_angle != null" class="flex gap-2">
+              <dt class="text-slate-400">Elev</dt>
+              <dd class="font-mono">{{ raster.el_angle }}°</dd>
+            </div>
+          </div>
+        </div>
         <div class="flex justify-between">
-          <dt class="text-slate-400">Volumen</dt>
-          <dd class="font-mono">{{ volTimeLabel }}</dd>
+          <dt class="text-slate-400">Valor bajo cursor</dt>
+          <dd data-testid="cursor-value" class="font-mono">{{ cursorLabel ?? '—' }}</dd>
         </div>
-        <div v-if="raster.vcp != null" class="flex justify-between">
-          <dt class="text-slate-400">VCP</dt>
-          <dd class="font-mono">{{ raster.vcp }}</dd>
-        </div>
-        <div v-if="raster.el_angle != null" class="flex justify-between">
-          <dt class="text-slate-400">Elevación</dt>
-          <dd class="font-mono">{{ raster.el_angle }}°</dd>
+        <div class="flex justify-between">
+          <dt class="text-slate-400">Lat/lon</dt>
+          <dd data-testid="cursor-latlon" class="font-mono">{{ cursorLatLonLabel ?? '—' }}</dd>
         </div>
       </dl>
 
@@ -144,5 +174,7 @@ const expanded = ref(false)
         </select>
       </label>
     </div>
+
+    <VcpInfoModal ref="vcpInfoModal" :vcp="raster?.vcp ?? null" />
   </div>
 </template>
