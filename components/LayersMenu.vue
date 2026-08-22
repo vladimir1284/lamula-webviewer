@@ -90,9 +90,9 @@ function openPanel(panel: PanelId) {
       </button>
 
       <label
-        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span>Satélite</span>
+        <span class="whitespace-nowrap">Satélite</span>
         <LayerIcon kind="sat" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <!-- overlay full-size en vez de sr-only: el clip-rect de sr-only
              deja el checkbox sin hit-test propio (Playwright resuelve el
@@ -110,9 +110,9 @@ function openPanel(panel: PanelId) {
       </label>
 
       <label
-        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span>Fenómenos</span>
+        <span class="whitespace-nowrap">Fenómenos</span>
         <LayerIcon kind="cells" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -124,9 +124,9 @@ function openPanel(panel: PanelId) {
       </label>
 
       <label
-        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span>Viento</span>
+        <span class="whitespace-nowrap">Viento</span>
         <LayerIcon kind="wind" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -138,9 +138,9 @@ function openPanel(panel: PanelId) {
       </label>
 
       <label
-        class="group pointer-events-auto relative z-50 flex w-48 max-w-[calc(100vw-2rem)] md:w-56 items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span>Rayos</span>
+        <span class="whitespace-nowrap">Rayos</span>
         <LayerIcon kind="lightning" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
