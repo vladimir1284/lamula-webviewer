@@ -5,7 +5,7 @@ import type { BaseMapId } from '#shared/basemaps'
 import { isBaseMapId } from '#shared/basemaps'
 
 export interface ViewerPrefs {
-  v: 4
+  v: 5
   site: string
   product: number
   opacity: number
@@ -21,6 +21,9 @@ export interface ViewerPrefs {
    * el nivel crudo a una grilla más gruesa antes del mismo lerp. Sin efecto si
    * `smooth` es false. */
   smoothRadius: 1 | 2 | 4 | 8
+  /** paleta de colores del raster on/off — off equivale a opacidad 0 (la capa
+   * sigue cargando, el valor bajo cursor no depende del estilo) */
+  showPalette: boolean
 }
 
 export const PREF_DEFAULTS = {
@@ -34,6 +37,7 @@ export const PREF_DEFAULTS = {
   animationFrames: 12,
   smooth: false,
   smoothRadius: 1,
+  showPalette: true,
 } as const satisfies Omit<ViewerPrefs, 'v'>
 
 const KEY = 'lamula:prefs'
@@ -76,7 +80,9 @@ function isValidV3(p: Record<string, unknown>): boolean {
     && typeof p.smooth === 'boolean'
 }
 
-function isValidV4(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
+// shape v4 histórico (pre showPalette) — idem, se migra en memoria al leer
+// y se materializa como v5 en el siguiente savePrefs
+function isValidV4(p: Record<string, unknown>): boolean {
   return p.v === 4
     && typeof p.site === 'string'
     && typeof p.product === 'number'
@@ -90,16 +96,47 @@ function isValidV4(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
     && (p.smoothRadius === 1 || p.smoothRadius === 2 || p.smoothRadius === 4 || p.smoothRadius === 8)
 }
 
+function isValidV5(p: Record<string, unknown> | ViewerPrefs): p is ViewerPrefs {
+  return p.v === 5
+    && typeof p.site === 'string'
+    && typeof p.product === 'number'
+    && typeof p.opacity === 'number'
+    && isBaseMapId(p.base)
+    && typeof p.coverage === 'boolean'
+    && (p.units === 'imperial' || p.units === 'si')
+    && (p.clock === 'utc' || p.clock === 'local')
+    && typeof p.animationFrames === 'number'
+    && typeof p.smooth === 'boolean'
+    && (p.smoothRadius === 1 || p.smoothRadius === 2 || p.smoothRadius === 4 || p.smoothRadius === 8)
+    && typeof p.showPalette === 'boolean'
+}
+
 export function loadPrefs(): ViewerPrefs | null {
   if (typeof localStorage === 'undefined') return null
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Record<string, unknown>
-    if (isValidV4(parsed)) return parsed
+    if (isValidV5(parsed)) return parsed
+    if (isValidV4(parsed)) {
+      return {
+        v: 5,
+        site: parsed.site as string,
+        product: parsed.product as number,
+        opacity: parsed.opacity as number,
+        base: parsed.base as BaseMapId,
+        coverage: parsed.coverage as boolean,
+        units: parsed.units as 'imperial' | 'si',
+        clock: parsed.clock as 'utc' | 'local',
+        animationFrames: parsed.animationFrames as number,
+        smooth: parsed.smooth as boolean,
+        smoothRadius: parsed.smoothRadius as 1 | 2 | 4 | 8,
+        showPalette: PREF_DEFAULTS.showPalette,
+      }
+    }
     if (isValidV3(parsed)) {
       return {
-        v: 4,
+        v: 5,
         site: parsed.site as string,
         product: parsed.product as number,
         opacity: parsed.opacity as number,
@@ -110,11 +147,12 @@ export function loadPrefs(): ViewerPrefs | null {
         animationFrames: parsed.animationFrames as number,
         smooth: parsed.smooth as boolean,
         smoothRadius: PREF_DEFAULTS.smoothRadius,
+        showPalette: PREF_DEFAULTS.showPalette,
       }
     }
     if (isValidV2(parsed)) {
       return {
-        v: 4,
+        v: 5,
         site: parsed.site as string,
         product: parsed.product as number,
         opacity: parsed.opacity as number,
@@ -125,11 +163,12 @@ export function loadPrefs(): ViewerPrefs | null {
         animationFrames: parsed.animationFrames as number,
         smooth: PREF_DEFAULTS.smooth,
         smoothRadius: PREF_DEFAULTS.smoothRadius,
+        showPalette: PREF_DEFAULTS.showPalette,
       }
     }
     if (isValidV1(parsed)) {
       return {
-        v: 4,
+        v: 5,
         site: parsed.site as string,
         product: parsed.product as number,
         opacity: parsed.opacity as number,
@@ -140,6 +179,7 @@ export function loadPrefs(): ViewerPrefs | null {
         animationFrames: PREF_DEFAULTS.animationFrames,
         smooth: PREF_DEFAULTS.smooth,
         smoothRadius: PREF_DEFAULTS.smoothRadius,
+        showPalette: PREF_DEFAULTS.showPalette,
       }
     }
     return null
@@ -153,7 +193,7 @@ export function savePrefs(patch: Partial<Omit<ViewerPrefs, 'v'>>): void {
   if (typeof localStorage === 'undefined') return
   const current = loadPrefs()
   const next: ViewerPrefs = {
-    v: 4,
+    v: 5,
     site: current?.site ?? PREF_DEFAULTS.site,
     product: current?.product ?? PREF_DEFAULTS.product,
     opacity: current?.opacity ?? PREF_DEFAULTS.opacity,
@@ -164,6 +204,7 @@ export function savePrefs(patch: Partial<Omit<ViewerPrefs, 'v'>>): void {
     animationFrames: current?.animationFrames ?? PREF_DEFAULTS.animationFrames,
     smooth: current?.smooth ?? PREF_DEFAULTS.smooth,
     smoothRadius: current?.smoothRadius ?? PREF_DEFAULTS.smoothRadius,
+    showPalette: current?.showPalette ?? PREF_DEFAULTS.showPalette,
     ...patch,
   }
   try {

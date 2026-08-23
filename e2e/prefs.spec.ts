@@ -1,6 +1,6 @@
-// Preferencias de usuario (D28): diálogo, persistencia en lamula:prefs v4,
-// aplicación de units/clock/coverage/smooth/smoothRadius y migración desde
-// v1/v2/v3 — end-to-end en modo fixture.
+// Preferencias de usuario (D28): diálogo, persistencia en lamula:prefs v5,
+// aplicación de units/clock/coverage/smooth/smoothRadius/showPalette y
+// migración desde v1/v2/v3/v4 — end-to-end en modo fixture.
 //
 // Hidratación (hallazgo documentado en animation.spec.ts): abrir el diálogo
 // y togglear controles son clicks con efecto real — UN solo click tras
@@ -42,7 +42,7 @@ function seedPrefs(page: Page, value: Record<string, unknown>) {
 const readPrefs = async (page: Page) =>
   JSON.parse(await page.evaluate(key => localStorage.getItem(key) ?? 'null', PREFS_KEY))
 
-test('el diálogo abre, togglea coverage, persiste v4 y cierra con Esc', async ({ page }) => {
+test('el diálogo abre, togglea coverage, persiste v5 y cierra con Esc', async ({ page }) => {
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
@@ -54,7 +54,7 @@ test('el diálogo abre, togglea coverage, persiste v4 y cierra con Esc', async (
   await page.getByTestId('pref-coverage').click() // único click (toggle con efecto)
   await expect(async () => {
     const prefs = await readPrefs(page)
-    expect(prefs.v).toBe(4)
+    expect(prefs.v).toBe(5)
     expect(prefs.coverage).toBe(false)
   }).toPass({ timeout: 5000 })
 
@@ -88,7 +88,7 @@ test('sin prefs guardadas aplica el default: hora local en la meta', async ({ pa
   await expectVolTime(page, local(t))
 })
 
-test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio escribe v4', async ({ page }) => {
+test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio escribe v5', async ({ page }) => {
   await seedPrefs(page, {
     v: 1,
     site: series.site,
@@ -102,17 +102,17 @@ test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio 
   // defaults nuevos activos (clock local)
   await expectVolTime(page, local(t))
 
-  // primer cambio materializa v4 conservando lo guardado en v1
+  // primer cambio materializa v5 conservando lo guardado en v1
   await page.getByTestId('layers-menu-toggle').click()
   await page.getByTestId('prefs-open').click()
   await page.getByTestId('pref-units-si').click()
   await expect(async () => {
     const prefs = await readPrefs(page)
-    expect(prefs).toMatchObject({ v: 4, opacity: 0.5, units: 'si', clock: 'local', smooth: false, smoothRadius: 1 })
+    expect(prefs).toMatchObject({ v: 5, opacity: 0.5, units: 'si', clock: 'local', smooth: false, smoothRadius: 1, showPalette: true })
   }).toPass({ timeout: 5000 })
 })
 
-test('migración: un v2 guardado (pre-smooth) arranca con smooth off y el primer cambio escribe v4', async ({ page }) => {
+test('migración: un v2 guardado (pre-smooth) arranca con smooth off y el primer cambio escribe v5', async ({ page }) => {
   await seedPrefs(page, {
     v: 2,
     site: series.site,
@@ -134,7 +134,7 @@ test('migración: un v2 guardado (pre-smooth) arranca con smooth off y el primer
   await page.getByTestId('smooth-toggle').click() // único click (toggle con efecto)
   await expect(async () => {
     const prefs = await readPrefs(page)
-    expect(prefs).toMatchObject({ v: 4, opacity: 0.8, coverage: true, smooth: true, smoothRadius: 1 })
+    expect(prefs).toMatchObject({ v: 5, opacity: 0.8, coverage: true, smooth: true, smoothRadius: 1, showPalette: true })
   }).toPass({ timeout: 5000 })
 })
 
@@ -167,7 +167,36 @@ test('migración: un v3 guardado (pre-smoothRadius) arranca con radio 1 y el sel
 
   await expect(async () => {
     const prefs = await readPrefs(page)
-    expect(prefs).toMatchObject({ v: 4, smooth: true, smoothRadius: 4 })
+    expect(prefs).toMatchObject({ v: 5, smooth: true, smoothRadius: 4 })
+  }).toPass({ timeout: 5000 })
+})
+
+test('migración: un v4 guardado (pre-showPalette) arranca con la paleta activada y el toggle persiste el cambio', async ({ page }) => {
+  await seedPrefs(page, {
+    v: 4,
+    site: series.site,
+    product: series.product,
+    opacity: 0.8,
+    base: 'osm',
+    coverage: true,
+    units: 'imperial',
+    clock: 'local',
+    animationFrames: 12,
+    smooth: false,
+    smoothRadius: 1,
+  })
+  const t = series.times[1]
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
+
+  await page.getByTestId('layers-menu-toggle').click()
+  await expect(page.getByTestId('show-palette-toggle')).toBeChecked()
+  await expect(page.getByTestId('legend')).toBeVisible()
+
+  await page.getByTestId('show-palette-toggle').click() // único click (toggle con efecto)
+  await expect(page.getByTestId('legend')).toBeHidden()
+  await expect(async () => {
+    const prefs = await readPrefs(page)
+    expect(prefs).toMatchObject({ v: 5, smooth: false, smoothRadius: 1, showPalette: false })
   }).toPass({ timeout: 5000 })
 })
 

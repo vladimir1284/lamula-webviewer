@@ -7,6 +7,7 @@ import { ref } from 'vue'
 import type { Radar, Product, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import { rasterProductDef } from '#shared/products'
+import type { UnitsPref } from '../utils/units'
 
 defineProps<{
   radars: Radar[]
@@ -23,6 +24,9 @@ defineProps<{
   cogError: string | null
   cursorLabel: string | null
   cursorLatLonLabel: string | null
+  /** paleta de colores on/off (LayersMenu) — controla la leyenda de abajo */
+  showPalette: boolean
+  units: UnitsPref
 }>()
 
 defineEmits<{
@@ -164,6 +168,16 @@ const vcpInfoModal = ref<{ open: () => void }>()
           <dd data-testid="cursor-latlon" class="font-mono">{{ cursorLatLonLabel ?? '—' }}</dd>
         </div>
       </dl>
+
+      <!-- leyenda de colores (D36→checkbox "Mostrar paleta de colores" en
+           LayersMenu): debajo de lat/lon, no en la esquina inferior derecha -->
+      <div
+        v-if="showPalette && productDef"
+        data-testid="legend-chip"
+        class="rounded bg-slate-900/95 p-2 shadow-lg"
+      >
+        <MapLegend :palette="productDef.palette" :units="units" />
+      </div>
 
       <!-- fallo de carga del COG: aviso aparte, no oculta la metadata -->
       <p

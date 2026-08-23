@@ -108,9 +108,9 @@ const gradientStops = computed(() =>
         />
         <text
           :x="x(tick)"
-          :y="BAR_Y + BAR_H + 16"
+          :y="BAR_Y + BAR_H + 17"
           text-anchor="middle"
-          font-size="10"
+          font-size="13"
           fill="currentColor"
         >{{ tickLabel(tick) }}</text>
       </g>

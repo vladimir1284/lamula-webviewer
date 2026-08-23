@@ -207,6 +207,7 @@ onMounted(() => {
       animationFrames: prefs?.animationFrames ?? PREF_DEFAULTS.animationFrames,
       smooth: prefs?.smooth ?? PREF_DEFAULTS.smooth,
       smoothRadius: prefs?.smoothRadius ?? PREF_DEFAULTS.smoothRadius,
+      showPalette: prefs?.showPalette ?? PREF_DEFAULTS.showPalette,
     },
   })
 })
@@ -716,6 +717,9 @@ function onToggleSmooth(event: Event) {
 function onSelectSmoothRadius(event: Event) {
   send({ type: 'SET_PREF', patch: { smoothRadius: Number((event.target as HTMLSelectElement).value) as 1 | 2 | 4 | 8 } })
 }
+function onToggleShowPalette(event: Event) {
+  send({ type: 'SET_PREF', patch: { showPalette: (event.target as HTMLInputElement).checked } })
+}
 function onToggleSatellite() {
   send({ type: 'TOGGLE_SATELLITE' })
 }
@@ -833,33 +837,19 @@ function onSatOpacityInput(event: Event) {
         :cog-error="ctx.cogError"
         :cursor-label="cursorLabel"
         :cursor-lat-lon-label="cursorLatLonLabel"
+        :show-palette="ctx.showPalette"
+        :units="ctx.units"
         @select-site="onSelectSite"
         @select-product="onSelectProduct"
       />
 
-      <!-- leyenda flotante esquina inferior derecha (D36): antes vivía en el
-           aside izquierdo. Oculta bajo md: en una pantalla angosta no hay lugar
-           junto al timebar sin solaparse — la variante móvil compacta (leyenda
-           inline en el timebar, como mobile.png) queda pendiente; por ahora en
-           mobile simplemente no se muestra, el timebar usa el ancho completo.
-           Valor bajo cursor + lat/lon se movieron al chip de radar/producto,
-           junto a VCP/elevación (ver RadarProductChip.vue). -->
-      <div
-        v-if="productDef"
-        class="pointer-events-none absolute bottom-6 right-4 z-10 hidden w-56 md:block"
-      >
-        <div class="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 p-2 shadow-lg">
-          <MapLegend :palette="productDef.palette" :units="ctx.units" />
-        </div>
-      </div>
-
       <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
-           directamente sobre el mapa. En md+ deja espacio a la derecha para el
-           stack de leyenda/puntero (oculto en mobile, ver arriba — ahí el
-           timebar usa el ancho completo). -->
+           directamente sobre el mapa. La leyenda (D36) se mudó al chip de
+           radar/producto, debajo de lat/lon (checkbox "Mostrar paleta de
+           colores" en LayersMenu) — la esquina inferior derecha queda libre
+           siempre, el timebar ya no reserva espacio para ella. -->
       <div
-        class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8"
-        :class="productDef ? 'md:right-64' : 'md:right-8'"
+        class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8 md:right-8"
       >
         <div class="pointer-events-auto">
           <p
@@ -908,6 +898,7 @@ function onSatOpacityInput(event: Event) {
       :opacity="ctx.opacity"
       :smooth="ctx.smooth"
       :smooth-radius="ctx.smoothRadius"
+      :show-palette="ctx.showPalette"
       :animation-engaged="animationEngaged"
       :sat="ctx.sat"
       :sat-variant="ctx.satVariant"
@@ -924,6 +915,7 @@ function onSatOpacityInput(event: Event) {
       @opacity-input="onOpacityInput"
       @toggle-smooth="onToggleSmooth"
       @select-smooth-radius="onSelectSmoothRadius"
+      @toggle-show-palette="onToggleShowPalette"
       @toggle-satellite="onToggleSatellite"
       @select-sat-variant="onSelectSatVariant"
       @sat-opacity-input="onSatOpacityInput"

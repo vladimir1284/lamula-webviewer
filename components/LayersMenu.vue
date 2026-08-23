@@ -23,6 +23,7 @@ defineProps<{
   opacity: number
   smooth: boolean
   smoothRadius: 1 | 2 | 4 | 8
+  showPalette: boolean
   animationEngaged: boolean
   sat: boolean
   satVariant: 'ir' | 'vis'
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   'opacity-input': [event: Event]
   'toggle-smooth': [event: Event]
   'select-smooth-radius': [event: Event]
+  'toggle-show-palette': [event: Event]
   'toggle-satellite': []
   'select-sat-variant': [event: Event]
   'sat-opacity-input': [event: Event]
@@ -219,6 +221,16 @@ function openPrefs() {
             @change="emit('toggle-smooth', $event)"
           >
           <span>Suavizar celdas del raster</span>
+        </label>
+
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            data-testid="show-palette-toggle"
+            :checked="showPalette"
+            @change="emit('toggle-show-palette', $event)"
+          >
+          <span>Mostrar paleta de colores</span>
         </label>
 
         <label
