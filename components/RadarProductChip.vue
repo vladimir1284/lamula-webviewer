@@ -36,21 +36,57 @@ const vcpInfoModal = ref<{ open: () => void }>()
 
 <template>
   <div class="pointer-events-auto absolute left-4 top-4 z-20 w-72 max-w-[calc(100vw-2rem)]">
-    <button
-      type="button"
-      data-testid="radar-chip-toggle"
-      class="flex w-full items-center gap-2.5 rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-left shadow-lg"
-      @click="expanded = !expanded"
-    >
-      <AppLogo :size="20" class="shrink-0 text-teal-400" />
-      <span class="min-w-0 flex-1">
-        <span class="block truncate text-sm font-bold">
-          {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}
+    <div class="rounded-lg border border-slate-700 bg-slate-900/95 shadow-lg" :class="expanded ? 'rounded-b-none border-b-0' : ''">
+      <button
+        type="button"
+        data-testid="radar-chip-toggle"
+        class="flex w-full items-center gap-2.5 px-3 py-2 text-left"
+        @click="expanded = !expanded"
+      >
+        <AppLogo :size="20" class="shrink-0 text-teal-400" />
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm font-bold">
+            {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}
+          </span>
+          <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0 mt-0.5" />
         </span>
-        <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0 mt-0.5" />
-      </span>
-      <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
-    </button>
+        <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
+      </button>
+    </div>
+
+    <!-- selectores pegados al toggle: mismo card, sin gap -->
+    <div
+      v-if="expanded"
+      class="space-y-3 rounded-b-lg border border-t border-slate-700 border-t-slate-700/60 bg-slate-900/95 p-3 text-sm shadow-lg"
+    >
+      <label class="block">
+        <span class="mb-1 block text-slate-400">Radar</span>
+        <select
+          :value="site"
+          data-testid="radar-select"
+          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+          @change="$emit('select-site', $event)"
+        >
+          <option v-for="r in radars" :key="r.site_id" :value="r.site_id">
+            {{ r.icao ?? r.site_id }}
+          </option>
+        </select>
+      </label>
+
+      <label class="block">
+        <span class="mb-1 block text-slate-400">Producto</span>
+        <select
+          :value="String(product)"
+          data-testid="product-select"
+          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+          @change="$emit('select-product', $event)"
+        >
+          <option v-for="p in rasterProducts" :key="p.code" :value="String(p.code)">
+            {{ rasterProductDef(p.code)?.name ?? p.mnemonic }} ({{ p.mnemonic }})
+          </option>
+        </select>
+      </label>
+    </div>
 
     <!-- estado del raster: SIEMPRE visible, no detrás del toggle — es
          información de un vistazo (equivalente al resumen de pronóstico de
@@ -138,41 +174,6 @@ const vcpInfoModal = ref<{ open: () => void }>()
       >
         {{ cogError }}
       </p>
-    </div>
-
-    <!-- solo los selectores viven detrás del toggle: identidad+estado de
-         arriba ya cubre lo que se mira sin necesidad de expandir -->
-    <div
-      v-if="expanded"
-      class="mt-1.5 space-y-3 rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-sm shadow-lg"
-    >
-      <label class="block">
-        <span class="mb-1 block text-slate-400">Radar</span>
-        <select
-          :value="site"
-          data-testid="radar-select"
-          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-          @change="$emit('select-site', $event)"
-        >
-          <option v-for="r in radars" :key="r.site_id" :value="r.site_id">
-            {{ r.icao ?? r.site_id }}
-          </option>
-        </select>
-      </label>
-
-      <label class="block">
-        <span class="mb-1 block text-slate-400">Producto</span>
-        <select
-          :value="String(product)"
-          data-testid="product-select"
-          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
-          @change="$emit('select-product', $event)"
-        >
-          <option v-for="p in rasterProducts" :key="p.code" :value="String(p.code)">
-            {{ rasterProductDef(p.code)?.name ?? p.mnemonic }} ({{ p.mnemonic }})
-          </option>
-        </select>
-      </label>
     </div>
 
     <VcpInfoModal ref="vcpInfoModal" :vcp="raster?.vcp ?? null" />
