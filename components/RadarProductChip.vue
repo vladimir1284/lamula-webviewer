@@ -43,7 +43,6 @@ const vcpInfoModal = ref<{ open: () => void }>()
         class="flex w-full items-center gap-2.5 px-3 py-2 text-left"
         @click="expanded = !expanded"
       >
-        <AppLogo :size="20" class="shrink-0 text-teal-400" />
         <span class="min-w-0 flex-1">
           <span class="block truncate text-sm font-bold">
             {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}

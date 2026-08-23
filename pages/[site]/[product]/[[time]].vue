@@ -804,6 +804,18 @@ function onSatOpacityInput(event: Event) {
         />
       </ClientOnly>
 
+      <!-- marca centrada arriba: tab trapezoidal que sale del borde superior
+           (reemplaza el ícono que vivía dentro de RadarProductChip) -->
+      <div class="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center">
+        <div
+          class="pointer-events-auto flex h-11 w-72 items-center justify-center gap-2 bg-gradient-to-b from-slate-950/80 to-slate-700/80 px-6 shadow-lg ring-1 ring-inset ring-white/10"
+          style="clip-path: path('M0,0 L288,0 L257.06,32.42 Q246,44 230,44 L58,44 Q42,44 30.94,32.42 Z')"
+        >
+          <AppLogo :size="24" class="shrink-0 text-teal-400" />
+          <span class="text-sm font-bold tracking-wide text-slate-100">LAMULA<sup class="text-[0.6em]">™</sup> WebViewer</span>
+        </div>
+      </div>
+
       <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
            + el primer bloque del aside izquierdo -->
       <RadarProductChip
