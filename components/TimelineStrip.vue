@@ -53,6 +53,16 @@ function pct(iso: string): number {
   return ((naiveUtcToEpochMs(iso) - start) / (end - start)) * 100
 }
 
+// separa el primer/último tick de la punta redondeada del track (h-3.5 = 14px,
+// radio 7px) — si no, el tick queda montado sobre la curva: |( en vez de (|
+const TICK_EDGE_INSET_PX = 7
+
+function markLeft(time: string, idx: number): string {
+  if (idx === 0) return `${TICK_EDGE_INSET_PX}px`
+  if (idx === props.times.length - 1) return `calc(100% - ${TICK_EDGE_INSET_PX}px)`
+  return `${pct(time)}%`
+}
+
 const gapBands = computed(() =>
   props.gaps.map(g => ({
     left: pct(g.after),
@@ -315,10 +325,10 @@ const tickLabels = computed(() => {
                para hacer click, aunque no se le muestre la hora en la
                leyenda (tickLabels solo etiqueta 5-6) -->
           <div
-            v-for="time in times"
+            v-for="(time, idx) in times"
             :key="`mark-${time}`"
             class="pointer-events-none absolute top-1/2 h-1.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
-            :style="{ left: `${pct(time)}%` }"
+            :style="{ left: markLeft(time, idx) }"
           />
           <!-- objetivos de click invisibles, uno por vol_time: la maqueta no
                los muestra (drag/click-en-track ya alcanza el más cercano),
