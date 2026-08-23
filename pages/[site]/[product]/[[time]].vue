@@ -825,16 +825,6 @@ function onSatOpacityInput(event: Event) {
         @select-product="onSelectProduct"
       />
 
-      <!-- ⚙ preferencias: junto al menú de capas, ya no vive en un header fijo -->
-      <button
-        data-testid="prefs-open"
-        aria-label="Preferencias"
-        class="pointer-events-auto absolute right-[9.5rem] top-4 z-20 grid h-10 w-10 place-items-center rounded-lg border border-slate-700 bg-slate-900/95 text-slate-400 shadow-lg hover:text-slate-100"
-        @click="prefsDialog?.open()"
-      >
-        ⚙
-      </button>
-
       <!-- leyenda flotante esquina inferior derecha (D36): antes vivía en el
            aside izquierdo. Oculta bajo md: en una pantalla angosta no hay lugar
            junto al timebar sin solaparse — la variante móvil compacta (leyenda
@@ -929,6 +919,7 @@ function onSatOpacityInput(event: Event) {
       @select-wind-level="onSelectWindLevel"
       @select-day="onSelectDay"
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
+      @open-prefs="prefsDialog?.open()"
     />
   </div>
 </template>

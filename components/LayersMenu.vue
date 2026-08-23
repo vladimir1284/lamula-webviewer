@@ -49,6 +49,7 @@ const emit = defineEmits<{
   'select-wind-level': [event: Event]
   'select-day': [day: string]
   'open-panel': [panel: PanelId]
+  'open-prefs': []
 }>()
 
 const open = ref(false)
@@ -56,6 +57,11 @@ const open = ref(false)
 function openPanel(panel: PanelId) {
   open.value = false
   emit('open-panel', panel)
+}
+
+function openPrefs() {
+  open.value = false
+  emit('open-prefs')
 }
 </script>
 
@@ -422,6 +428,18 @@ function openPanel(panel: PanelId) {
             VWP
           </button>
         </div>
+      </fieldset>
+
+      <fieldset class="rounded bg-slate-800 p-3">
+        <legend class="px-1 text-slate-400">Preferencias</legend>
+        <button
+          type="button"
+          data-testid="prefs-open"
+          class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+          @click="openPrefs"
+        >
+          Unidades, hora, alcance del radar
+        </button>
       </fieldset>
 
       <DayPicker

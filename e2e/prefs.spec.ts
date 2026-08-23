@@ -46,6 +46,8 @@ test('el diálogo abre, togglea coverage, persiste v4 y cierra con Esc', async (
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
+  // D36: prefs-open se mudó al menú de capas
+  await page.getByTestId('layers-menu-toggle').click()
   await page.getByTestId('prefs-open').click() // único click, post-networkidle
   await expect(page.getByTestId('prefs-dialog')).toBeVisible()
 
@@ -101,6 +103,7 @@ test('migración: un v1 guardado arranca con defaults nuevos y el primer cambio 
   await expectVolTime(page, local(t))
 
   // primer cambio materializa v4 conservando lo guardado en v1
+  await page.getByTestId('layers-menu-toggle').click()
   await page.getByTestId('prefs-open').click()
   await page.getByTestId('pref-units-si').click()
   await expect(async () => {
@@ -200,6 +203,7 @@ test('coverage off sembrado: el viewer arranca sin la máscara y el toggle la re
   const t = series.times[1]
   await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t)}`)
 
+  await page.getByTestId('layers-menu-toggle').click()
   await page.getByTestId('prefs-open').click()
   const checkbox = page.getByTestId('pref-coverage')
   await expect(checkbox).not.toBeChecked()
