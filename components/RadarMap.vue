@@ -10,6 +10,7 @@
 // contenido ⇒ modo animación sobre un pool de capas (utils/map/frame-pool.ts).
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
+import { defaults as defaultControls } from 'ol/control'
 import View from 'ol/View'
 import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
@@ -394,6 +395,7 @@ onMounted(() => {
   updateSatelliteTime()
   map = new Map({
     target: container.value,
+    controls: defaultControls({ zoom: false }),
     layers: [
       baseLayer,
       satelliteLayer,
