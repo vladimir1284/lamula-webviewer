@@ -169,9 +169,10 @@ const vcpInfoModal = ref<{ open: () => void }>()
       <p
         v-if="cogError"
         data-testid="cog-error"
-        class="rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
+        class="flex items-start gap-2 rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
       >
-        {{ cogError }}
+        <span aria-hidden="true">⚠️</span>
+        <span class="min-w-0 break-words">{{ cogError }}</span>
       </p>
     </div>
 
