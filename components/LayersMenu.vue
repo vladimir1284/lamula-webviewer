@@ -260,7 +260,7 @@ function openPrefs() {
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': sat }">
-          <span>Satélite</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="sat" class="h-5 w-5" />Satélite</span>
           <input
             type="checkbox"
             data-testid="sat-toggle"
@@ -305,7 +305,7 @@ function openPrefs() {
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('cells') }">
-          <span>Fenómenos</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="cells" class="h-5 w-5" />Fenómenos</span>
           <input
             type="checkbox"
             data-testid="layer-toggle-cells"
@@ -353,7 +353,7 @@ function openPrefs() {
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('wind') }">
-          <span>Viento<template v-if="layers.includes('wind')"> ({{ WIND_LEVEL_LABELS[windLevel] }})</template></span>
+          <span class="flex items-center gap-2"><LayerIcon kind="wind" class="h-5 w-5" />Viento<template v-if="layers.includes('wind')"> ({{ WIND_LEVEL_LABELS[windLevel] }})</template></span>
           <input
             type="checkbox"
             data-testid="layer-toggle-wind"
@@ -390,7 +390,7 @@ function openPrefs() {
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('lightning') }">
-          <span>Rayos</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="lightning" class="h-5 w-5" />Rayos</span>
           <input
             type="checkbox"
             data-testid="layer-toggle-lightning"
