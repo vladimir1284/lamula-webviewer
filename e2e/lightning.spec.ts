@@ -126,8 +126,8 @@ test('ventana sin cubos con strikes: capa limpia y mensaje explícito (D24)', as
 
 test('rayos solo no arrastran fenómenos: sin tabla ni markers de celdas', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined, 'base=off&layers=lightning'))
-  // D36: SidePanel se reemplazó por DataModal (native <dialog>, siempre en
-  // el DOM pero cerrado sin ?panel=)
+  // D36: SidePanel se reemplazó por DataModal; D37: dock condicionado a
+  // ?panel= (v-if), no en el DOM cuando está cerrado
   await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
   await expect(page.locator('[data-testid^=cell-row-]')).toHaveCount(0)
 })

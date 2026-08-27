@@ -89,12 +89,14 @@ test('degradación: site sin fenómenos avisa, y el VWP sigue funcionando', asyn
   await gotoHydrated(page, viewerUrl(vwpOnly!.raster, 'base=off&layers=cells&panel=vwp'))
 
   // panel=vwp abre DataModal directo en el deep-link (D36: VwpModal se
-  // consolidó en DataModal) — su <dialog> nativo bloquea clicks fuera de sí
-  // (backdrop cubre toda la pantalla), así que hay que cerrarlo antes de
-  // alcanzar el menú de capas (overlay-info se mudó ahí, antes siempre
+  // consolidó en DataModal). D37: DataModal es un dock (no <dialog> modal)
+  // mutuamente excluyente con el menú de capas — sus pills flotantes
+  // (incluido "Menú") se ocultan mientras el dock está abierto, así que
+  // hay que cerrarlo (✕) antes de alcanzar overlay-info (antes siempre
   // visible en el aside)
   await expect(page.locator('[data-testid=data-modal]')).toBeVisible()
-  await page.keyboard.press('Escape')
+  await page.locator('[data-testid=data-modal-close]').click()
+  await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
   await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=overlay-info]'))
     .toContainText('Sin datos de celdas')
@@ -133,11 +135,11 @@ test('deep link completo reproduce capas + panel + celda tras hidratar', async (
   // deep-link) — verificar su contenido primero, mientras está abierto
   await expect(page.locator('[data-testid=data-modal]')).toContainText(topCell.cell_id!)
   await expect(page.locator('[data-testid=trend-chart]').first()).toBeVisible()
-  // el <dialog> nativo abierto bloquea clicks fuera de sí (su backdrop
-  // cubre toda la pantalla) — cerrarlo antes de alcanzar el menú de capas
-  await page.keyboard.press('Escape')
+  // D37: DataModal es dock (no <dialog> modal), mutuamente excluyente con
+  // Capas — sus pills flotantes (incluido "Menú") se ocultan mientras está
+  // abierto, así que hay que cerrarlo (✕) antes de alcanzar el menú
+  await page.locator('[data-testid=data-modal-close]').click()
   await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
-  // D36: los toggles de capa se mudaron al menú de capas
   await page.locator('[data-testid=layers-menu-toggle]').click()
   await expect(page.locator('[data-testid=layer-toggle-cells]')).toBeChecked()
   await expect(page.locator('[data-testid=layer-toggle-meso]')).toBeChecked()

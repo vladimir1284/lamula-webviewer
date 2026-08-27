@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Modal de ayuda sobre el VCP activo, abierto desde RadarProductChip.vue.
-// Mismo patrón sin librería que PrefsDialog/TabModal (<dialog> nativo).
+// Mismo patrón sin librería que PrefsDialog (<dialog> nativo).
 import { computed, ref } from 'vue'
 import { VCP_SOURCE_URL, vcpInfo } from '#shared/vcp'
 

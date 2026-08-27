@@ -115,8 +115,8 @@ test('frame a >1 h de todo valid_time: capa limpia y mensaje explícito (D24)', 
 
 test('viento solo no arrastra fenómenos: sin tabla ni markers de celdas', async ({ page }) => {
   await gotoHydrated(page, viewerUrl(joined.raster, 'base=off&layers=wind'))
-  // D36: SidePanel se reemplazó por DataModal (native <dialog>, siempre en
-  // el DOM pero cerrado sin ?panel=)
+  // D36: SidePanel se reemplazó por DataModal; D37: dock condicionado a
+  // ?panel= (v-if), no en el DOM cuando está cerrado
   await expect(page.locator('[data-testid=data-modal]')).not.toBeVisible()
   await expect(page.locator('[data-testid^=cell-row-]')).toHaveCount(0)
 })

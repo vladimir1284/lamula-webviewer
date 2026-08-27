@@ -16,6 +16,11 @@ import type { OverlayLayerId, PanelId } from '../machines/overlay'
 
 defineProps<{
   base: BaseMapId
+  /** true con el dock de Datos abierto (D37): oculta también los pills
+      flotantes (Menú/Satélite/...) — comparten el mismo rincón superior
+      derecho que el botón cerrar de DataModal.vue y lo tapaban (subtree
+      intercepts pointer events en e2e) */
+  panelOpen: boolean
   /** false cuando el producto activo no tiene paleta en el catálogo (D36):
       oculta opacidad/suavizado, que no aplican sin paleta — igual que el
       antiguo v-if="productDef" del aside */
@@ -75,8 +80,10 @@ function openPrefs() {
        así el on/off vive en un solo lugar y no hay dos controles para el
        mismo estado compitiendo por espacio. Todo el grupo (botón + pills)
        se oculta con el panel abierto (D37) — cerrar ahí es cosa del header
-       "Capas ✕" del panel, no de este botón. -->
-  <div v-if="!open" class="absolute right-4 top-4 flex flex-col items-end gap-2">
+       "Capas ✕" del panel, no de este botón. También se oculta con el dock
+       de Datos abierto (D37, `panelOpen`): mismo rincón superior derecho
+       que su botón cerrar. -->
+  <div v-if="!open && !panelOpen" class="absolute right-4 top-4 flex flex-col items-end gap-2">
     <button
       type="button"
       data-testid="layers-menu-toggle"

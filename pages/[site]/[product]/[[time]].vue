@@ -52,7 +52,6 @@ definePageMeta({
 const route = useRoute()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
-const dataModal = ref<{ open: () => void, close: () => void }>()
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -214,21 +213,11 @@ onMounted(() => {
 
 const ctx = computed(() => snapshot.value.context)
 
-// DataModal (D36): no es parte de la URL en sí, pero se abre/cierra en
-// función de ctx.panel (cells|trend|vwp|null) — mismo contrato que el rail
-// derecho + el modal VWP de antes, ahora consolidados en un solo modal con
-// tabs. El watch cubre clicks en el menú de capas y el cierre (✕/Esc, que
-// dispara onDataModalClose → SELECT_PANEL null); onMounted cubre el
-// deep-link ?panel=cells|trend|vwp (el watch por sí solo no ve el valor
-// inicial). Cambiar de tab CON el modal abierto no pasa por este watch —
+// DataModal (D37): panel acoplado a la derecha, visible con v-if="ctx.panel"
+// directo en el template — no necesita open()/close() imperativos (antes
+// era un <dialog>, D36). El cierre (✕) dispara onDataModalClose →
+// SELECT_PANEL null; cambiar de tab CON el panel abierto no pasa por acá,
 // DataModal emite update:panel directo (ver onDataModalUpdatePanel).
-onMounted(() => {
-  if (ctx.value.panel !== null) dataModal.value?.open()
-})
-watch(() => ctx.value.panel, (p) => {
-  if (p !== null) dataModal.value?.open()
-  else dataModal.value?.close()
-})
 function onDataModalClose() {
   if (ctx.value.panel !== null) send({ type: 'SELECT_PANEL', panel: null })
 }
@@ -750,30 +739,6 @@ function onSatOpacityInput(event: Event) {
         @speed="onSpeedChange"
       />
 
-      <DataModal
-        ref="dataModal"
-        :panel="ctx.panel"
-        :phenomena="overlayCtx.phenomena"
-        :joined="overlayCtx.joined"
-        :selected-cell="ctx.cell"
-        :past-cell-ids="ctx.pastCells"
-        :future-cell-ids="ctx.futureCells"
-        :series="overlayCtx.series"
-        :series-error="overlayCtx.seriesError"
-        :vwp-profiles="overlayCtx.vwpProfiles"
-        :vwp-window="overlayCtx.vwpWindow"
-        :vwp-joined="overlayCtx.vwpJoined"
-        :vwp-error="overlayCtx.vwpError"
-        :vwp-empty="overlaySnapshot.matches({ vwp: 'empty' })"
-        :units="ctx.units"
-        :clock="ctx.clock"
-        @close="onDataModalClose"
-        @update:panel="onDataModalUpdatePanel"
-        @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
-        @toggle-past-track="onToggleCellTrack($event, 'past')"
-        @toggle-future-track="onToggleCellTrack($event, 'future')"
-      />
-
       <ClientOnly>
         <RadarMap
           v-if="radar"
@@ -886,6 +851,33 @@ function onSatOpacityInput(event: Event) {
       </div>
     </div>
 
+    <!-- panel de Datos (D37): mismo hueco/patrón de dock que LayersMenu
+         (hermano flex a la derecha, doble ancho), mutuamente excluyente —
+         openPanel() en LayersMenu.vue cierra su dock al abrir un tab de
+         Datos; sus pills flotantes se ocultan con :panel-open más abajo. -->
+    <DataModal
+      :panel="ctx.panel"
+      :phenomena="overlayCtx.phenomena"
+      :joined="overlayCtx.joined"
+      :selected-cell="ctx.cell"
+      :past-cell-ids="ctx.pastCells"
+      :future-cell-ids="ctx.futureCells"
+      :series="overlayCtx.series"
+      :series-error="overlayCtx.seriesError"
+      :vwp-profiles="overlayCtx.vwpProfiles"
+      :vwp-window="overlayCtx.vwpWindow"
+      :vwp-joined="overlayCtx.vwpJoined"
+      :vwp-error="overlayCtx.vwpError"
+      :vwp-empty="overlaySnapshot.matches({ vwp: 'empty' })"
+      :units="ctx.units"
+      :clock="ctx.clock"
+      @close="onDataModalClose"
+      @update:panel="onDataModalUpdatePanel"
+      @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
+      @toggle-past-track="onToggleCellTrack($event, 'past')"
+      @toggle-future-track="onToggleCellTrack($event, 'future')"
+    />
+
     <!-- menú de capas (D36) + panel acoplado a la derecha (D37): en md+ el
          panel es un hermano flex real (no overlay) que empuja el mapa a la
          izquierda achicando el wrapper .flex-1 de arriba — RadarMap ya
@@ -894,6 +886,7 @@ function onSatOpacityInput(event: Event) {
          mapa en una pantalla angosta). -->
     <LayersMenu
       :base="ctx.base"
+      :panel-open="!!ctx.panel"
       :has-palette="!!productDef"
       :opacity="ctx.opacity"
       :smooth="ctx.smooth"

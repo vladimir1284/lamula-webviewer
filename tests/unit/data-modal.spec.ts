@@ -1,14 +1,13 @@
-// DataModal (D36): un solo modal con tabs Celdas/Tendencia/VWP, reemplaza
-// SidePanel.vue (rail) + VwpModal.vue (modal aparte) — los 3 ya compartían
-// el mismo PanelId en overlayMachine. El contenido VWP (chart/table) viene
-// tal cual de vwp-modal.spec.ts (borrado); CellTable/TrendChart ya tienen
-// su propia cobertura (cell-table.spec.ts, trend-chart.spec.ts) — acá solo
-// se verifica el cableado del modal (tabs, open/close, update:panel).
+// DataModal (D37): panel de datos acoplado a la derecha (Celdas/Tendencia/
+// VWP), reemplaza el <dialog> centrado (D36) — ver comentario en
+// DataModal.vue. El contenido VWP (chart/table) viene tal cual de
+// vwp-modal.spec.ts (borrado); CellTable/TrendChart ya tienen su propia
+// cobertura (cell-table.spec.ts, trend-chart.spec.ts) — acá solo se
+// verifica el cableado del panel (visibilidad, tabs, close, update:panel).
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import CellTable from '~/components/CellTable.vue'
 import DataModal from '~/components/DataModal.vue'
-import TabModal from '~/components/TabModal.vue'
 import TrendChart from '~/components/TrendChart.vue'
 import VwpChart from '~/components/VwpChart.vue'
 import VwpTable from '~/components/VwpTable.vue'
@@ -18,7 +17,7 @@ import { vwpVolume } from '../helpers/derive'
 const LEVELS = vwpVolume.rows.map(({ created_at: _c, ...row }) => row)
 // sin auto-import de Nuxt bajo Vitest: registrar a mano los componentes
 // anidados, igual que vwp-chart.spec.ts hace con WindBarb
-const globalComponents = { components: { TabModal, CellTable, TrendChart, VwpChart, VwpTable, WindBarb } }
+const globalComponents = { components: { CellTable, TrendChart, VwpChart, VwpTable, WindBarb } }
 
 const BASE_PROPS = {
   panel: 'vwp' as const,
@@ -34,15 +33,18 @@ const BASE_PROPS = {
 }
 
 function mountOpen(props: Partial<InstanceType<typeof DataModal>['$props']> = {}) {
-  const w = mount(DataModal, {
+  return mount(DataModal, {
     props: { ...BASE_PROPS, ...props },
     global: globalComponents,
   })
-  w.get('dialog').element.setAttribute('open', '')
-  return w
 }
 
 describe('DataModal', () => {
+  it('panel=null: no renderiza nada', () => {
+    const w = mountOpen({ panel: null })
+    expect(w.find('[data-testid=data-modal]').exists()).toBe(false)
+  })
+
   it('panel=vwp: abre en la tab VWP, sub-tab Gráfico muestra el grid, Datos la tabla', async () => {
     const w = mountOpen()
     expect(w.find('[data-testid=vwp-grid]').exists()).toBe(true)
@@ -62,22 +64,16 @@ describe('DataModal', () => {
     expect(w.find('[data-testid=vwp-empty]').exists()).toBe(true)
   })
 
-  it('cambiar de tab top-level (con el modal ya abierto) emite update:panel, no resetea a Celdas', async () => {
+  it('cambiar de tab top-level (con el panel ya abierto) emite update:panel, no resetea a Celdas', async () => {
     const w = mountOpen({ panel: 'cells' })
     await w.get('[data-testid=data-modal-tab-vwp]').trigger('click')
     expect(w.emitted('update:panel')?.at(-1)).toEqual(['vwp'])
     expect(w.find('[data-testid=vwp-grid]').exists()).toBe(true)
   })
 
-  it('expone open()/close()', () => {
-    const w = mount(DataModal, { props: BASE_PROPS, global: globalComponents })
-    expect(typeof (w.vm as { open?: unknown }).open).toBe('function')
-    expect(typeof (w.vm as { close?: unknown }).close).toBe('function')
-  })
-
-  it('cerrar el <dialog> nativo emite close', () => {
+  it('botón cerrar emite close', async () => {
     const w = mountOpen()
-    w.get('dialog').element.dispatchEvent(new Event('close'))
+    await w.get('[data-testid=data-modal-close]').trigger('click')
     expect(w.emitted('close')).toHaveLength(1)
   })
 })

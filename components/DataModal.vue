@@ -1,22 +1,21 @@
 <script setup lang="ts">
-// Modal único de datos (D36): reemplaza SidePanel.vue (rail Celdas/Tendencia)
-// y VwpModal.vue (modal VWP aparte) — los 3 paneles ya comparten el mismo
-// PanelId (cells|trend|vwp) en overlayMachine, así que viven en un solo
-// <dialog> con tabs top-level en vez de 3 superficies distintas. El
-// contenido de VWP (antes en VwpModal.vue) se mueve tal cual acá — no hay
-// duplicación, es el único lugar donde ese markup existe una vez borrado
-// VwpModal.vue. Abre/cierra con el mismo patrón que VwpModal tenía: la
-// página hace watch(ctx.panel) y llama open()/close(); acá solo se expone
-// eso. Cambiar de tab con el modal YA abierto (sin pasar por open()) emite
-// update:panel, que la página reenvía como SELECT_PANEL — ver el fix en
-// TabModal.vue (open() respeta el v-model, no resetea a la primera tab).
-import { ref } from 'vue'
+// Panel de datos (D37): reemplaza el <dialog> centrado (D36) — ahora ocupa
+// el dock derecho donde vivía LayersMenu, con el doble de su ancho
+// (md:w-80 → md:w-[40rem]), mismo patrón de acoplado/overlay que
+// LayersMenu.vue (dock real en md+, overlay full-screen en mobile).
+// Mutuamente excluyente con el panel de capas: abrir un tab de Datos desde
+// LayersMenu ya cierra su dock (ver openPanel() ahí); abrir el menú de
+// capas emite close-panel para cerrar este panel (ver @close-panel en la
+// página). `active` es tab local (antes vivía en TabModal) — cambiar de
+// tab con el panel ya abierto emite update:panel sin pasar por el prop
+// `panel` (evita el flash de resetear a la primera tab).
+import { ref, watch } from 'vue'
 import type { Phenomenon, VwpLevel } from '#shared/contract'
 import type { PanelId } from '../machines/overlay'
 import type { ClockPref } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   panel: PanelId | null
   // Celdas
   phenomena: Phenomenon[] | null
@@ -52,27 +51,56 @@ const TABS: { id: PanelId, label: string }[] = [
   { id: 'vwp', label: 'VWP' },
 ]
 
-const modal = ref<{ open: () => void, close: () => void }>()
-const vwpSubTab = ref<'chart' | 'table'>('chart')
-
-defineExpose({
-  open: () => modal.value?.open(),
-  close: () => modal.value?.close(),
+const active = ref<PanelId>(props.panel ?? 'cells')
+watch(() => props.panel, (p) => {
+  if (p !== null) active.value = p
 })
+
+function setActive(id: PanelId) {
+  active.value = id
+  emit('update:panel', id)
+}
+
+const vwpSubTab = ref<'chart' | 'table'>('chart')
 </script>
 
 <template>
-  <TabModal
-    ref="modal"
-    title="Datos"
-    testid-prefix="data-modal"
-    :tabs="TABS"
-    :active="panel ?? 'cells'"
-    @close="emit('close')"
-    @update:active="emit('update:panel', $event as PanelId)"
+  <div
+    v-if="panel"
+    data-testid="data-modal"
+    class="pointer-events-auto fixed inset-0 z-40 overflow-y-auto bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-[40rem] md:shrink-0 md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
   >
-    <template #cells>
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="text-sm font-bold">Datos</h2>
+      <button
+        type="button"
+        data-testid="data-modal-close"
+        aria-label="Cerrar"
+        class="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+        @click="emit('close')"
+      >
+        ✕
+      </button>
+    </div>
+
+    <div class="mb-3 flex gap-1 border-b border-slate-700 pb-2">
+      <button
+        v-for="tab in TABS"
+        :key="tab.id"
+        :data-testid="`data-modal-tab-${tab.id}`"
+        class="rounded px-3 py-1.5 text-sm"
+        :class="active === tab.id
+          ? 'bg-slate-700 text-slate-100'
+          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'"
+        @click="setActive(tab.id)"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <div class="text-sm">
       <CellTable
+        v-if="active === 'cells'"
         :phenomena="phenomena"
         :joined="joined"
         :selected-cell="selectedCell"
@@ -83,61 +111,62 @@ defineExpose({
         @toggle-past-track="emit('toggle-past-track', $event)"
         @toggle-future-track="emit('toggle-future-track', $event)"
       />
-    </template>
-    <template #trend>
+
       <TrendChart
+        v-else-if="active === 'trend'"
         :series="series"
         :cell-id="selectedCell"
         :error="seriesError"
         :units="units"
         :clock="clock"
       />
-    </template>
-    <template #vwp>
-      <div class="mb-2 flex gap-1 border-b border-slate-700 pb-2">
-        <button
-          type="button"
-          data-testid="vwp-modal-tab-chart"
-          class="rounded px-3 py-1 text-sm"
-          :class="vwpSubTab === 'chart' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
-          @click="vwpSubTab = 'chart'"
+
+      <template v-else>
+        <div class="mb-2 flex gap-1 border-b border-slate-700 pb-2">
+          <button
+            type="button"
+            data-testid="vwp-modal-tab-chart"
+            class="rounded px-3 py-1 text-sm"
+            :class="vwpSubTab === 'chart' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
+            @click="vwpSubTab = 'chart'"
+          >
+            Gráfico
+          </button>
+          <button
+            type="button"
+            data-testid="vwp-modal-tab-table"
+            class="rounded px-3 py-1 text-sm"
+            :class="vwpSubTab === 'table' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
+            @click="vwpSubTab = 'table'"
+          >
+            Datos
+          </button>
+        </div>
+        <p v-if="vwpError" data-testid="vwp-error" class="rounded bg-amber-900/40 p-3 text-sm text-amber-200">
+          Error consultando el VWP: {{ vwpError }}
+        </p>
+        <p
+          v-else-if="vwpEmpty || vwpWindow.length === 0"
+          data-testid="vwp-empty"
+          class="rounded bg-slate-800 p-3 text-sm text-slate-400"
         >
-          Gráfico
-        </button>
-        <button
-          type="button"
-          data-testid="vwp-modal-tab-table"
-          class="rounded px-3 py-1 text-sm"
-          :class="vwpSubTab === 'table' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
-          @click="vwpSubTab = 'table'"
-        >
-          Datos
-        </button>
-      </div>
-      <p v-if="vwpError" data-testid="vwp-error" class="rounded bg-amber-900/40 p-3 text-sm text-amber-200">
-        Error consultando el VWP: {{ vwpError }}
-      </p>
-      <p
-        v-else-if="vwpEmpty || vwpWindow.length === 0"
-        data-testid="vwp-empty"
-        class="rounded bg-slate-800 p-3 text-sm text-slate-400"
-      >
-        Sin perfil de viento hasta este instante del día.
-      </p>
-      <VwpChart
-        v-else-if="vwpSubTab === 'chart'"
-        :profiles="vwpProfiles"
-        :window="vwpWindow"
-        :joined="vwpJoined"
-        :units="units"
-        :clock="clock"
-      />
-      <VwpTable
-        v-else
-        :profiles="vwpProfiles"
-        :joined="vwpJoined"
-        :units="units"
-      />
-    </template>
-  </TabModal>
+          Sin perfil de viento hasta este instante del día.
+        </p>
+        <VwpChart
+          v-else-if="vwpSubTab === 'chart'"
+          :profiles="vwpProfiles"
+          :window="vwpWindow"
+          :joined="vwpJoined"
+          :units="units"
+          :clock="clock"
+        />
+        <VwpTable
+          v-else
+          :profiles="vwpProfiles"
+          :joined="vwpJoined"
+          :units="units"
+        />
+      </template>
+    </div>
+  </div>
 </template>
