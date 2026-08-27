@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/discard-generated-assets.mjs",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

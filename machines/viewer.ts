@@ -53,7 +53,7 @@ export interface NavigateParams {
 export type PrefsParams = Partial<Omit<ViewerPrefs, 'v'>>
 
 /** preferencias de display del usuario (no compartibles — nunca en la URL) */
-export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames' | 'smooth' | 'smoothRadius'>
+export type UserPrefsSlice = Pick<ViewerPrefs, 'coverage' | 'units' | 'clock' | 'animationFrames' | 'smooth' | 'smoothRadius' | 'showPalette'>
 
 export interface ViewerInput {
   radars: Radar[]
@@ -138,6 +138,8 @@ interface ViewerContext {
   smooth: boolean
   /** radio de suavizado, 1/2/4/8 (decisión 33) — sin efecto si smooth es false */
   smoothRadius: 1 | 2 | 4 | 8
+  /** paleta de colores del raster on/off — off equivale a opacidad 0 */
+  showPalette: boolean
 }
 
 /** query params de configuración de display (opacity/base/satélite) — un solo syncQuery debounced */
@@ -299,6 +301,7 @@ export const viewerMachine = setup({
     animationFrames: 12,
     smooth: false,
     smoothRadius: 1,
+    showPalette: true,
   }),
   on: {
     CURSOR_MOVE: { actions: assign({ cursor: ({ event }) => event.sample }) },
@@ -772,6 +775,18 @@ export const viewerMachine = setup({
           { guard: { type: 'sameDaySelected', params: ({ event }) => event.day } },
           { target: '.jumping', actions: assign({ day: ({ event }) => event.day }) },
         ],
+        // al prender el checkbox, saltar YA al dato más reciente en vez de
+        // esperar al próximo tick del `after` de 'ready' (hasta
+        // LIVE_REFRESH_INTERVAL de retraso) — sombrea el handler de la raíz
+        // solo para esta región (nota XState v5 arriba)
+        SET_LIVE_REFRESH: [
+          {
+            guard: ({ event }) => event.value,
+            target: '.refreshingTick',
+            actions: assign({ liveRefresh: true }),
+          },
+          { actions: assign({ liveRefresh: ({ event }) => event.value }) },
+        ],
       },
       initial: 'init',
       states: {
@@ -853,11 +868,14 @@ export const viewerMachine = setup({
         },
         empty: {},
         error: {},
-        // tick del loop "en vivo": repide fetchDay del MISMO día y, si hay un
-        // vol_time nuevo al final, salta ahí (replace) — a diferencia del
-        // viejo botón, siempre sigue al más reciente mientras el checkbox
-        // esté encendido (no conserva posición intermedia: si el usuario
-        // quería ver un instante fijo, ya apagó el checkbox al tocar la barra)
+        // tick del loop "en vivo": repide fetchDay del MISMO día y, si el
+        // más reciente difiere del `time` MOSTRADO (no del último `times`
+        // cacheado — así también cubre reactivar el checkbox tras haber
+        // scrubbeado hacia atrás, donde `times` no cambió pero `time` sí),
+        // salta ahí (replace) — a diferencia del viejo botón, siempre sigue
+        // al más reciente mientras el checkbox esté encendido (no conserva
+        // posición intermedia: si el usuario quería ver un instante fijo,
+        // ya apagó el checkbox al tocar la barra)
         refreshingTick: {
           invoke: {
             src: 'fetchDay',
@@ -867,10 +885,9 @@ export const viewerMachine = setup({
                 guard: ({ event }) => event.output.length > 0,
                 target: 'ready',
                 actions: enqueueActions(({ context, event, enqueue }) => {
-                  const prevLast = context.times.at(-1)?.vol_time ?? null
                   const nextLast = event.output.at(-1)!.vol_time
                   enqueue.assign({ times: event.output, timelineError: null })
-                  if (nextLast !== prevLast) {
+                  if (nextLast !== context.time) {
                     enqueue.assign({ time: nextLast })
                     enqueue({ type: 'navigate', params: { patch: { time: nextLast }, mode: 'replace' } })
                   }

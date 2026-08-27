@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// Tabla numérica del volumen VWP casado, extraída de VwpPanel (D35 — ahora
-// vive en el tab "Datos" de VwpModal). u/v derivados en cliente (decisión 9
-// — el contrato trae dir/speed/rms por altura, sin componente vertical).
+// Tabla numérica del volumen VWP casado, extraída de VwpPanel (D35/D36 —
+// ahora vive en el sub-tab "Datos" del tab VWP de DataModal). u/v derivados
+// en cliente (decisión 9 — el contrato trae dir/speed/rms por altura, sin
+// componente vertical).
 import { computed } from 'vue'
 import type { VwpLevel } from '#shared/contract'
 import type { UnitsPref } from '../utils/units'

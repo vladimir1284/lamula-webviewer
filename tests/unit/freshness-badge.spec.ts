@@ -24,7 +24,28 @@ describe('FreshnessBadge', () => {
     const wrapper = mount(FreshnessBadge, {
       props: { lastSeenAt: '2026-07-10T11:00:00' },
     })
-    expect(wrapper.text()).toContain('hace 60 min')
+    expect(wrapper.text()).toContain('hace 1 h')
     expect(wrapper.classes()).toContain('bg-red-900')
+  })
+
+  it('usa horas cuando pasa más de 60 minutos', () => {
+    const wrapper = mount(FreshnessBadge, {
+      props: { lastSeenAt: '2026-07-10T09:00:00' },
+    })
+    expect(wrapper.text()).toContain('hace 3 h')
+  })
+
+  it('usa días cuando pasa más de 24 horas', () => {
+    const wrapper = mount(FreshnessBadge, {
+      props: { lastSeenAt: '2026-07-05T12:00:00' },
+    })
+    expect(wrapper.text()).toContain('hace 5 d')
+  })
+
+  it('usa meses/años para timestamps muy viejos o corruptos', () => {
+    const wrapper = mount(FreshnessBadge, {
+      props: { lastSeenAt: '2020-01-01T00:00:00' },
+    })
+    expect(wrapper.text()).toMatch(/hace \d+ años/)
   })
 })

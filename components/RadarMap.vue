@@ -10,6 +10,7 @@
 // contenido ⇒ modo animación sobre un pool de capas (utils/map/frame-pool.ts).
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
+import { defaults as defaultControls } from 'ol/control'
 import View from 'ol/View'
 import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
@@ -130,6 +131,25 @@ const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
 
 const animationMode = () => Array.isArray(props.frames) && props.frames.length > 0
+
+// (Re)construir el pool de animación (altas/bajas de capa) puede por sí solo
+// hacer que OL dispare un 'moveend' — no es un MapBrowserEvent, así que la
+// librería no distingue "el usuario paneó/zoomeó" de "el render interno se
+// asentó tras un cambio de capas" (confirmado empíricamente: initOrUpdatePool
+// dispara uno sin que medie ningún gesto). El listener de abajo reenvía TODO
+// moveend como 'moveEnd' hacia animationMachine, que lo interpreta siempre
+// como pan/zoom real y pausa el playback — si ese moveend espurio llega justo
+// tras arrancar la animación, aborta el play recién iniciado. Se descarta
+// como mucho UN moveend inmediatamente después de tocar el pool; el timeout
+// es la red de seguridad si ese moveend nunca llega (no debe quedar
+// suprimiendo uno genuino más adelante).
+let suppressNextMoveEnd = false
+let suppressMoveEndTimer: ReturnType<typeof setTimeout> | undefined
+function armMoveEndSuppression() {
+  suppressNextMoveEnd = true
+  clearTimeout(suppressMoveEndTimer)
+  suppressMoveEndTimer = setTimeout(() => { suppressNextMoveEnd = false }, 500)
+}
 
 // 'true' cuando el raster vigente terminó de renderizar (rendercomplete de
 // OL espera a los tiles) — los goldens de Playwright esperan este attr.
@@ -336,6 +356,7 @@ function teardownPool() {
 
 function initOrUpdatePool() {
   if (!map || !props.productDef || !animationMode()) return
+  armMoveEndSuppression()
   const frames = props.frames!
   const projCode = registerRadarProjection(props.radar.site_id, props.radar.proj4)
   const style = rasterStyle(
@@ -374,6 +395,7 @@ onMounted(() => {
   updateSatelliteTime()
   map = new Map({
     target: container.value,
+    controls: defaultControls({ zoom: false }),
     layers: [
       baseLayer,
       satelliteLayer,
@@ -446,6 +468,11 @@ onMounted(() => {
   map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
   map.on('moveend', () => {
     if (animationMode()) pool?.invalidateInactive()
+    if (suppressNextMoveEnd) {
+      suppressNextMoveEnd = false
+      clearTimeout(suppressMoveEndTimer)
+      return
+    }
     emit('moveEnd')
   })
   // click en el marker de una celda → seleccionar (las líneas de track y
@@ -553,6 +580,7 @@ watch(() => props.satVariant, (v) => {
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(suppressMoveEndTimer)
   resizeObserver?.disconnect()
   resizeObserver = undefined
   rasterRequestId += 1 // invalida cualquier fetch de raster en curso

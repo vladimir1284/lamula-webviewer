@@ -19,11 +19,12 @@ export function formatHhmm(iso: string, clock: ClockPref, tz?: string): string {
 }
 
 /**
- * Timestamp completo. En UTC es byte-idéntico al render histórico
- * (`${iso}Z`); en local, 'YYYY-MM-DD HH:MM:SS GMT-4' (Intl short).
+ * Fecha y hora del timestamp completo por separado (mismos valores que
+ * `formatFull`, sin concatenar) — para layouts que dan más peso visual a
+ * la hora que a la fecha.
  */
-export function formatFull(iso: string, clock: ClockPref, tz?: string): string {
-  if (clock === 'utc') return `${iso}Z`
+export function formatFullParts(iso: string, clock: ClockPref, tz?: string): { date: string, time: string } {
+  if (clock === 'utc') return { date: iso.slice(0, 10), time: `${iso.slice(11)}Z` }
   const epoch = naiveUtcToEpochMs(iso)
   const parts = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
@@ -38,8 +39,19 @@ export function formatFull(iso: string, clock: ClockPref, tz?: string): string {
   }).formatToParts(epoch)
   const get = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find(p => p.type === type)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')} `
-    + `${get('hour')}:${get('minute')}:${get('second')} ${get('timeZoneName')}`
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${get('hour')}:${get('minute')}:${get('second')} ${get('timeZoneName')}`,
+  }
+}
+
+/**
+ * Timestamp completo. En UTC es byte-idéntico al render histórico
+ * (`${iso}Z`); en local, 'YYYY-MM-DD HH:MM:SS GMT-4' (Intl short).
+ */
+export function formatFull(iso: string, clock: ClockPref, tz?: string): string {
+  const { date, time } = formatFullParts(iso, clock, tz)
+  return clock === 'utc' ? `${date}T${time}` : `${date} ${time}`
 }
 
 /**
