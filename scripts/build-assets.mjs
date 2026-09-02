@@ -52,7 +52,7 @@ execSync(`convert "${path.join(publicDir, 'favicon-16x16.png')}" "${path.join(pu
 // 5. Generate apple-touch-icon.png (180x180 on dark slate background)
 console.log('Generating apple-touch-icon.png (180x180 with slate background)...')
 const appleIconSvg = `
-<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+<svg width="180" height="180" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
   <rect width="180" height="180" rx="36" fill="#0f172a"/>
   <g transform="translate(18, 18) scale(0.84)">
     ${squareSvg.slice(squareSvg.indexOf('<g'), squareSvg.indexOf('</svg>'))}
@@ -66,7 +66,7 @@ execSync(`convert -background none "${tempAppleSvg}" "${path.join(publicDir, 'ap
 // 6. Generate Social OpenGraph Preview Card (og-image.png - 1200x630)
 console.log('Generating og-image.png (1200x630)...')
 const ogSvg = `
-<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0f172a"/>
