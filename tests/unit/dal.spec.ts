@@ -10,7 +10,7 @@ import { FixtureDal } from '~/server/dal/fixture'
 import { LiveDal } from '~/server/dal/live'
 import type { Dal } from '~/server/dal/types'
 import { FRESH_MAX_MINUTES, naiveUtcToEpochMs, zProductRow, zRadarRow } from '~/shared/contract'
-import { asD1, createSeededDb } from '../helpers/d1-sqlite'
+import { asPg, createSeededDb } from '../helpers/pg-sqlite'
 import {
   healthNow,
   lightningDay,
@@ -32,7 +32,7 @@ const R2_BASE = 'https://cogs.example.test'
 
 const adapters: [string, () => Dal][] = [
   ['fixture', () => new FixtureDal(R2_BASE)],
-  ['live (D1 sobre schema real)', () => new LiveDal(asD1(createSeededDb()), R2_BASE)],
+  ['live (Postgres sobre schema real)', () => new LiveDal(asPg(createSeededDb()), R2_BASE)],
 ]
 
 describe.each(adapters)('DAL %s', (_name, make) => {
@@ -253,7 +253,7 @@ describe.each(adapters)('DAL %s', (_name, make) => {
 
 describe('paridad live ↔ fixture (puerta M1)', () => {
   const fixture: Dal = new FixtureDal(R2_BASE)
-  const live: Dal = new LiveDal(asD1(createSeededDb()), R2_BASE)
+  const live: Dal = new LiveDal(asPg(createSeededDb()), R2_BASE)
 
   const calls: [string, (dal: Dal) => Promise<unknown>][] = [
     ['listRadars', d => d.listRadars()],

@@ -1,9 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// Corre contra el build real de Pages (wrangler pages dev sirve dist/
-// con el runtime workerd). Requiere `pnpm build` previo. El DAL corre en
-// modo fixture (grabaciones commiteadas): flujos completos deterministas
-// sin D1 real, sobre el mismo runtime que producción.
+// Corre contra el build real (Nitro node-server, mismo preset que
+// producción desde que el viewer salió de Cloudflare Pages al Swarm).
+// Requiere `pnpm build` previo. El DAL corre en modo fixture
+// (grabaciones commiteadas): flujos completos deterministas sin
+// Postgres real, sobre el mismo runtime que producción.
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
@@ -56,10 +57,13 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command:
-        'pnpm exec wrangler pages dev --port 8788 --ip 127.0.0.1'
-        + ' --binding NUXT_DAL_ADAPTER=fixture'
-        + ' --binding NUXT_PUBLIC_R2_BASE_URL=http://127.0.0.1:8790',
+      command: 'node .output/server/index.mjs',
+      env: {
+        PORT: '8788',
+        HOST: '127.0.0.1',
+        NUXT_DAL_ADAPTER: 'fixture',
+        NUXT_PUBLIC_R2_BASE_URL: 'http://127.0.0.1:8790',
+      },
       url: 'http://127.0.0.1:8788',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

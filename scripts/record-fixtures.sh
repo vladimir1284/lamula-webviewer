@@ -1,30 +1,27 @@
 #!/usr/bin/env bash
-# Graba las fixtures del DAL desde la D1 REAL del demo (nexrad-l3).
+# Graba las fixtures del DAL desde la Postgres REAL del demo.
 #
-# Requiere credenciales Cloudflare (wrangler login, o CLOUDFLARE_API_TOKEN
-# + CLOUDFLARE_ACCOUNT_ID en el entorno / .env).
-# Solo ejecuta SELECT (decisión 17 — este repo jamás escribe en D1).
+# Requiere credenciales de Postgres en el entorno / .env:
+# PG_HOST, PG_PORT (opcional, def. 5432), PG_DB, PG_USER, PG_PASSWORD.
+# Solo ejecuta SELECT (decisión 17 — este repo jamás escribe en Postgres).
 #
 # Ventana: últimos 15 min relativos al último volumen — series útiles para
 # closest/next/prev (≥3 volúmenes por producto) sin inflar el repo.
-# OJO: los timestamps del contrato usan 'T'; datetime() de SQLite devuelve
-# espacio y rompería la comparación lexicográfica — de ahí el strftime.
 # Tras grabar: `pnpm test` — los contract tests validan lo grabado.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
-DB=nexrad-l3
 OUT=server/dal/fixtures
-SINCE="strftime('%Y-%m-%dT%H:%M:%S', (SELECT MAX(vol_time) FROM rasters), '-15 minutes')"
+FMT="'YYYY-MM-DD\"T\"HH24:MI:SS'"
+SINCE="(SELECT to_char(MAX(vol_time)::timestamp - interval '15 minutes', $FMT) FROM rasters)"
 # phenomena necesita más historia: la serie por cell_id (charts) requiere
 # celdas presentes en ≥2 volúmenes NST
-SINCE_PHEN="strftime('%Y-%m-%dT%H:%M:%S', (SELECT MAX(vol_time) FROM rasters), '-30 minutes')"
+SINCE_PHEN="(SELECT to_char(MAX(vol_time)::timestamp - interval '30 minutes', $FMT) FROM rasters)"
 
 query() {
-  pnpm exec wrangler d1 execute "$DB" --remote --json --command "$1" \
-    | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s)[0].results,null,2)))"
+  node scripts/pg-query.mjs "$1"
 }
 
 echo "→ radars"
@@ -38,20 +35,20 @@ echo "→ rasters (ventana 15 min desde el último volumen)"
 query "SELECT site_id, product_code, vol_time, r2_key, size_bytes, el_angle, vcp,
               value_scale, value_offset, max_level, width, height, cell_m, created_at
        FROM rasters
-       WHERE vol_time >= ($SINCE)
+       WHERE vol_time >= $SINCE
        ORDER BY site_id, product_code, vol_time" > "$OUT/rasters.json"
 
 echo "→ phenomena (ventana 30 min)"
 query "SELECT site_id, product_code, vol_time, kind, cell_id, lat, lon,
               azimuth_deg, range_km, attrs, created_at
        FROM phenomena
-       WHERE vol_time >= ($SINCE_PHEN)
+       WHERE vol_time >= $SINCE_PHEN
        ORDER BY site_id, vol_time, kind, cell_id" > "$OUT/phenomena.json"
 
 echo "→ vwp (misma ventana)"
 query "SELECT site_id, vol_time, height_ft, wind_dir_deg, wind_speed_kt, rms_kt, created_at
        FROM vwp
-       WHERE vol_time >= ($SINCE)
+       WHERE vol_time >= $SINCE
        ORDER BY site_id, vol_time, height_ft" > "$OUT/vwp.json"
 
 # viento GFS: retención completa (72 h) — filas de metadata livianas, y el
@@ -60,9 +57,9 @@ query "SELECT site_id, vol_time, height_ft, wind_dir_deg, wind_speed_kt, rms_kt,
 # que bajarlos a tests/fixtures/cogs/r2/<r2_key> (mismo flujo que los COGs
 # golden) para que e2e/wind.spec.ts corra offline.
 echo "→ wind_grids (retención completa)"
-query "SELECT site_id, valid_time, cycle_time, forecast_hour, model, r2_key, size_bytes, created_at
+query "SELECT site_id, valid_time, level, cycle_time, forecast_hour, model, r2_key, size_bytes, created_at
        FROM wind_grids
-       ORDER BY site_id, valid_time" > "$OUT/wind.json"
+       ORDER BY site_id, valid_time, level" > "$OUT/wind.json"
 
 # rayos GLM: ventana de los rasters + 30 min hacia atrás — cubre la ventana
 # de observación (600 s) y el padding ±900 s del índice sin arrastrar las
@@ -74,7 +71,7 @@ query "SELECT site_id, valid_time, cycle_time, forecast_hour, model, r2_key, siz
 echo "→ lightning_buckets (ventana 30 min)"
 query "SELECT site_id, bucket_start, bucket_s, strike_count, r2_key, size_bytes, source, created_at
        FROM lightning_buckets
-       WHERE bucket_start >= (strftime('%Y-%m-%dT%H:%M:%S', (SELECT MAX(vol_time) FROM rasters), '-30 minutes'))
+       WHERE bucket_start >= $SINCE_PHEN
        ORDER BY site_id, bucket_start" > "$OUT/lightning.json"
 
 wc -c "$OUT"/*.json

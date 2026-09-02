@@ -63,10 +63,12 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module',
   ],
 
-  // Corre como Pages Functions en el edge; D1 llega por binding
-  // (event.context.cloudflare.env.DB). Ver docs/arquitectura.md.
+  // Server Node normal en el Swarm (Cloudflare pasa a ser solo DNS/CDN
+  // delante, orange-cloud) — Postgres directo por red interna, sin
+  // binding ni Pages Functions. Ver docs/arquitectura.md y el plan de
+  // migración D1→Postgres.
   nitro: {
-    preset: 'cloudflare-pages',
+    preset: 'node-server',
   },
 
   typescript: {
@@ -76,6 +78,12 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // NUXT_DAL_ADAPTER=fixture → DAL sirve grabaciones commiteadas (decisión 3)
     dalAdapter: '',
+    // Postgres self-hosted en el Swarm — NUXT_PG_* sobreescribe cada uno.
+    pgHost: '',
+    pgPort: '5432',
+    pgDatabase: '',
+    pgUser: '',
+    pgPassword: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',

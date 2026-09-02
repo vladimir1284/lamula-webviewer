@@ -21,7 +21,7 @@ import {
   zVwpRow,
   zWindGridRow,
 } from '~/shared/contract'
-import { createSeededDb } from '../helpers/d1-sqlite'
+import { createSeededDb } from '../helpers/pg-sqlite'
 
 // created_at es NOT NULL en la base: las grabaciones lo traen tal cual
 // aunque el DAL no lo sirva.

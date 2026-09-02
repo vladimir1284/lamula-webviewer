@@ -7,7 +7,7 @@
 // hace fallar esta suite — es la señal de drift de la puerta M1. Columnas
 // NUEVAS no la rompen: el pipeline puede extender sin coordinación.
 import { describe, expect, it } from 'vitest'
-import { createContractDb, insertRows } from '../helpers/d1-sqlite'
+import { createContractDb, insertRows } from '../helpers/pg-sqlite'
 
 interface ColumnSpec {
   name: string

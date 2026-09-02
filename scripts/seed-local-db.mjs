@@ -1,79 +1,67 @@
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+// Inicializa y puebla un Postgres local de desarrollo (docker run
+// postgres:16-alpine, o el que ya tengas) con el schema real del
+// pipeline (snapshot en tests/contract/schema/0001_init.sql) y las
+// mismas fixtures que usa el adaptador `fixture` — para probar el
+// adaptador `live` en local sin tocar el Postgres de producción.
+//
+// Uso:
+//   PG_HOST=localhost PG_DB=nexrad_l3_dev PG_USER=nexrad PG_PASSWORD=nexrad \
+//     pnpm db:setup
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import postgres from 'postgres';
 
 const WORKSPACE_DIR = process.cwd();
 const SCHEMA_FILE = join(WORKSPACE_DIR, 'tests/contract/schema/0001_init.sql');
 const FIXTURES_DIR = join(WORKSPACE_DIR, 'server/dal/fixtures');
-const TEMP_SEED_FILE = join(WORKSPACE_DIR, 'temp-seed.sql');
+const TABLES = ['radars', 'products', 'rasters', 'phenomena', 'vwp', 'wind_grids', 'lightning_buckets'];
 
-function escapeValue(val) {
-  if (val === null || val === undefined) {
-    return 'NULL';
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    console.error(`falta ${name} en el entorno (ver comentario de cabecera de este script)`);
+    process.exit(1);
   }
-  if (typeof val === 'number') {
-    return val.toString();
-  }
-  if (typeof val === 'boolean') {
-    return val ? '1' : '0';
-  }
-  if (typeof val === 'object') {
-    return `'${JSON.stringify(val).replace(/'/g, "''")}'`;
-  }
-  return `'${val.toString().replace(/'/g, "''")}'`;
+  return value;
 }
 
 async function setup() {
+  const sql = postgres({
+    host: requireEnv('PG_HOST'),
+    port: Number(process.env.PG_PORT || '5432'),
+    database: requireEnv('PG_DB'),
+    username: requireEnv('PG_USER'),
+    password: requireEnv('PG_PASSWORD'),
+  });
+
   try {
-    console.log('0/3 Cleaning existing local D1 database files...');
-    try {
-      const { rmSync } = await import('node:fs');
-      rmSync(join(WORKSPACE_DIR, '.wrangler/state/v3/d1'), { recursive: true, force: true });
-    } catch {
-      // Ignore
+    console.log('1/3 Aplicando schema...');
+    // DROP+recrea: dev-only, más simple que llevar un runner de
+    // migraciones acá también (el pipeline ya tiene el suyo en db/).
+    for (const table of [...TABLES].reverse()) {
+      await sql.unsafe(`DROP TABLE IF EXISTS ${table} CASCADE`);
+    }
+    await sql.unsafe(readFileSync(SCHEMA_FILE, 'utf8'));
+
+    console.log('2/3 Insertando fixtures...');
+    for (const table of TABLES) {
+      const rows = JSON.parse(readFileSync(join(FIXTURES_DIR, `${table}.json`), 'utf8'));
+      if (rows.length === 0) continue;
+      await sql`INSERT INTO ${sql(table)} ${sql(rows, ...Object.keys(rows[0]))}`;
     }
 
-    console.log('1/3 Initializing local D1 database schema...');
-    execSync(`pnpm exec wrangler d1 execute nexrad-l3 --local --file="${SCHEMA_FILE}"`, {
-      stdio: 'inherit',
-    });
-
-    console.log('2/3 Generating seed SQL from fixtures...');
-    const tables = ['radars', 'products', 'rasters', 'phenomena', 'vwp'];
-    let sql = '';
-
-    for (const table of tables) {
-      const filePath = join(FIXTURES_DIR, `${table}.json`);
-      const data = JSON.parse(readFileSync(filePath, 'utf8'));
-      
-      if (data.length === 0) continue;
-      
-      const columns = Object.keys(data[0]);
-      
-      for (const row of data) {
-        const vals = columns.map(col => escapeValue(row[col]));
-        sql += `INSERT OR IGNORE INTO ${table} (${columns.join(', ')}) VALUES (${vals.join(', ')});\n`;
-      }
+    console.log('3/3 Listo.');
+    for (const table of TABLES) {
+      const [{ n }] = await sql`SELECT COUNT(*)::int AS n FROM ${sql(table)}`;
+      console.log(`  ${table}: ${n} filas`);
     }
-
-    writeFileSync(TEMP_SEED_FILE, sql, 'utf8');
-
-    console.log('3/3 Populating local database with seeded rows...');
-    execSync(`pnpm exec wrangler d1 execute nexrad-l3 --local --file="${TEMP_SEED_FILE}"`, {
-      stdio: 'inherit',
-    });
-
-    console.log('✓ Local database successfully setup and seeded.');
-  } catch (error) {
-    console.error('Error during database setup:', error);
-    process.exit(1);
-  } finally {
-    try {
-      unlinkSync(TEMP_SEED_FILE);
-    } catch {
-      // Ignore if it doesn't exist
-    }
+  }
+  finally {
+    await sql.end();
   }
 }
 
-setup();
+setup().catch((err) => {
+  console.error('Error durante el seed:', err);
+  process.exit(1);
+});

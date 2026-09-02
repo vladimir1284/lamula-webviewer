@@ -1,32 +1,36 @@
 # Arquitectura
 
-Una sola aplicación **Nuxt 3** desplegada en **Cloudflare Pages** (preset `cloudflare-pages` de Nitro). Las server routes (`/server/api/*`) corren como Pages Functions en el edge y leen D1 por binding; el cliente renderiza el mapa OpenLayers y decodifica los COG directamente desde R2. No hay backend propio que operar: el "backend" es la misma app.
+Una sola aplicación **Nuxt 3** corriendo como servidor Node (preset `node-server` de Nitro) en un contenedor del mismo Docker Swarm donde corre `nexrad-l3-pipeline` — Cloudflare queda solo como DNS/CDN (`orange-cloud`) delante, no como hosting (decisión 38: migrado desde Cloudflare Pages junto con el pase de D1 a Postgres self-hosted). Las server routes (`/server/api/*`) leen Postgres directo, por red interna del Swarm; el cliente renderiza el mapa OpenLayers y decodifica los COG directamente desde R2 (público, sin cambios). No hay backend propio que operar: el "backend" es la misma app.
 
 ```
-                    Cloudflare Pages (un solo deploy)
+                         Docker Swarm (mismo del pipeline)
 ┌─────────────────────────────────────────────────────────────┐
-│  Nuxt 3                                                     │
-│                                                             │
-│  server routes (/api/*)          cliente (navegador)        │
+│  Nuxt 3 (contenedor Node)                                    │
+│                                                               │
+│  server routes (/api/*)          cliente (navegador)         │
 │  ┌──────────────────────┐        ┌────────────────────────┐ │
 │  │ DAL adaptador live   │  JSON  │ Pinia stores           │ │
-│  │ binding D1 (lectura) │───────▶│ OpenLayers map         │ │
-│  │ claves R2 → URLs     │        │  WebGLTileLayer +      │ │
-│  └──────────┬───────────┘        │  ol/source/GeoTIFF ────┼─┼──▶ R2 (COGs,
-│             │                    │  paleta = color ramp   │ │    HTTP range,
-│             ▼                    │  proj4 AEQD por radar  │ │    CORS)
-│      Cloudflare D1               └────────────────────────┘ │
-│      (compartida con                                        │
-│       nexrad-l3-pipeline,                                   │
-│       solo lectura aquí)                                    │
+│  │ Postgres directo     │───────▶│ OpenLayers map         │ │
+│  │ (red interna Swarm)  │        │  WebGLTileLayer +      │ │
+│  │ claves R2 → URLs     │        │  ol/source/GeoTIFF ────┼─┼──▶ R2 (COGs,
+│  └──────────┬───────────┘        │  paleta = color ramp   │ │    HTTP range,
+│             │                    │  proj4 AEQD por radar  │ │    CORS, público)
+│             ▼                    └────────────────────────┘ │
+│      Postgres self-hosted                                    │
+│      (compartido con                                         │
+│       nexrad-l3-pipeline,                                    │
+│       solo lectura aquí)                                     │
 └─────────────────────────────────────────────────────────────┘
+                    ▲
+                    │ orange-cloud (DNS/CDN, no hosting)
+                Cloudflare
 ```
 
 ## Componentes
 
 | Componente | Responsabilidad |
 |---|---|
-| **DAL** | Interfaz única de datos. Adaptador **live**: server routes → binding D1 + construcción de URLs R2. Adaptador **fixture**: mismas rutas servidas desde respuestas grabadas + COGs golden del repo, para CI determinista y desarrollo offline. Nada por encima del DAL sabe de dónde vienen los datos. |
+| **DAL** | Interfaz única de datos. Adaptador **live**: server routes → Postgres directo (`postgres.js`, red interna del Swarm) + construcción de URLs R2. Adaptador **fixture**: mismas rutas servidas desde respuestas grabadas + COGs golden del repo, para CI determinista y desarrollo offline. Nada por encima del DAL sabe de dónde vienen los datos. |
 | **Server routes** (`/server/api/*`) | Endpoints de lectura tipados (Zod/TS) sobre el contrato: radares, productos disponibles, lista de datetimes, raster más cercano/siguiente/anterior, fenómenos por volumen, series por `cell_id`, VWP, health. |
 | **Shell & routing** | Rutas file-based de Nuxt, SSR del shell, estado deep-linkable, locale, chrome del layout. |
 | **Map core** | Mapa OpenLayers, registro dinámico de proyecciones AEQD por radar (`proj4.defs` con la columna `radars.proj4` tal cual + `register`), base Web Mercator con OSM, capa de cobertura del radar. |
@@ -43,7 +47,7 @@ Una sola aplicación **Nuxt 3** desplegada en **Cloudflare Pages** (preset `clou
 
 | Capa | Elección | Nota |
 |---|---|---|
-| Framework | Nuxt 3 (Vue 3, Composition API, TypeScript) | preset Nitro `cloudflare-pages` |
+| Framework | Nuxt 3 (Vue 3, Composition API, TypeScript) | preset Nitro `node-server` |
 | Estado / routing | Pinia + Vue Router (integrados en Nuxt) | |
 | Estilos | Tailwind CSS | |
 | Componentes | PrimeVue v4 (modo unstyled + Tailwind) | DataTable/DatePicker/Slider pesados en esta app |
@@ -51,7 +55,7 @@ Una sola aplicación **Nuxt 3** desplegada en **Cloudflare Pages** (preset `clou
 | i18n | @nuxtjs/i18n | es + en |
 | Validación API | Zod en server routes | los tipos del contrato viven en un módulo compartido server/cliente |
 | Tests | Vitest + @vue/test-utils + Playwright | visual-regression con goldens propios |
-| Deploy | Cloudflare Pages vía `wrangler-action` en GitHub Actions | preview deployments por PR |
+| Deploy | Imagen Docker a `ghcr.io` vía GitHub Actions | deploy real al Swarm manual (`docker stack deploy`), mismo patrón que nexrad-l3-pipeline |
 
 ## Flujo de datos típico (una vista)
 
@@ -74,5 +78,5 @@ La URL es la **fuente de verdad** del estado compartible: los cambios de ruta (i
 
 ## Acceso a datos compartidos
 
-- **D1**: binding de solo-lectura-por-disciplina — D1 no tiene roles; el contrato es que este proyecto **jamás escribe** y que las migraciones se aplican únicamente desde `db/` del pipeline. Las server routes usan exclusivamente `SELECT`.
-- **R2**: bucket expuesto con acceso público de lectura (dominio custom o `r2.dev`) + CORS habilitado para el origen del viewer. El viewer construye URLs desde `rasters.r2_key`; no lista el bucket ni conoce su estructura más allá de la convención documentada en el [contrato](contrato.md).
+- **Postgres**: conexión directa de solo-lectura-por-disciplina (`postgres.js`, red interna del Swarm) — el contrato es que este proyecto **jamás escribe** y que las migraciones se aplican únicamente desde `db/pg_migrations/` del pipeline. Las server routes usan exclusivamente `SELECT`. Sin Postgres alcanzable (`NUXT_PG_*` sin configurar), el DAL live falla con un 503 explícito — usar `NUXT_DAL_ADAPTER=fixture` para desarrollo offline.
+- **R2**: bucket expuesto con acceso público de lectura (dominio custom o `r2.dev`) + CORS habilitado para el origen del viewer. El viewer construye URLs desde `rasters.r2_key`; no lista el bucket ni conoce su estructura más allá de la convención documentada en el [contrato](contrato.md). Sin cambios por la migración D1→Postgres — siempre fue acceso por URL pública, nunca binding.

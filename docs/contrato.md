@@ -1,6 +1,6 @@
 # Contrato de datos (consumido)
 
-El contrato lo **posee y congela nexrad-l3-pipeline**: schema D1 en [`db/migrations/`](https://github.com/vladimir1284/nexrad-l3-pipeline/tree/main/db) de ese repo + convención de claves R2. Este proyecto lo lee y no lo cambia; cualquier cambio necesario es una migración negociada del lado del pipeline. Los contract tests de este repo (F1) asertan las formas de las que el viewer depende y fallan CI ante drift.
+El contrato lo **posee y congela nexrad-l3-pipeline**: schema Postgres en [`db/pg_migrations/`](https://github.com/vladimir1284/nexrad-l3-pipeline/tree/main/db) de ese repo (migrado de D1, decisión 38 — `db/migrations/` queda como referencia histórica) + convención de claves R2. Este proyecto lo lee y no lo cambia; cualquier cambio necesario es una migración negociada del lado del pipeline. Los contract tests de este repo (F1) asertan las formas de las que el viewer depende y fallan CI ante drift.
 
 Esta página es la **vista del consumidor**: qué lee el viewer de cada tabla y qué asume. La fuente de verdad es el SQL del pipeline.
 
@@ -10,7 +10,7 @@ Esta página es la **vista del consumidor**: qué lee el viewer de cada tabla y 
 - Retención: **72 h** — el viewer nunca asume historia más allá de 3 días.
 - Calibración raster: `físico = nivel · value_scale + value_offset` para niveles ≥ 2; nivel **0** = below threshold (nodata), **1** = range folded.
 
-## D1
+## Postgres
 
 ### `radars` — catálogo dinámico
 
@@ -59,7 +59,7 @@ Una fila por `(site_id, vol_time, height_ft)`: `wind_dir_deg`, `wind_speed_kt`, 
 
 ### `wind_grids` — viento GFS 10 m en grilla
 
-Una fila por `(site_id, valid_time)`: `cycle_time`, `forecast_hour`, `model`, `r2_key` → JSON u/v en R2 (gzip + `immutable` desde el edge — el ciclo va en la key). Consulta del viewer: por `(site_id, día UTC ± 2 h)` como índice del join temporal (padding mayor que phen/vwp porque la tolerancia es 1 h). Migración del pipeline: `0003_wind_grids.sql` (snapshot en `tests/contract/schema/`, drift check activo). Spec completa (keys R2, formato del fichero, cron) en [Spec pipeline viento](pipeline-viento.md).
+Una fila por `(site_id, valid_time, level)`: `cycle_time`, `forecast_hour`, `model`, `r2_key` → JSON u/v en R2 (gzip + `immutable` desde el edge — el ciclo y el nivel van en la key). Consulta del viewer: por `(site_id, nivel, día UTC ± 2 h)` como índice del join temporal (padding mayor que phen/vwp porque la tolerancia es 1 h). Schema del pipeline: `db/pg_migrations/0001_init.sql` (snapshot en `tests/contract/schema/`, drift check activo). Spec completa (keys R2, formato del fichero, cron) en [Spec pipeline viento](pipeline-viento.md).
 
 ## R2
 
@@ -69,10 +69,10 @@ Una fila por `(site_id, valid_time)`: `cycle_time`, `forecast_hour`, `model`, `r
 
 ## Requisitos de setup fuera del código (una vez)
 
-1. CORS en el bucket R2 para el origen de Pages (y `localhost` para desarrollo).
+1. CORS en el bucket R2 para el origen público del viewer (y `localhost` para desarrollo).
 2. Acceso público de lectura al bucket (dominio custom recomendado sobre `r2.dev`).
-3. Binding D1 del proyecto Pages del viewer a la base `nexrad-l3` (misma cuenta).
-4. Binding a la base `nexrad-l3-test` para previews/CI si aplica.
+3. Credenciales Postgres (`NUXT_PG_HOST`/`NUXT_PG_PORT`/`NUXT_PG_DATABASE`/`NUXT_PG_USER`/`NUXT_PG_PASSWORD`) del contenedor del viewer apuntando a la misma base que usa el pipeline — mismo Swarm, red interna, sin binding.
+4. DNS del dominio del viewer apuntado (orange-cloud) al reverse proxy del Swarm.
 
 ## Puntos de coordinación abiertos con el pipeline
 

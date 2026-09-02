@@ -9,7 +9,7 @@
     "db:setup": "node scripts/seed-local-db.mjs",
     "build:assets": "node scripts/build-assets.mjs",
     "build": "node scripts/build-assets.mjs && nuxt build",
-    "preview": "wrangler pages dev",
+    "preview": "node .output/server/index.mjs",
     "postinstall": "node scripts/build-assets.mjs && nuxt prepare",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -25,6 +25,7 @@
     "nuxt": "^3.17.0",
     "ol": "^10.9.0",
     "pinia": "^3.0.0",
+    "postgres": "^3.4.5",
     "primevue": "^4.3.0",
     "proj4": "^2.20.9",
     "vue": "^3.5.0",
@@ -33,7 +34,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250620.0",
     "@nuxt/eslint": "^1.4.0",
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@playwright/test": "^1.53.0",
@@ -47,7 +47,6 @@
     "happy-dom": "^17.4.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0",
-    "vue-tsc": "^2.2.10",
-    "wrangler": "^4.20.0"
+    "vue-tsc": "^2.2.10"
   }
 }

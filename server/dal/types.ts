@@ -51,15 +51,13 @@ export interface Dal {
 }
 
 /**
- * Subconjunto estructural de D1Database que usa el adaptador live —
- * permite testearlo contra better-sqlite3 con el schema real del pipeline.
+ * Subconjunto estructural del cliente Postgres que usa el adaptador
+ * live — permite testearlo contra better-sqlite3 con el schema real
+ * del pipeline (ver tests/helpers/pg-sqlite.ts::asPg).
+ *
+ * `sql` usa placeholders numerados ($1, $2, …) — sintaxis Postgres
+ * nativa, sin traducción en el adaptador de producción (server/dal/pg.ts).
  */
-export interface D1PreparedLike {
-  bind(...values: unknown[]): D1PreparedLike
-  all<T>(): Promise<{ results: T[] }>
-  first<T>(): Promise<T | null>
-}
-
-export interface D1Like {
-  prepare(sql: string): D1PreparedLike
+export interface PgLike {
+  query<T>(sql: string, params?: unknown[]): Promise<T[]>
 }
