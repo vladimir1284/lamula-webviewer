@@ -1,6 +1,7 @@
 FROM node:22-bookworm-slim AS build
-# imagemagick: build:assets (postinstall + build) usa `convert` para generar favicons/og-image.
-RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \
+# imagemagick+librsvg2-bin: build:assets (postinstall + build) usa `convert`
+# para generar favicons/og-image; convert delega el rasterizado de SVG a rsvg-convert.
+RUN apt-get update && apt-get install -y --no-install-recommends imagemagick librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10 --activate
