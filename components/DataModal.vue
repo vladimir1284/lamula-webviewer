@@ -68,8 +68,12 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
   <div
     v-if="panel"
     data-testid="data-modal"
-    class="pointer-events-auto fixed inset-0 z-40 overflow-y-auto bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-[40rem] md:shrink-0 md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
+    class="pointer-events-auto fixed inset-x-0 bottom-0 top-12 z-40 overflow-y-auto rounded-t-2xl bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-[40rem] md:shrink-0 md:rounded-none md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
   >
+    <div class="mb-2 flex justify-center md:hidden" aria-hidden="true">
+      <div class="h-1.5 w-12 rounded-full bg-slate-600" />
+    </div>
+
     <div class="mb-3 flex items-center justify-between">
       <h2 class="text-sm font-bold">Datos</h2>
       <button

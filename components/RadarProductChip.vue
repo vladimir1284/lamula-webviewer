@@ -3,13 +3,13 @@
 // radar/producto + el bloque de estado del raster que vivían en el aside
 // izquierdo. Identidad + estado de lo que se está mirando; los controles de
 // qué se dibuja ENCIMA del mapa viven en LayersMenu.vue, no acá.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Radar, Product, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import { rasterProductDef } from '#shared/products'
 import type { UnitsPref } from '../utils/units'
 
-defineProps<{
+const props = defineProps<{
   radars: Radar[]
   site: string
   rasterProducts: Product[]
@@ -35,26 +35,43 @@ defineEmits<{
 }>()
 
 const expanded = ref(false)
+const showDetailsMobile = ref(false)
 const vcpInfoModal = ref<{ open: () => void }>()
+const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchError || !props.productDef))
 </script>
 
 <template>
-  <div class="pointer-events-auto absolute left-4 top-4 z-20 w-72 max-w-[calc(100vw-2rem)]">
+  <div class="pointer-events-auto absolute left-4 top-4 z-20 w-auto md:w-72 max-w-[calc(100vw-9rem)] md:max-w-[calc(100vw-2rem)]">
     <div class="rounded-lg border border-slate-700 bg-slate-900/95 shadow-lg" :class="expanded ? 'rounded-b-none border-b-0' : ''">
-      <button
-        type="button"
-        data-testid="radar-chip-toggle"
-        class="flex w-full items-center gap-2.5 px-3 py-2 text-left"
-        @click="expanded = !expanded"
-      >
-        <span class="min-w-0 flex-1">
-          <span class="block truncate text-sm font-bold">
-            {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}
+      <div class="flex items-center justify-between gap-1 px-3 py-2">
+        <button
+          type="button"
+          data-testid="radar-chip-toggle"
+          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          @click="expanded = !expanded"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-bold">
+              {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}
+            </span>
+            <span class="flex items-center gap-2 text-xs text-slate-300">
+              <span v-if="volTimeParts" class="font-mono font-semibold text-teal-400">{{ volTimeParts.time }}</span>
+              <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0" />
+            </span>
           </span>
-          <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0 mt-0.5" />
-        </span>
-        <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
-      </button>
+          <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="radar-details-toggle"
+          aria-label="Detalles de radar"
+          class="grid h-7 w-7 shrink-0 place-items-center rounded bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700 md:hidden"
+          @click="showDetailsMobile = !showDetailsMobile"
+        >
+          ℹ️
+        </button>
+      </div>
     </div>
 
     <!-- selectores pegados al toggle: mismo card, sin gap -->
@@ -91,10 +108,11 @@ const vcpInfoModal = ref<{ open: () => void }>()
       </label>
     </div>
 
-    <!-- estado del raster: SIEMPRE visible, no detrás del toggle — es
-         información de un vistazo (equivalente al resumen de pronóstico de
-         Windy bajo su buscador), no un control -->
-    <div class="mt-1.5 space-y-2">
+    <!-- estado del raster: visible siempre en md+, y en móvil solo si showDetailsMobile es true o si hay un error -->
+    <div
+      class="mt-1.5 space-y-2"
+      :class="(showDetailsMobile || hasError) ? 'block' : 'hidden md:block'"
+    >
       <p
         v-if="radarsError"
         data-testid="radars-error"
