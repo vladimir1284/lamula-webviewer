@@ -32,9 +32,6 @@ const DEFAULT_SAT = false
 const DEFAULT_SAT_VARIANT = 'ir' as const
 const DEFAULT_SAT_OPACITY = 0.6
 const QUERY_SYNC_DEBOUNCE_MS = 300
-// tras pausar la animación, espera esto antes de resincronizar overlays
-// (fenómenos/VWP) al frame visible — evita fetch por cada frame reproducido
-const OVERLAY_RESUME_DELAY_MS = 3000
 
 definePageMeta({
   key: route => route.params.site as string,
@@ -533,31 +530,8 @@ onMounted(() => {
 watch([() => ctx.value.site, () => ctx.value.day], ([site, day]) => {
   overlaySend({ type: 'SET_SCOPE', site, day })
 })
-// durante reproducción, overlays (fenómenos/VWP) no siguen cada frame — solo
-// el raster anima; al pausar, resincroniza pasados unos segundos (ver
-// OVERLAY_RESUME_DELAY_MS)
-let overlayResumeTimer: ReturnType<typeof setTimeout> | null = null
 watch(displayedVolTime, (volTime) => {
-  if (animPlaying.value) return
   overlaySend({ type: 'SET_TIME', volTime, prevVolTime: prevDayVolTime(volTime) })
-})
-watch(animPlaying, (playing) => {
-  if (overlayResumeTimer) {
-    clearTimeout(overlayResumeTimer)
-    overlayResumeTimer = null
-  }
-  if (playing) return
-  overlayResumeTimer = setTimeout(() => {
-    overlayResumeTimer = null
-    overlaySend({
-      type: 'SET_TIME',
-      volTime: displayedVolTime.value,
-      prevVolTime: prevDayVolTime(displayedVolTime.value),
-    })
-  }, OVERLAY_RESUME_DELAY_MS)
-})
-onBeforeUnmount(() => {
-  if (overlayResumeTimer) clearTimeout(overlayResumeTimer)
 })
 watch(
   [() => ctx.value.layers, () => ctx.value.panel, () => ctx.value.windLevel],
@@ -683,8 +657,8 @@ const volTimeParts = computed(() =>
 // GOES no tiene vol_time propio (WMS en vivo): usa el mismo vol_time del
 // raster mostrado — coherente con currentDisplayTime() en RadarMap.vue.
 const satTimeLabel = computed(() =>
-  ctx.value.sat && !animPlaying.value && raster.value
-    ? formatFull(raster.value.vol_time, ctx.value.clock)
+  ctx.value.sat && displayedVolTime.value
+    ? formatFull(displayedVolTime.value, ctx.value.clock)
     : null,
 )
 
