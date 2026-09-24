@@ -235,50 +235,64 @@ const tickLabels = computed(() => {
          eliminó (quedaba redundante con el fieldset "Velocidad" de
          TimelineMenu, que ya cubre lo mismo con menos protagonismo visual).
          items-center centra todo contra el mismo eje que el track. -->
-    <div class="flex items-center" style="overflow: visible;">
-      <div class="flex items-center gap-1">
-        <button
-          type="button"
-          data-testid="timeline-prev"
-          :disabled="!canPrev"
-          aria-label="Volumen anterior"
-          class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
-          :style="{ background: SLATE }"
-          @click="emit('step', -1)"
-        >
-          ‹
-        </button>
-        <button
-          type="button"
-          data-testid="anim-play"
-          :aria-label="playing ? 'Pausar' : 'Reproducir'"
-          class="grid h-14 w-14 flex-none place-items-center rounded-full shadow"
-          :style="{ background: SLATE }"
-          @click="emit('toggle')"
-        >
-          <svg v-if="playing" viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
-          <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-        </button>
-        <button
-          type="button"
-          data-testid="timeline-next"
-          :disabled="!canNext"
-          aria-label="Volumen siguiente"
-          class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
-          :style="{ background: SLATE }"
-          @click="emit('step', 1)"
-        >
-          ›
-        </button>
+    <div class="flex flex-col gap-2.5 md:flex-row md:items-center md:gap-0" style="overflow: visible;">
+      <!-- Controles de reproducción + Botón Menú en móvil -->
+      <div class="flex items-center justify-between md:justify-start">
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="timeline-prev"
+            :disabled="!canPrev"
+            aria-label="Volumen anterior"
+            class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
+            :style="{ background: SLATE }"
+            @click="emit('step', -1)"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            data-testid="anim-play"
+            :aria-label="playing ? 'Pausar' : 'Reproducir'"
+            class="grid h-14 w-14 flex-none place-items-center rounded-full shadow"
+            :style="{ background: SLATE }"
+            @click="emit('toggle')"
+          >
+            <svg v-if="playing" viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+            <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="white" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          </button>
+          <button
+            type="button"
+            data-testid="timeline-next"
+            :disabled="!canNext"
+            aria-label="Volumen siguiente"
+            class="grid h-9 w-9 flex-none place-items-center rounded-full text-base text-white shadow disabled:opacity-30"
+            :style="{ background: SLATE }"
+            @click="emit('step', 1)"
+          >
+            ›
+          </button>
+        </div>
+
+        <div class="flex items-center md:hidden">
+          <button
+            type="button"
+            data-testid="timeline-menu"
+            aria-label="Menú"
+            class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow"
+            :style="{ background: SLATE }"
+            @click="emit('menu')"
+          >
+            ☰
+          </button>
+        </div>
       </div>
 
-      <!-- wrapper del track: overflow visible porque el tooltip de scrub se
-           sale hacia arriba y la pastilla "en vivo" flota sobre el handle.
-           ml-3: separación fija respecto al grupo de reproducción. -->
-      <div class="relative min-w-0 flex-1 ml-3" style="overflow: visible;">
+      <!-- wrapper del track: 100% en móvil, flex-1 ml-3 en desktop -->
+      <div class="relative my-1 min-w-0 flex-1 md:my-0 md:ml-3" style="overflow: visible;">
         <label
           data-testid="live-refresh-toggle"
-          class="absolute flex -translate-x-1/2 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold text-white shadow"
+          class="absolute flex -translate-x-1/2 cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold text-white shadow z-10"
           style="bottom: 100%; margin-bottom: 6px;"
           :style="{ left: `${handlePct}%`, background: liveRefresh ? PRIMARY_BLUE : SLATE }"
           :title="liveRefresh ? 'En vivo: siguiendo el dato más reciente' : 'En vivo apagado'"
@@ -297,7 +311,7 @@ const tickLabels = computed(() => {
         <div
           ref="trackEl"
           data-testid="timeline-slider"
-          class="relative h-3.5 touch-none select-none rounded-full"
+          class="relative h-4 touch-none select-none rounded-full"
           :style="{ background: MID_GRAY }"
           role="slider"
           tabindex="0"
@@ -321,19 +335,14 @@ const tickLabels = computed(() => {
             class="pointer-events-none absolute inset-y-0 bg-[repeating-linear-gradient(45deg,rgba(245,158,11,0.45)_0_4px,transparent_4px_8px)]"
             :style="{ left: `${band.left}%`, width: `${band.width}%` }"
           />
-          <!-- marca blanca por vol_time (D37): guía visual de dónde hay dato
-               para hacer click, aunque no se le muestre la hora en la
-               leyenda (tickLabels solo etiqueta 5-6) -->
+          <!-- marca blanca por vol_time (D37) -->
           <div
             v-for="(time, idx) in times"
             :key="`mark-${time}`"
             class="pointer-events-none absolute top-1/2 h-1.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
             :style="{ left: markLeft(time, idx) }"
           />
-          <!-- objetivos de click invisibles, uno por vol_time: la maqueta no
-               los muestra (drag/click-en-track ya alcanza el más cercano),
-               pero un click exacto sobre un tick puntual es más preciso que
-               fiarse del snap por posición — y e2e/pruebas los necesitan -->
+          <!-- objetivos de click invisibles, uno por vol_time -->
           <button
             v-for="time in times"
             :key="time"
@@ -367,8 +376,8 @@ const tickLabels = computed(() => {
         </div>
       </div>
 
-      <!-- ml-5: más separación del track que la del grupo de reproducción -->
-      <div class="ml-5 flex items-center">
+      <!-- Menú en desktop -->
+      <div class="hidden items-center md:flex md:ml-5">
         <button
           type="button"
           data-testid="timeline-menu"
@@ -382,11 +391,8 @@ const tickLabels = computed(() => {
       </div>
     </div>
 
-    <!-- etiquetas + buffer bajo el track: fila propia (no comparte cross-axis
-         con los botones, ver arriba) con padding igual al ancho de los
-         botones+gaps que flanquean el track arriba (prev+play+next a la
-         izquierda, ☰ a la derecha), para no meterse debajo de ellos. -->
-    <div :style="{ paddingLeft: 'calc(2 * 2.25rem + 3.5rem + 2 * 0.25rem + 0.75rem)', paddingRight: 'calc(2.75rem + 1.25rem)' }">
+    <!-- etiquetas bajo el track: sin padding en móvil, con padding en desktop -->
+    <div class="pl-0 pr-0 md:pl-[calc(2*2.25rem+3.5rem+2*0.25rem+0.75rem)] md:pr-[calc(2.75rem+1.25rem)]">
       <div class="relative h-8">
         <span
           v-for="label in tickLabels"

@@ -97,67 +97,63 @@ function openPrefs() {
       >☰</span>
     </button>
 
-    <label
-      class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
-    >
-      <span class="whitespace-nowrap">Satélite</span>
-      <LayerIcon kind="sat" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
-      <!-- overlay full-size en vez de sr-only: el clip-rect de sr-only
-           deja el checkbox sin hit-test propio (Playwright resuelve el
-           click al <label> padre, no al input — ver e2e wind/lightning/
-           phenomena). Cubrir todo el pill sí es clickeable en cualquier
-           punto Y mantiene la asociación label→input para lectores de
-           pantalla. -->
-      <input
-        type="checkbox"
-        class="absolute inset-0 z-10 cursor-pointer opacity-0"
-        data-testid="sat-toggle-pill"
-        :checked="sat"
-        @change="emit('toggle-satellite')"
+    <div class="hidden md:flex md:flex-col md:items-end md:gap-2">
+      <label
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-    </label>
+        <span class="whitespace-nowrap">Satélite</span>
+        <LayerIcon kind="sat" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="sat-toggle-pill"
+          :checked="sat"
+          @change="emit('toggle-satellite')"
+        >
+      </label>
 
-    <label
-      class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
-    >
-      <span class="whitespace-nowrap">Fenómenos</span>
-      <LayerIcon kind="cells" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
-      <input
-        type="checkbox"
-        class="absolute inset-0 z-10 cursor-pointer opacity-0"
-        data-testid="layer-toggle-cells-pill"
-        :checked="layers.includes('cells')"
-        @change="emit('toggle-layer', 'cells')"
+      <label
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-    </label>
+        <span class="whitespace-nowrap">Fenómenos</span>
+        <LayerIcon kind="cells" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-cells-pill"
+          :checked="layers.includes('cells')"
+          @change="emit('toggle-layer', 'cells')"
+        >
+      </label>
 
-    <label
-      class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
-    >
-      <span class="whitespace-nowrap">Viento</span>
-      <LayerIcon kind="wind" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
-      <input
-        type="checkbox"
-        class="absolute inset-0 z-10 cursor-pointer opacity-0"
-        data-testid="layer-toggle-wind-pill"
-        :checked="layers.includes('wind')"
-        @change="emit('toggle-layer', 'wind')"
+      <label
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-    </label>
+        <span class="whitespace-nowrap">Viento</span>
+        <LayerIcon kind="wind" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-wind-pill"
+          :checked="layers.includes('wind')"
+          @change="emit('toggle-layer', 'wind')"
+        >
+      </label>
 
-    <label
-      class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
-    >
-      <span class="whitespace-nowrap">Rayos</span>
-      <LayerIcon kind="lightning" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
-      <input
-        type="checkbox"
-        class="absolute inset-0 z-10 cursor-pointer opacity-0"
-        data-testid="layer-toggle-lightning-pill"
-        :checked="layers.includes('lightning')"
-        @change="emit('toggle-layer', 'lightning')"
+      <label
+        class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-    </label>
+        <span class="whitespace-nowrap">Rayos</span>
+        <LayerIcon kind="lightning" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
+        <input
+          type="checkbox"
+          class="absolute inset-0 z-10 cursor-pointer opacity-0"
+          data-testid="layer-toggle-lightning-pill"
+          :checked="layers.includes('lightning')"
+          @change="emit('toggle-layer', 'lightning')"
+        >
+      </label>
+    </div>
   </div>
 
   <!-- backdrop solo mobile (D37): en desktop el panel es dock, no overlay
@@ -172,8 +168,12 @@ function openPrefs() {
   <div
     v-if="open"
     data-testid="layers-menu"
-    class="pointer-events-auto fixed inset-0 z-40 overflow-y-auto bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-80 md:shrink-0 md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
+    class="pointer-events-auto fixed inset-x-0 bottom-0 top-12 z-40 overflow-y-auto rounded-t-2xl bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-80 md:shrink-0 md:rounded-none md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
   >
+    <div class="mb-2 flex justify-center md:hidden" aria-hidden="true">
+      <div class="h-1.5 w-12 rounded-full bg-slate-600" />
+    </div>
+
     <div class="mb-3 flex items-center justify-between">
       <h2 class="text-sm font-bold">Capas</h2>
       <button
