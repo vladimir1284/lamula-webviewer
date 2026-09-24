@@ -277,7 +277,7 @@ const tickLabels = computed(() => {
         <div class="flex items-center md:hidden">
           <button
             type="button"
-            data-testid="timeline-menu"
+            data-testid="timeline-menu-mobile"
             aria-label="Menú"
             class="grid h-11 w-11 flex-none place-items-center rounded-full text-lg text-white shadow"
             :style="{ background: SLATE }"

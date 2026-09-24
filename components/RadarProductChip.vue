@@ -3,13 +3,13 @@
 // radar/producto + el bloque de estado del raster que vivían en el aside
 // izquierdo. Identidad + estado de lo que se está mirando; los controles de
 // qué se dibuja ENCIMA del mapa viven en LayersMenu.vue, no acá.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Radar, Product, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import { rasterProductDef } from '#shared/products'
 import type { UnitsPref } from '../utils/units'
 
-defineProps<{
+const props = defineProps<{
   radars: Radar[]
   site: string
   rasterProducts: Product[]
@@ -37,6 +37,7 @@ defineEmits<{
 const expanded = ref(false)
 const showDetailsMobile = ref(false)
 const vcpInfoModal = ref<{ open: () => void }>()
+const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchError || !props.productDef))
 </script>
 
 <template>
@@ -110,7 +111,7 @@ const vcpInfoModal = ref<{ open: () => void }>()
     <!-- estado del raster: visible siempre en md+, y en móvil solo si showDetailsMobile es true o si hay un error -->
     <div
       class="mt-1.5 space-y-2"
-      :class="showDetailsMobile ? 'block' : 'hidden md:block'"
+      :class="(showDetailsMobile || hasError) ? 'block' : 'hidden md:block'"
     >
       <p
         v-if="radarsError"
