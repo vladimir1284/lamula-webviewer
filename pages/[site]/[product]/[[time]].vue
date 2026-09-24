@@ -534,8 +534,8 @@ watch([() => ctx.value.site, () => ctx.value.day], ([site, day]) => {
   overlaySend({ type: 'SET_SCOPE', site, day })
 })
 // durante reproducción, overlays (fenómenos/VWP) no siguen cada frame — solo
-// el raster anima; al pausar, resincroniza pasados unos segundos (ver
-// OVERLAY_RESUME_DELAY_MS)
+// el raster (y ahora viento/satélite) anima; al pausar, resincroniza pasados
+// unos segundos (ver OVERLAY_RESUME_DELAY_MS)
 let overlayResumeTimer: ReturnType<typeof setTimeout> | null = null
 watch(displayedVolTime, (volTime) => {
   if (animPlaying.value) return
@@ -683,8 +683,8 @@ const volTimeParts = computed(() =>
 // GOES no tiene vol_time propio (WMS en vivo): usa el mismo vol_time del
 // raster mostrado — coherente con currentDisplayTime() en RadarMap.vue.
 const satTimeLabel = computed(() =>
-  ctx.value.sat && !animPlaying.value && raster.value
-    ? formatFull(raster.value.vol_time, ctx.value.clock)
+  ctx.value.sat && displayedVolTime.value
+    ? formatFull(displayedVolTime.value, ctx.value.clock)
     : null,
 )
 

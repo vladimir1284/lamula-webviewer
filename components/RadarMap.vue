@@ -163,10 +163,9 @@ function coverageRadiusM(): number {
 }
 
 // ── Capa de fondo GOES (WMS) ─────────────────────────────────────────────
-// Siempre bajo el raster (zIndex 3 < 5); oculta SOLO mientras la animación
-// reproduce — pausar o salir de modo animación la trae de vuelta.
+// Siempre bajo el raster (zIndex 3 < 5); se mantiene activa durante la animación.
 function updateSatelliteVisibility() {
-  satelliteLayer?.setVisible(props.satEnabled && !props.animPlaying)
+  satelliteLayer?.setVisible(props.satEnabled)
 }
 
 // dato de radar actualmente mostrado (frame activo en animación, raster en
@@ -181,12 +180,10 @@ function updateSatelliteTime() {
 }
 
 // ── Capa de viento (partículas) ──────────────────────────────────────────
-// Mismo contrato que el satélite: oculta/pausada SOLO mientras la animación
-// reproduce (partículas de un ciclo fijo con frames barriendo horas serían
-// un sinsentido); al pausar vuelve con el grid del frame en reposo.
+// Se mantiene activa durante la animación y se actualiza al cambiar el grid del frame.
 function updateWind() {
   if (!windLayer) return
-  windLayer.setPaused(props.animPlaying)
+  windLayer.setPaused(false)
   windLayer.setGrid(props.windGrid)
 }
 
