@@ -4,6 +4,7 @@ import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { BaseMapId } from '#shared/basemaps'
 import type {
+  FeedbackSubmission,
   LightningBucketFile,
   LightningBucketMeta,
   Phenomenon,
@@ -524,6 +525,18 @@ onMounted(() => {
   onBeforeUnmount(() => clearInterval(nudgeInterval))
 })
 
+function onFeedbackSwitchTab(tab: 'submit' | 'mine') {
+  feedbackSend({ type: 'SWITCH_TAB', tab })
+  if (tab === 'mine') {
+    feedbackSend({ type: 'FETCH_MINE' })
+  }
+}
+
+function onFeedbackSubmit(payload: FeedbackSubmission) {
+  feedbackSend({ type: 'SUBMIT_FEEDBACK', submission: payload })
+  feedbackSend({ type: 'FETCH_MINE' })
+}
+
 const feedbackMapContext = computed(() => {
   return {
     url: route.fullPath,
@@ -788,8 +801,8 @@ function onSatOpacityInput(event: Event) {
         :submitting="feedbackSnapshot.matches({ form: 'submitting' })"
         :submission-error="feedbackCtx.submissionError"
         @close="feedbackSend({ type: 'CLOSE_DIALOG' })"
-        @switch-tab="tab => feedbackSend({ type: 'SWITCH_TAB', tab })"
-        @submit="payload => feedbackSend({ type: 'SUBMIT_FEEDBACK', submission: payload })"
+        @switch-tab="onFeedbackSwitchTab"
+        @submit="onFeedbackSubmit"
         @mark-read="feedbackSend({ type: 'MARK_READ' })"
       />
 

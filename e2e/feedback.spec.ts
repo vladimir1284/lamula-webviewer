@@ -14,7 +14,8 @@ test.describe('Feedback Flow', () => {
     const feedbackPill = page.getByTestId('feedback-pill')
     if (await feedbackPill.isVisible()) {
       await feedbackPill.click()
-    } else {
+    }
+    else {
       const menuFeedbackBtn = page.getByTestId('menu-feedback-open')
       await expect(menuFeedbackBtn).toBeVisible()
       await menuFeedbackBtn.click()
@@ -34,15 +35,17 @@ test.describe('Feedback Flow', () => {
     await expect(submitBtn).toBeEnabled()
     await submitBtn.click()
 
-    // Cambiar a la pestaña "Mis mensajes"
+    // Al enviar con éxito, la máquina cambia automáticamente activeTab a 'mine'
     const mineTab = page.getByTestId('feedback-tab-mine')
-    await mineTab.click()
-    await expect(mineTab).toHaveClass(/border-teal-400/)
+    await expect(mineTab).toHaveClass(/border-teal-400/, { timeout: 10000 })
 
     // Verificar que el mensaje enviado aparece en la lista
     const threadItems = page.getByTestId('feedback-item-thread')
     await expect(threadItems).toHaveCount(1, { timeout: 10000 })
     await expect(threadItems.first()).toContainText('Mensaje de prueba e2e sobre el visor de radar')
+
+    // Capturar screenshot para verificación visual
+    await page.screenshot({ path: '/home/jules/verification/screenshots/feedback_mine_tab.png' })
 
     // Cerrar diálogo
     await page.getByTestId('feedback-dialog-close').click()
