@@ -84,9 +84,17 @@ export default defineNuxtConfig({
     pgDatabase: '',
     pgUser: '',
     pgPassword: '',
+    pgWriteUser: '',
+    pgWritePassword: '',
+    adminToken: '',
+    feedbackWebhookUrl: '',
+    turnstileSecret: '',
+    turnstileDisabled: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',
+      turnstileSiteKey: '',
+      buildId: process.env.GIT_SHA || 'dev',
     },
   },
 

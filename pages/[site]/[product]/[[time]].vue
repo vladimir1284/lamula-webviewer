@@ -4,6 +4,7 @@ import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { BaseMapId } from '#shared/basemaps'
 import type {
+  FeedbackSubmission,
   LightningBucketFile,
   LightningBucketMeta,
   Phenomenon,
@@ -17,10 +18,13 @@ import { WIND_LEVEL_LABELS, zLightningBucketFile, zWindGridFile } from '#shared/
 import { rasterProductDef } from '#shared/products'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
 import { animationMachine } from '../../../machines/animation'
+import { feedbackMachine } from '../../../machines/feedback'
 import { overlayMachine } from '../../../machines/overlay'
 import type { OverlayLayerId, PanelId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
+
+import { shouldShowNudge } from '../../../utils/feedback/nudge'
 import { formatFull, formatFullParts } from '../../../utils/time-display'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
@@ -61,7 +65,7 @@ if (!initialRoute) {
   throw createError({ statusCode: 404, statusMessage: 'Ruta de viewer inválida' })
 }
 
-// Instante "ahora" para la vista live, calculado una vez en SSR (viaja en el
+// Instante "ahora" para la vista live, calculated una vez en SSR (viaja en el
 // payload; recalcular en cliente rompería la key del useFetch de abajo).
 const nowT = useState('viewer-now', () => new Date().toISOString().slice(0, 19)).value
 const tInitial = initialRoute.time ?? nowT
@@ -507,6 +511,55 @@ const displayedVolTime = computed(() =>
   animationEngaged.value ? animCurrentVolTime.value : raster.value?.vol_time ?? null,
 )
 
+// ── Feedback ────────────────────────────────────────────────────────────
+const { snapshot: feedbackSnapshot, send: feedbackSend } = useActor(feedbackMachine)
+const feedbackCtx = computed(() => feedbackSnapshot.value.context)
+
+onMounted(() => {
+  feedbackSend({ type: 'FETCH_MINE' })
+
+  const nudgeInterval = setInterval(() => {
+    feedbackSend({ type: 'CHECK_NUDGE', nowMs: Date.now() })
+  }, 10000)
+
+  onBeforeUnmount(() => clearInterval(nudgeInterval))
+})
+
+function onFeedbackSwitchTab(tab: 'submit' | 'mine') {
+  feedbackSend({ type: 'SWITCH_TAB', tab })
+  if (tab === 'mine') {
+    feedbackSend({ type: 'FETCH_MINE' })
+  }
+}
+
+function onFeedbackSubmit(payload: FeedbackSubmission) {
+  feedbackSend({ type: 'SUBMIT_FEEDBACK', submission: payload })
+  feedbackSend({ type: 'FETCH_MINE' })
+}
+
+const feedbackMapContext = computed(() => {
+  return {
+    url: route.fullPath,
+    site: ctx.value.site,
+    product: ctx.value.product,
+    volTime: displayedVolTime.value,
+    layers: ctx.value.layers,
+    panel: ctx.value.panel,
+    windLevel: ctx.value.windLevel,
+    baseMap: ctx.value.base,
+    buildId: useRuntimeConfig().public.buildId,
+    locale: typeof navigator !== 'undefined' ? navigator.language : 'es-ES',
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+  }
+})
+
+const showNudge = computed(() => {
+  if (typeof window === 'undefined') return false
+  const nudge = feedbackCtx.value.identity.nudge
+  const nowMs = Date.now()
+  return shouldShowNudge(nudge, feedbackCtx.value.sessionStartTimeMs, nowMs)
+})
+
 // frame anterior del día al mostrado — define la ventana de observación
 // del overlay de rayos (D31); null (primer frame / fuera del día cargado)
 // → la máquina cae al fallback de 600 s
@@ -739,6 +792,27 @@ function onSatOpacityInput(event: Event) {
         @speed="onSpeedChange"
       />
 
+      <FeedbackDialog
+        :open="feedbackCtx.dialogOpen"
+        :active-tab="feedbackCtx.activeTab"
+        :profile="feedbackCtx.identity.profile"
+        :items="feedbackCtx.items"
+        :map-context="feedbackMapContext"
+        :submitting="feedbackSnapshot.matches({ form: 'submitting' })"
+        :submission-error="feedbackCtx.submissionError"
+        @close="feedbackSend({ type: 'CLOSE_DIALOG' })"
+        @switch-tab="onFeedbackSwitchTab"
+        @submit="onFeedbackSubmit"
+        @mark-read="feedbackSend({ type: 'MARK_READ' })"
+      />
+
+      <FeedbackNudge
+        v-if="showNudge"
+        @open="feedbackSend({ type: 'NUDGE_ACTION', action: 'open' })"
+        @later="feedbackSend({ type: 'NUDGE_ACTION', action: 'later' })"
+        @never="feedbackSend({ type: 'NUDGE_ACTION', action: 'never' })"
+      />
+
       <ClientOnly>
         <RadarMap
           v-if="radar"
@@ -881,7 +955,7 @@ function onSatOpacityInput(event: Event) {
     <!-- menú de capas (D36) + panel acoplado a la derecha (D37): en md+ el
          panel es un hermano flex real (no overlay) que empuja el mapa a la
          izquierda achicando el wrapper .flex-1 de arriba — RadarMap ya
-         resuelve el resize con su ResizeObserver (ver RadarMap.vue). En
+         resuelves el resize con su ResizeObserver (ver RadarMap.vue). En
          mobile sigue siendo overlay full-screen (sin lugar para correr el
          mapa en una pantalla angosta). -->
     <LayersMenu
@@ -904,6 +978,7 @@ function onSatOpacityInput(event: Event) {
       :overlay-join-info="overlayJoinInfo"
       :available-days="availableDays"
       :day="ctx.day"
+      :unread-feedback-count="feedbackCtx.unreadCount"
       @select-base="onSelectBase"
       @opacity-input="onOpacityInput"
       @toggle-smooth="onToggleSmooth"
@@ -917,6 +992,7 @@ function onSatOpacityInput(event: Event) {
       @select-day="onSelectDay"
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
       @open-prefs="prefsDialog?.open()"
+      @open-feedback="feedbackSend({ type: 'OPEN_DIALOG' })"
     />
   </div>
 </template>
