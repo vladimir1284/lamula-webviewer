@@ -45,5 +45,6 @@ nav:
   - Spec pipeline rayos: pipeline-rayos.md
   - Máquinas de estado: maquinas-estado.md
   - Plan de implementación: plan-implementacion.md
+  - Plan de feedback de usuarios: plan-feedback.md
   - Estrategia de pruebas: pruebas.md
   - Validaciones manuales: validaciones.md
