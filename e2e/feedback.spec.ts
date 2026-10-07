@@ -44,9 +44,6 @@ test.describe('Feedback Flow', () => {
     await expect(threadItems).toHaveCount(1, { timeout: 10000 })
     await expect(threadItems.first()).toContainText('Mensaje de prueba e2e sobre el visor de radar')
 
-    // Capturar screenshot para verificación visual
-    await page.screenshot({ path: '/home/jules/verification/screenshots/feedback_mine_tab.png' })
-
     // Cerrar diálogo
     await page.getByTestId('feedback-dialog-close').click()
     await expect(dialog).not.toBeVisible()
