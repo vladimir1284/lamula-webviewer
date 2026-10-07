@@ -86,7 +86,7 @@ export default defineNuxtConfig({
     pgPassword: '',
     pgWriteUser: '',
     pgWritePassword: '',
-    adminToken: 'admin-secret-change-me',
+    adminToken: '',
     feedbackWebhookUrl: '',
     turnstileSecret: '',
     turnstileDisabled: '',

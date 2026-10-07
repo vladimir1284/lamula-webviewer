@@ -1,4 +1,4 @@
-import createHmac from 'crypto'
+import { createHmac } from 'crypto'
 
 function verifySessionToken(token: string, secret: string): boolean {
   if (!token || !secret) return false
@@ -6,7 +6,7 @@ function verifySessionToken(token: string, secret: string): boolean {
   if (parts.length !== 2) return false
 
   const [payload, sig] = parts
-  const hmac = createHmac.createHmac('sha256', secret).update(payload!).digest('hex')
+  const hmac = createHmac('sha256', secret).update(payload!).digest('hex')
   return hmac === sig
 }
 

@@ -1,4 +1,4 @@
-import createHash from 'crypto'
+import { createHash } from 'crypto'
 import { zFeedbackSubmission } from '#shared/contract'
 import { useFeedbackDal } from '../../dal/feedback'
 import { parseBody } from '../../dal/params'
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const tokenHash = createHash.createHash('sha256').update(rawToken).digest('hex')
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex')
   const dal = useFeedbackDal(event)
 
   const result = await dal.createFeedback(tokenHash, submission)

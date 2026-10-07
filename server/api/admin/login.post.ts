@@ -1,4 +1,4 @@
-import createHmac, { timingSafeEqual } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { z } from 'zod'
 import { parseBody } from '../../dal/params'
 
@@ -7,7 +7,7 @@ const zLoginBody = z.object({
 })
 
 function signSession(payload: string, secret: string): string {
-  const hmac = createHmac.createHmac('sha256', secret).update(payload).digest('hex')
+  const hmac = createHmac('sha256', secret).update(payload).digest('hex')
   return `${payload}.${hmac}`
 }
 
@@ -15,6 +15,13 @@ export default defineEventHandler(async (event) => {
   const body = await parseBody(event, zLoginBody)
   const config = useRuntimeConfig(event)
   const secret = config.adminToken
+
+  if (!secret) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Admin no configurado (falta NUXT_ADMIN_TOKEN)',
+    })
+  }
 
   const givenBuf = Buffer.from(body.password)
   const expectedBuf = Buffer.from(secret)
