@@ -41,6 +41,7 @@ defineProps<{
   overlayJoinInfo: string | null
   availableDays: string[]
   day: string
+  unreadFeedbackCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -57,6 +58,7 @@ const emit = defineEmits<{
   'select-day': [day: string]
   'open-panel': [panel: PanelId]
   'open-prefs': []
+  'open-feedback': []
 }>()
 
 const open = ref(false)
@@ -69,6 +71,11 @@ function openPanel(panel: PanelId) {
 function openPrefs() {
   open.value = false
   emit('open-prefs')
+}
+
+function openFeedback() {
+  open.value = false
+  emit('open-feedback')
 }
 </script>
 
@@ -98,6 +105,21 @@ function openPrefs() {
     </button>
 
     <div class="hidden md:flex md:flex-col md:items-end md:gap-2">
+      <button
+        type="button"
+        data-testid="feedback-pill"
+        class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-3 text-sm font-bold shadow-lg hover:bg-slate-800"
+        @click="openFeedback"
+      >
+        <span>Feedback</span>
+        <span
+          v-if="unreadFeedbackCount && unreadFeedbackCount > 0"
+          data-testid="feedback-unread-badge"
+          class="flex h-2.5 w-2.5 rounded-full bg-red-500"
+        />
+        <span class="text-base">💬</span>
+      </button>
+
       <label
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
@@ -450,15 +472,29 @@ function openPrefs() {
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <legend class="px-1 text-slate-400">Preferencias</legend>
-        <button
-          type="button"
-          data-testid="prefs-open"
-          class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
-          @click="openPrefs"
-        >
-          Unidades, hora, alcance del radar
-        </button>
+        <legend class="px-1 text-slate-400">Preferencias y Opinión</legend>
+        <div class="flex flex-col gap-2">
+          <button
+            type="button"
+            data-testid="prefs-open"
+            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            @click="openPrefs"
+          >
+            Unidades, hora, alcance del radar
+          </button>
+          <button
+            type="button"
+            data-testid="menu-feedback-open"
+            class="w-full flex items-center justify-between rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            @click="openFeedback"
+          >
+            <span>Dejar opinión / Sugerencia</span>
+            <span
+              v-if="unreadFeedbackCount && unreadFeedbackCount > 0"
+              class="h-2 w-2 rounded-full bg-red-500"
+            />
+          </button>
+        </div>
       </fieldset>
 
       <DayPicker
