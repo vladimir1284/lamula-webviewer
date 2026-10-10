@@ -4,7 +4,7 @@
 // partirlo no cambia la física — solo la resolución de la integración.
 import type { WindGridFile } from '#shared/contract'
 import { describe, expect, it } from 'vitest'
-import { mulberry32, WindParticles } from '../../utils/wind/particles'
+import { mulberry32, TRAIL_FADE_60, trailFadeAlpha, WindParticles } from '../../utils/wind/particles'
 
 /** campo uniforme: sin error de muestreo, solo el de la integración */
 function uniformGrid(u: number, v: number): WindGridFile {
@@ -60,5 +60,36 @@ describe('sub-paso de dt', () => {
     expect(Math.max(1, Math.ceil(0.05 / MAX_DT_S))).toBe(1)
     expect(Math.max(1, Math.ceil(0.25 / MAX_DT_S))).toBe(5) // GIF a 4 fps
     expect(Math.max(1, Math.ceil(0.4 / MAX_DT_S))).toBe(8) // GIF a 2.5 fps
+  })
+})
+
+// El fade de estelas es exponencial en el tiempo, no en el número de ticks.
+// Sin esto el GIF salía con estelas unas 3 veces más largas que la pantalla:
+// 20 pasos por segundo simulado contra 60. Ver decisión 42.
+describe('fade de estelas invariante al framerate', () => {
+  const REF = 1 / 60
+
+  it('a 60 fps devuelve el alpha de referencia', () => {
+    expect(trailFadeAlpha(REF)).toBeCloseTo(TRAIL_FADE_60, 12)
+  })
+
+  it('n pasos de dt/n atenúan lo mismo que un paso de dt', () => {
+    const dt = 0.25
+    const whole = trailFadeAlpha(dt)
+    const split = trailFadeAlpha(dt / 5) ** 5
+    expect(split).toBeCloseTo(whole, 12)
+  })
+
+  it('la vida de la estela no depende del paso', () => {
+    // pasos hasta que el alpha acumulado cae al 1 %, en segundos simulados
+    const lifeS = (dtS: number) => {
+      const a = trailFadeAlpha(dtS)
+      return (Math.log(0.01) / Math.log(a)) * dtS
+    }
+    const pantalla = lifeS(REF)
+    expect(lifeS(0.05)).toBeCloseTo(pantalla, 9) // sub-paso del export
+    expect(lifeS(0.004)).toBeCloseTo(pantalla, 9) // 240 fps
+    expect(pantalla).toBeGreaterThan(0.8) // ~0.92 s, el valor histórico
+    expect(pantalla).toBeLessThan(1)
   })
 })

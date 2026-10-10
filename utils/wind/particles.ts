@@ -16,6 +16,25 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
+/** alpha del fade de estelas a 60 fps (destination-in) */
+export const TRAIL_FADE_60 = 0.92
+/** paso de referencia del fade: un frame a 60 fps */
+const FADE_REF_DT_S = 1 / 60
+
+/**
+ * Alpha del fade de estelas para un paso de `dtS` segundos.
+ *
+ * El fade es exponencial en el TIEMPO, no en el número de ticks. A 60 fps se
+ * aplica 60 veces por segundo simulado; un paso de export de 0.05 s solo 20
+ * veces. Con un alpha fijo la estela del export salía unas 3 veces más larga
+ * y más oscura que en pantalla. Elevar a `dtS / FADE_REF_DT_S` deja la vida
+ * de la estela invariante al framerate, y de paso estabiliza la pantalla
+ * ante hipos de rAF.
+ */
+export function trailFadeAlpha(dtS: number): number {
+  return TRAIL_FADE_60 ** (dtS / FADE_REF_DT_S)
+}
+
 export interface Viewport {
   west: number
   east: number

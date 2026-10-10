@@ -14,15 +14,13 @@ import type { FrameState } from 'ol/Map'
 import { apply as applyTransform } from 'ol/transform'
 import Layer from 'ol/layer/Layer'
 import { toLonLat } from 'ol/proj'
-import { mulberry32, WindParticles } from '../wind/particles'
+import { mulberry32, trailFadeAlpha, WindParticles } from '../wind/particles'
 import { fromLonLat3857 } from './mercator'
 
 /** partículas ∝ área del canvas, acotado para móvil/desktop */
 const PARTICLES_PER_PX2 = 1 / 15_000
 const MIN_PARTICLES = 400
 const MAX_PARTICLES = 3000
-/** alpha del fade de estelas por tick (destination-in) */
-const TRAIL_FADE = 0.92
 const STROKE = 'rgba(15, 23, 42, 0.85)' // slate-900: legible sobre OSM y raster
 const LINE_WIDTH = 1.4
 const MAX_DT_S = 0.05 // tab en background / hipo de rAF: no teletransportar
@@ -218,7 +216,9 @@ export class WindParticleLayer extends Layer {
 
     // MAX_DT_S protege de hipos reales de rAF, así que NO se sube para el
     // export: un dt grande se parte en n pasos lógicos. El fade de estelas
-    // corre n veces, que es justo lo que pasa en pantalla a 60 fps.
+    // corre n veces, pero con el alpha escalado por el dt de cada paso
+    // (trailFadeAlpha): a 20 pasos por segundo simulado un alpha fijo de
+    // 60 fps dejaba las estelas 3 veces más largas que en pantalla.
     const steps = Math.max(1, Math.ceil(dtS / MAX_DT_S))
     for (let i = 0; i < steps; i++) {
       this.drawStep(ctx, width, height, dtS / steps, frameState)
@@ -238,7 +238,7 @@ export class WindParticleLayer extends Layer {
   ): void {
     // estelas: atenuar lo ya pintado antes de sumar el tick nuevo
     ctx.globalCompositeOperation = 'destination-in'
-    ctx.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE})`
+    ctx.fillStyle = `rgba(0, 0, 0, ${trailFadeAlpha(dtS)})`
     ctx.fillRect(0, 0, width, height)
     ctx.globalCompositeOperation = 'source-over'
 

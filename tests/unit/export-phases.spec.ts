@@ -2,7 +2,8 @@
 // reloj — por eso el determinismo del GIF se puede razonar sin navegador.
 import { describe, expect, it } from 'vitest'
 import { LOOP_MS } from '../../utils/lightning/anim'
-import { phaseTasks, sequenceTasks } from '../../utils/export/frame-driver'
+import { phaseTasks, sequenceTasks, warmupFrames } from '../../utils/export/frame-driver'
+import { trailFadeAlpha } from '../../utils/wind/particles'
 
 describe('sequenceTasks', () => {
   it('una tarea por frame del pool, en orden', () => {
@@ -53,5 +54,34 @@ describe('phaseTasks', () => {
 
   it('count no positivo da tabla vacía', () => {
     expect(phaseTasks(0, 0)).toEqual([])
+  })
+})
+
+// El viento resiembra al entrar en modo export: sin calentar, el frame 0 sale
+// sin estelas y el bucle salta al dar la vuelta. Medido en el GIF de muestra:
+// el empalme pasaba de 0.0330 (interior) a 0.0514 de RMSE. Ver decisión 42.
+describe('warmupFrames', () => {
+  it('deja el residuo de estela bajo el 1 %', () => {
+    for (const dtS of [0.05, 0.1, 0.25, 0.4]) {
+      const n = warmupFrames(dtS)
+      expect(trailFadeAlpha(dtS) ** n).toBeLessThanOrEqual(0.01)
+      // y no se pasa de largo: un frame menos ya no alcanzaría
+      expect(trailFadeAlpha(dtS) ** (n - 1)).toBeGreaterThan(0.01)
+    }
+  })
+
+  it('un dt más grande necesita menos frames', () => {
+    expect(warmupFrames(0.25)).toBeLessThan(warmupFrames(0.05))
+  })
+
+  it('el GIF de fases (20 frames de 250 ms) calienta en pocos frames', () => {
+    const [task] = phaseTasks(20, -1)
+    expect(warmupFrames(task!.windDtS)).toBeLessThanOrEqual(5)
+  })
+
+  it('dt no positivo no calienta; un dt diminuto queda acotado', () => {
+    expect(warmupFrames(0)).toBe(0)
+    expect(warmupFrames(-1)).toBe(0)
+    expect(warmupFrames(1e-9)).toBe(24) // WARMUP_MAX
   })
 })

@@ -20,6 +20,7 @@ import type { ChromeSpec } from './chrome'
 import type { MapCaptureHandle } from './types'
 import { captureMap } from './capture'
 import { LOOP_MS } from '../lightning/anim'
+import { trailFadeAlpha } from '../wind/particles'
 
 export type ExportKind = 'sequence' | 'phase'
 
@@ -76,6 +77,34 @@ export function phaseTasks(count: number, index: number, loopMs: number = LOOP_M
   return tasks
 }
 
+/** residuo de estela por debajo del cual ya no aporta píxeles visibles */
+const WARMUP_RESIDUAL = 0.01
+/** tope del calentamiento: un dt muy pequeño pediría decenas de frames */
+const WARMUP_MAX = 24
+/** el mapa ya está en reposo antes de calentar: un settle no debe tardar */
+const WARMUP_SETTLE_MS = 2_000
+
+/**
+ * Frames de calentamiento antes de capturar el primero.
+ *
+ * El viento resiembra al entrar en modo export, así que el frame 0 saldría
+ * sin estelas y el bucle daría un salto visible al volver del último frame.
+ * Avanzar el reloj sin capturar lleva el búfer de estelas a régimen.
+ *
+ * El fade acumulado de un frame es `trailFadeAlpha(windDtS)` — partir el dt
+ * en sub-pasos no lo cambia, porque el fade es exponencial en el tiempo. Hace
+ * falta llegar a `WARMUP_RESIDUAL`, de ahí el logaritmo.
+ *
+ * Ojo con lo que esto NO hace: el campo de viento no es periódico, así que el
+ * bucle no cierra exacto. La costura deja de verse, no desaparece.
+ */
+export function warmupFrames(windDtS: number): number {
+  if (!(windDtS > 0)) return 0
+  const fade = trailFadeAlpha(windDtS)
+  if (!(fade > 0) || fade >= 1) return WARMUP_MAX
+  return Math.min(WARMUP_MAX, Math.ceil(Math.log(WARMUP_RESIDUAL) / Math.log(fade)))
+}
+
 export interface DriveOptions {
   tasks: readonly FrameTask[]
   /** opciones de captura comunes; el chrome se recalcula frame a frame */
@@ -89,6 +118,8 @@ export interface DriveOptions {
   isCancelled?: () => boolean
   /** ms a esperar a que el frame del pool termine de decodificar */
   frameTimeoutMs?: number
+  /** frames de calentamiento; por defecto, los que pida `warmupFrames` */
+  warmup?: number
 }
 
 export interface DriveResult {
@@ -101,6 +132,8 @@ export interface DriveResult {
   skipped: number[]
   /** frames cuyo `settle()` venció sin `rendercomplete` */
   unsettled: number
+  /** frames de calentamiento corridos antes de capturar (no van en la salida) */
+  warmup: number
 }
 
 const FRAME_TIMEOUT_MS = 20_000
@@ -147,8 +180,26 @@ export async function driveExport(
   let done = 0
   let cancelled = false
 
+  const first = opts.tasks[0]!
+  const warmup = Math.max(0, opts.warmup ?? warmupFrames(first.windDtS))
+
   try {
-    for (let i = 0; i < total; i++) {
+    // Calentar el búfer de estelas del viento antes del primer frame: ver
+    // `warmupFrames`. Los rayos no lo necesitan — se limpian y repintan
+    // enteros, así que la misma fase da siempre la misma imagen.
+    for (let w = 0; w < warmup && !cancelled; w++) {
+      if (opts.isCancelled?.()) {
+        cancelled = true
+        break
+      }
+      handle.setExportClock({
+        lightningPhase: first.lightningPhase,
+        windDtS: first.windDtS,
+      })
+      await handle.settle(WARMUP_SETTLE_MS)
+    }
+
+    for (let i = 0; i < total && !cancelled; i++) {
       if (opts.isCancelled?.()) {
         cancelled = true
         break
@@ -207,5 +258,6 @@ export async function driveExport(
     cancelled,
     skipped,
     unsettled,
+    warmup,
   }
 }
