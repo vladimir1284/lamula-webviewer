@@ -18,10 +18,20 @@ export interface CanvasGeometry {
 }
 
 /**
+ * Reloj inyectado a las capas animadas durante un export (F7.3). Sin esto no
+ * hay determinismo: `renderSync()` estampa `frameState.time = Date.now()`.
+ */
+export interface ExportClock {
+  /** fase 0–1 del bucle de rayos */
+  lightningPhase: number
+  /** segundos de avance lógico del viento en este frame */
+  windDtS: number
+}
+
+/**
  * Capacidad de captura que expone `RadarMap.vue`. Deliberadamente no filtra la
  * instancia `ol/Map`: el seam existe para que `utils/export/` siga agnóstico al
- * renderer. F7.3 añadirá aquí `activateFrame`, `frameReady`, `setExportClock` y
- * `setExportPixelRatio`.
+ * renderer.
  */
 export interface MapCaptureHandle {
   /** contenedor del mapa (el `target` de OL), o null si aún no montó */
@@ -34,6 +44,25 @@ export interface MapCaptureHandle {
    * disparado antes de engancharse: no vuelve a dispararse).
    */
   settle: (timeoutMs?: number) => Promise<boolean>
+
+  // ── F7.3: secuencia animada ────────────────────────────────────────────
+  /** frames en el pool de animación; 0 si el mapa sigue en modo estático */
+  frameCount: () => number
+  /** índice del frame mostrado ahora (para restaurarlo al acabar) */
+  activeFrame: () => number
+  /** muestra el frame `i` del pool, sin pasar por el estado de la página */
+  activateFrame: (i: number) => void
+  /**
+   * ¿El frame `i` ya no va a cambiar? Listo, o fallado sin remedio (su COG no
+   * existe: fuera de la retención de 72 h del pipeline es lo normal). Esperar
+   * solo a 'listo' colgaría la captura hasta el timeout en vez de exportar el
+   * mismo blanco que se ve en pantalla.
+   */
+  frameSettled: (i: number) => boolean
+  /** null devuelve a las capas animadas su reloj real */
+  setExportClock: (clock: ExportClock | null) => void
+  /** sube el búfer de viento y rayos a `r` px por px CSS; null vuelve a 1 */
+  setExportPixelRatio: (r: number | null) => void
 }
 
 /**

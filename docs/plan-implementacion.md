@@ -86,9 +86,9 @@ Compartir una vista hoy exige un deep-link, red y que el dato siga dentro de la 
 
 > **Puerta (F7.2):** anotar, hacer pan+zoom de ida y vuelta, exportar y comprobar por píxel que la anotación cae en la posición proyectada esperada; recargar y recuperarla.
 
-**F7.3 — GIF y WebM.** Reloj inyectable en las capas de viento y rayos (sin pausarlas: pausar limpia su canvas), driver de frames sobre el `FramePool` existente, `gifenc` en un Worker con buffers transferibles, WebM por `captureStream`+`MediaRecorder`. GIF a 960×540 DPR 1 y 12 frames por defecto, tope duro de 8 MB.
+**F7.3 — GIF y WebM (hecho).** Reloj inyectado en las capas de viento y rayos (`setExportPhase` / `setExportMode`+`stepExport`, sin pausarlas: pausar limpia su canvas), driver de frames sobre el `FramePool` existente, `gifenc` en un Worker con buffers transferibles, vídeo por `captureStream(0)`+`MediaRecorder`. Dos formas: secuencia del radar (exige haber reproducido una vez) y bucle de rayos sobre un volumen, las dos con la fase repartida en `k/N` para que el bucle cierre sin costura. GIF a 960 px de ancho y DPR 1, tope duro de 8 MB. Ver decisión 42.
 
-> **Puerta (F7.3):** dos exports GIF consecutivos de la misma secuencia son byte-idénticos (cubre semilla del viento, fase de rayos, sub-paso y determinismo del encoder); GIF de 12 frames bajo 8 MB en menos de 20 s, bucle sin costura, rayos y viento visibles en todos los frames.
+> **Puerta (F7.3):** dos exports GIF consecutivos de la misma vista son byte-idénticos **con viento y rayos encendidos** (cubre semilla del viento, fase de rayos, sub-paso y determinismo del encoder) — verificado en `e2e/export-animation.spec.ts`; GIF bajo 8 MB con cabecera `GIF89a`, extensión Netscape de bucle infinito y un descriptor de imagen por frame. Pendiente de validación del experto: que el bucle se vea sin costura y que un GIF de la secuencia sea legible en un cliente de chat real.
 
 ## Hitos
 

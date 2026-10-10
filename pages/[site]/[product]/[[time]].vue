@@ -435,6 +435,9 @@ watch(() => ctx.value.time, () => {
 })
 
 const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.value]?.vol_time ?? ctx.value.time)
+// vol_times de la ventana, en el orden del pool: el chrome del GIF sella cada
+// frame con SU hora, no con la del volumen en reposo (F7.3)
+const animFrameTimes = computed(() => animFrames.value?.map(f => f.vol_time) ?? null)
 // resalta el frame realmente mostrado en la barra: el de animación mientras
 // está enganchada (aunque en pausa — la URL no se toca hasta pausar), si no
 // el de timelineCurrent de siempre
@@ -844,6 +847,7 @@ function onSatOpacityInput(event: Event) {
         :units="ctx.units"
         :base="ctx.base"
         :sat-enabled="ctx.sat"
+        :frame-times="animFrameTimes"
       />
 
       <TimelineMenu

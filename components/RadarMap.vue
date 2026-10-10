@@ -656,11 +656,13 @@ watch(
 
 // scrubbing / avance de la animación: swap dentro del mismo pool, sin
 // refetch si ya estaba listo (texturas ya en GPU)
-watch(() => props.activeFrame, (i) => {
+function showFrame(i: number) {
   if (!animationMode() || !pool) return
   pool.activate(i)
   rasterLoaded.value = pool.isReady(i) ? 'true' : 'false'
-})
+}
+
+watch(() => props.activeFrame, showFrame)
 
 watch(
   () => [
@@ -738,6 +740,24 @@ const captureHandle: MapCaptureHandle = {
     // cuando se enganchó el `once` — forzar un frame más garantiza el evento
     map.render()
   }),
+
+  // ── F7.3: el driver del export conduce frames y reloj ──────────────────
+  // Va directo al pool y a las capas animadas, SIN pasar por el estado de la
+  // página: `updateLightning()` oculta los rayos con `animPlaying`, y el
+  // export quiere verlos. El driver restaura el frame original al acabar.
+  frameCount: () => (animationMode() ? (pool?.size() ?? 0) : 0),
+  activeFrame: () => pool?.activeFrame() ?? -1,
+  activateFrame: showFrame,
+  frameSettled: (i: number) => pool?.isSettled(i) ?? false,
+  setExportClock: (clock) => {
+    windLayer?.setExportMode(clock ? clock.windDtS : null)
+    lightningLayer?.setExportPhase(clock ? clock.lightningPhase : null)
+    if (clock) windLayer?.stepExport()
+  },
+  setExportPixelRatio: (r) => {
+    windLayer?.setExportPixelRatio(r)
+    lightningLayer?.setExportPixelRatio(r)
+  },
 }
 
 defineExpose(captureHandle)

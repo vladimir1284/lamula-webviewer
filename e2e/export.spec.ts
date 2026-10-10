@@ -87,8 +87,11 @@ test('canario: la forma de .ol-layers que asume el compositor sigue vigente', as
   }
   // el canvas WebGL del raster declara su tamaño CSS (rama 2 del transform)
   expect(shape!.some(c => c.transform === '' && c.width !== '')).toBe(true)
-  // viento y rayos siguen siendo canvas sueltos sin transform NI width
-  // (rama 3: la que la receta oficial de OL descartaría con NaN)
+  // Viento y rayos siguen siendo canvas SUELTOS dentro de .ol-layers y sin
+  // transform — ahí es donde la receta oficial de OL metería NaN y los
+  // descartaría en silencio. Desde F7.3 sí declaran tamaño CSS (hace falta
+  // para poder subir el búfer a 2× en el export), así que el compositor los
+  // resuelve por la rama 2; la rama 3 se mantiene como respaldo.
   const custom = await page.evaluate(() =>
     ['.wind-particle-canvas', '.lightning-canvas'].map((sel) => {
       const c = document.querySelector<HTMLCanvasElement>(sel)
@@ -101,7 +104,7 @@ test('canario: la forma de .ol-layers que asume el compositor sigue vigente', as
     if (!c.found) continue
     expect(c.inLayers).toBe(true)
     expect(c.transform).toBe('')
-    expect(c.width).toBe('')
+    expect(c.width).toMatch(/^\d/)
   }
 })
 

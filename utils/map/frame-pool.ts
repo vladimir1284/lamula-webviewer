@@ -193,6 +193,27 @@ export class FramePool {
   }
 
   /**
+   * ¿Este frame ya no va a cambiar? Listo o fallado. Lo necesita el export
+   * (F7.3): esperar a 'ready' en un frame cuyo COG devuelve 404 colgaría la
+   * captura hasta el timeout; con el COG ausente el frame sale en blanco, que
+   * es exactamente lo que el usuario ve en pantalla.
+   */
+  isSettled(index: number): boolean {
+    const state = this.entries[index]?.state
+    return state === 'ready' || state === 'error'
+  }
+
+  /** frames en la pool — puede ser menor que la serie pedida (MAX_POOL). */
+  size(): number {
+    return this.entries.length
+  }
+
+  /** índice del frame visible; -1 antes del primer `activate()`. */
+  activeFrame(): number {
+    return this.activeIndex
+  }
+
+  /**
    * pan/zoom: el blob de cada frame ya está completo en memoria (no hay
    * tiles parciales que revalidar), así que no hace falta volver a 'loading'
    * ni re-fetch — solo ocultar lo inactivo para no pagar su costo de render.

@@ -12,7 +12,11 @@ import type { ClockPref } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
 import type { ChromeMode, ChromeSpec } from '../utils/export/chrome'
 import type { BrandImage, MapCaptureHandle } from '../utils/export/types'
+import type { AnimationFormat } from '../utils/export/animate'
 import { captureMap } from '../utils/export/capture'
+import { exportAnimation } from '../utils/export/animate'
+import { phaseTasks, sequenceTasks } from '../utils/export/frame-driver'
+import { pickVideoMime } from '../utils/export/video'
 import { exportFilename } from '../utils/export/filename'
 import { fileToAvatarDataUrl, loadBrandImage } from '../utils/export/images'
 import { canCopyImages, canvasToBlob, copyCanvasToClipboard, downloadBlob } from '../utils/export/sink'
@@ -32,6 +36,8 @@ const props = defineProps<{
   units: UnitsPref
   base: BaseMapId
   satEnabled: boolean
+  /** vol_times de la ventana de animación, en el orden del pool (F7.3) */
+  frameTimes?: string[] | null
 }>()
 
 const TITLE = 'LAMULA WebViewer'
@@ -212,9 +218,108 @@ function copy() {
     .catch(() => { error.value = 'El navegador no dejó copiar la imagen.' })
 }
 
+// ── Animación (F7.3) ─────────────────────────────────────────────────────
+// Dos formas sobre el mismo mapa: la secuencia de frames del radar, o el
+// bucle de 5 s de los rayos sobre una sola observación. La secuencia exige
+// que el pool de animación exista — es decir, que el usuario haya dado a play
+// al menos una vez; en modo estático no hay frames que recorrer.
+type AnimKind = 'sequence' | 'phase'
+
+/** El GIF se reduce: a 2560×1440 la cuantización cuesta ~25× y el fichero se dispara. */
+const GIF_MAX_WIDTH = 960
+const VIDEO_MAX_WIDTH = 1280
+/** ms por frame de la secuencia del radar */
+const SEQUENCE_DELAY_MS = 400
+/** frames del bucle de rayos: 20 sobre 5 s = 4 fps, suficiente para el fade */
+const PHASE_FRAMES = 20
+
+const videoMime = pickVideoMime()
+// la preferencia la pone el usuario; la disponibilidad manda sobre ella. Sin
+// pool de animación no hay secuencia que recorrer, y forzar el ref dejaría la
+// elección pegada en 'phase' cuando el pool aparece después.
+const animKindPref = ref<AnimKind>('sequence')
+const animFormat = ref<AnimationFormat>('gif')
+const animBusy = ref(false)
+const animDone = ref(0)
+const animTotal = ref(0)
+const animNotice = ref<string | null>(null)
+const poolFrames = ref(0)
+let animCancelled = false
+
+const canSequence = computed(() => poolFrames.value > 1)
+const animKind = computed<AnimKind>(() => (canSequence.value ? animKindPref.value : 'phase'))
+
+function refreshPoolFrames() {
+  poolFrames.value = props.handle?.frameCount() ?? 0
+}
+
+function chromeFor(timeIso: string | null): ChromeSpec {
+  return { ...spec.value, timeIso }
+}
+
+async function generateAnimation() {
+  const handle = props.handle
+  if (!handle || animBusy.value) return
+  animBusy.value = true
+  animCancelled = false
+  error.value = null
+  animNotice.value = null
+  animDone.value = 0
+
+  const format = animFormat.value
+  const tasks = animKind.value === 'sequence'
+    ? sequenceTasks(poolFrames.value, SEQUENCE_DELAY_MS)
+    : phaseTasks(PHASE_FRAMES, handle.activeFrame())
+  animTotal.value = tasks.length
+
+  try {
+    await ensureBrand()
+    const result = await exportAnimation(handle, {
+      tasks,
+      format,
+      videoMime: videoMime ?? undefined,
+      // 1× siempre: el tope de área de canvas de iOS y el coste de cuantizar
+      // hacen que 2× no sea una opción para una secuencia
+      capture: { pixelRatio: 1, watermark: logo.value, onTaint: 'skip' },
+      chromeFor: task => chromeFor(props.frameTimes?.[task.index] ?? props.volTime),
+      maxWidth: format === 'gif' ? GIF_MAX_WIDTH : VIDEO_MAX_WIDTH,
+      onProgress: (done, total) => {
+        animDone.value = done
+        animTotal.value = total
+      },
+      isCancelled: () => animCancelled,
+    })
+    if (result.drive.cancelled) {
+      animNotice.value = `Cancelado tras ${result.drive.frames} frames.`
+    }
+    downloadBlob(result.blob, exportFilename({
+      site: props.site,
+      product: props.productSlug,
+      volTime: props.volTime,
+      ext: result.ext,
+    }))
+    const kb = Math.round(result.blob.size / 1024)
+    animNotice.value = `${result.drive.frames} frames · ${result.drive.width}×${result.drive.height} · ${kb} kB`
+  }
+  catch (e) {
+    error.value = e instanceof Error ? e.message : 'No se pudo generar la animación'
+  }
+  finally {
+    animBusy.value = false
+    // el driver devolvió el mapa a su frame original; repintar la vista
+    // previa para que no quede mostrando el último frame de la secuencia
+    void render()
+  }
+}
+
+function cancelAnimation() {
+  animCancelled = true
+}
+
 defineExpose({
   open: () => {
     dialog.value?.showModal()
+    refreshPoolFrames()
     void render()
   },
 })
@@ -386,6 +491,97 @@ defineExpose({
             {{ s }}×
           </button>
         </div>
+      </fieldset>
+
+      <fieldset class="rounded bg-slate-900/60 p-3">
+        <legend class="px-1 text-slate-400">Animación</legend>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            data-testid="export-anim-sequence"
+            :aria-pressed="animKind === 'sequence'"
+            :disabled="!canSequence || animBusy"
+            class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
+            :class="animKind === 'sequence'
+              ? 'border-teal-400 bg-slate-700 text-teal-300'
+              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+            @click="animKindPref = 'sequence'"
+          >
+            Secuencia del radar
+          </button>
+          <button
+            type="button"
+            data-testid="export-anim-phase"
+            :aria-pressed="animKind === 'phase'"
+            :disabled="animBusy"
+            class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
+            :class="animKind === 'phase'
+              ? 'border-teal-400 bg-slate-700 text-teal-300'
+              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+            @click="animKindPref = 'phase'"
+          >
+            Bucle de rayos
+          </button>
+        </div>
+
+        <p v-if="!canSequence" class="pt-2 text-xs text-slate-500">
+          Para exportar la secuencia, reproduce primero la animación: los frames se
+          exportan del mismo pool que usa el reproductor.
+        </p>
+
+        <div class="mt-3 flex gap-2">
+          <button
+            type="button"
+            data-testid="export-anim-format-gif"
+            :aria-pressed="animFormat === 'gif'"
+            :disabled="animBusy"
+            class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
+            :class="animFormat === 'gif'
+              ? 'border-teal-400 bg-slate-700 text-teal-300'
+              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+            @click="animFormat = 'gif'"
+          >
+            GIF
+          </button>
+          <button
+            v-if="videoMime"
+            type="button"
+            data-testid="export-anim-format-video"
+            :aria-pressed="animFormat === 'video'"
+            :disabled="animBusy"
+            class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
+            :class="animFormat === 'video'
+              ? 'border-teal-400 bg-slate-700 text-teal-300'
+              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+            @click="animFormat = 'video'"
+          >
+            Vídeo
+          </button>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            data-testid="export-anim-run"
+            class="flex-1 rounded border border-teal-500 bg-teal-600/20 px-2 py-2 font-semibold text-teal-200 hover:bg-teal-600/40 disabled:opacity-40"
+            :disabled="animBusy || busy || !handle"
+            @click="generateAnimation"
+          >
+            {{ animBusy ? `Capturando ${animDone}/${animTotal}…` : 'Generar y descargar' }}
+          </button>
+          <button
+            v-if="animBusy"
+            type="button"
+            data-testid="export-anim-cancel"
+            class="shrink-0 rounded border border-slate-600 px-2 py-2 hover:bg-slate-700"
+            @click="cancelAnimation"
+          >
+            Cancelar
+          </button>
+        </div>
+        <p v-if="animNotice" data-testid="export-anim-notice" class="pt-2 text-xs text-slate-400">
+          {{ animNotice }}
+        </p>
       </fieldset>
 
       <p v-if="error" data-testid="export-error" class="rounded bg-amber-900/40 px-3 py-2 text-xs text-amber-200">

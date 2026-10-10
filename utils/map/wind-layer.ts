@@ -42,6 +42,13 @@ export class WindParticleLayer extends Layer {
   private paused = false
   private lastTime: number | null = null
   private rafId: number | null = null
+  /** avance lógico por frame cuando manda el driver del export (F7.3) */
+  private exportDtS: number | null = null
+  /** píxeles de búfer por píxel CSS; 1 fuera del export */
+  private renderRatio = 1
+  /** frame lógico pedido / ya pintado: un settle dispara varios renders */
+  private exportSeq = 0
+  private exportDrawn = 0
   /** firma de la vista con la que se sembró (cambia ⇒ resembrar) */
   private viewKey = ''
   private readonly onVisibility = () => {
@@ -82,11 +89,59 @@ export class WindParticleLayer extends Layer {
     this.paused = paused
     if (paused) {
       this.stopLoop()
-      this.clearCanvas()
+      // durante el export la pausa no puede borrar lo ya pintado: el driver
+      // lee el canvas justo después del render
+      if (this.exportDtS === null) this.clearCanvas()
     }
     else {
       this.scheduleTick()
     }
+  }
+
+  /**
+   * Modo export (F7.3): el reloj deja de ser `frameState.time` y pasa a ser un
+   * avance fijo por frame que inyecta el driver. `renderSync()` estampa
+   * `frameState.time = Date.now()` (ol/Map.js), así que por esa vía no hay
+   * determinismo posible. Entrar o salir del modo RESIEMBRA las partículas:
+   * dos exports seguidos tienen que partir del mismo estado o nunca serán
+   * byte-idénticos.
+   */
+  setExportMode(dtS: number | null): void {
+    // idempotente: el driver la llama en cada frame y resembrar ahí dejaría
+    // el viento sin estelas y con las partículas de vuelta al origen
+    if (dtS === this.exportDtS) return
+    this.exportDtS = dtS
+    this.exportSeq = 0
+    this.exportDrawn = 0
+    this.stopLoop()
+    this.reseed()
+    if (dtS === null) this.scheduleTick()
+  }
+
+  /**
+   * Avanza un frame lógico. No pinta: marca el frame como pendiente y deja
+   * que el render del mapa (el `renderSync()` de `settle()`) lo dibuje. Un
+   * settle provoca más de un render, y repetir el fade de estelas cambiaría
+   * los píxeles — de ahí el contador.
+   */
+  stepExport(): void {
+    this.exportSeq += 1
+    this.changed()
+  }
+
+  /** Búfer a `r` px de salida por px CSS (export a 2×); null vuelve a DPR 1. */
+  setExportPixelRatio(r: number | null): void {
+    const next = r ?? 1
+    if (next === this.renderRatio) return
+    this.renderRatio = next
+    this.reseed()
+  }
+
+  private reseed(): void {
+    this.particles = null
+    this.viewKey = ''
+    this.lastTime = null
+    this.clearCanvas()
   }
 
   protected override disposeInternal(): void {
@@ -117,19 +172,31 @@ export class WindParticleLayer extends Layer {
 
   private renderFrame(frameState: FrameState): HTMLElement {
     const [width, height] = frameState.size
-    // DPR 1 deliberado: estelas difuminadas no necesitan retina y la mitad
-    // de píxeles es la mitad de fillRect/stroke por tick (móvil)
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width
-      this.canvas.height = height
+    // DPR 1 deliberado fuera del export: estelas difuminadas no necesitan
+    // retina y la mitad de píxeles es la mitad de fillRect/stroke por tick
+    // (móvil). El export a 2× sí sube el búfer: junto al raster nítido una
+    // estela a mitad de resolución canta.
+    const ratio = this.renderRatio
+    const bufW = Math.round(width * ratio)
+    const bufH = Math.round(height * ratio)
+    if (this.canvas.width !== bufW || this.canvas.height !== bufH) {
+      this.canvas.width = bufW
+      this.canvas.height = bufH
     }
+    // tamaño CSS explícito SIEMPRE: con él el compositor del export resuelve
+    // esta capa por la rama de `style.width` y no por la de respaldo
+    // (utils/export/transform.ts). Con ratio 1 las dos dan lo mismo.
+    this.canvas.style.width = `${width}px`
+    this.canvas.style.height = `${height}px`
 
     const ctx = this.ctx
     if (!ctx || this.grid === null || this.paused) return this.canvas
+    // el búfer está en px de salida; de aquí abajo se dibuja en px CSS
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 
     // vista movida (pan/zoom/rotate/resize) → limpiar y resembrar
     const vs = frameState.viewState
-    const key = `${vs.center[0]},${vs.center[1]},${vs.resolution},${vs.rotation},${width}x${height}`
+    const key = `${vs.center[0]},${vs.center[1]},${vs.resolution},${vs.rotation},${width}x${height}@${ratio}`
     if (key !== this.viewKey || this.particles === null) {
       this.viewKey = key
       this.clearCanvas()
@@ -137,11 +204,38 @@ export class WindParticleLayer extends Layer {
       this.particles = this.seedParticles(frameState)
     }
 
-    const dtS = this.lastTime === null
+    if (this.exportDtS !== null) {
+      // frame lógico ya pintado: el render extra de `settle()` no debe
+      // volver a atenuar las estelas
+      if (this.exportDrawn === this.exportSeq) return this.canvas
+      this.exportDrawn = this.exportSeq
+    }
+
+    const dtS = this.exportDtS ?? (this.lastTime === null
       ? 0.016
-      : Math.min((frameState.time - this.lastTime) / 1000, MAX_DT_S)
+      : Math.min((frameState.time - this.lastTime) / 1000, MAX_DT_S))
     this.lastTime = frameState.time
 
+    // MAX_DT_S protege de hipos reales de rAF, así que NO se sube para el
+    // export: un dt grande se parte en n pasos lógicos. El fade de estelas
+    // corre n veces, que es justo lo que pasa en pantalla a 60 fps.
+    const steps = Math.max(1, Math.ceil(dtS / MAX_DT_S))
+    for (let i = 0; i < steps; i++) {
+      this.drawStep(ctx, width, height, dtS / steps, frameState)
+    }
+
+    if (this.exportDtS === null) this.scheduleTick()
+    return this.canvas
+  }
+
+  /** Un paso lógico: atenuar lo pintado y sumar el tramo nuevo de cada partícula. */
+  private drawStep(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    dtS: number,
+    frameState: FrameState,
+  ): void {
     // estelas: atenuar lo ya pintado antes de sumar el tick nuevo
     ctx.globalCompositeOperation = 'destination-in'
     ctx.fillStyle = `rgba(0, 0, 0, ${TRAIL_FADE})`
@@ -152,7 +246,7 @@ export class WindParticleLayer extends Layer {
     ctx.lineWidth = LINE_WIDTH
     ctx.lineCap = 'round'
     ctx.beginPath()
-    for (const s of this.particles.tick(dtS)) {
+    for (const s of this.particles!.tick(dtS)) {
       const p0 = applyTransform(
         frameState.coordinateToPixelTransform,
         fromLonLat3857(s.lon0, s.lat0),
@@ -165,9 +259,6 @@ export class WindParticleLayer extends Layer {
       ctx.lineTo(p1[0]!, p1[1]!)
     }
     ctx.stroke()
-
-    this.scheduleTick()
-    return this.canvas
   }
 
   private seedParticles(frameState: FrameState): WindParticles {
