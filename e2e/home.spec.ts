@@ -96,7 +96,7 @@ test('day picker: ventana de 72h, día activo marcado, día vacío no navega', a
 })
 
 test('timeline: un tick por vol_time, click salta al frame exacto', async ({ page }) => {
-  await page.goto(`/${series.site}/${series.product}/${isoToPath(series.times[0])}`)
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(series.times[0])}`)
   const ticks = page.getByTestId('timeline-tick')
   await expect(ticks).toHaveCount(series.times.length)
 
@@ -109,7 +109,7 @@ test('timeline: un tick por vol_time, click salta al frame exacto', async ({ pag
 test('timeline: stepping con botones y teclado (←/→), replace en la URL', async ({ page }) => {
   const t1 = series.times[1]
   const t2 = series.times[2]
-  await page.goto(`/${series.site}/${series.product}/${isoToPath(t1)}`)
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(t1)}`)
 
   await page.getByTestId('timeline-next').click()
   await expect(page).toHaveURL(new RegExp(`${isoToPath(t2)}$`))
@@ -124,7 +124,7 @@ test('timeline: stepping con botones y teclado (←/→), replace en la URL', as
 
 test('timeline: extremo real de la serie deshabilita esa dirección (404 silencioso)', async ({ page }) => {
   const first = series.times[0]
-  await page.goto(`/${series.site}/${series.product}/${isoToPath(first)}`)
+  await gotoHydrated(page, `/${series.site}/${series.product}/${isoToPath(first)}`)
   await expect(page.getByTestId('timeline-prev')).toBeEnabled()
 
   await page.getByTestId('timeline-prev').click()

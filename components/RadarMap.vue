@@ -162,23 +162,29 @@ let modifyInteraction: Modify | undefined
 
 const animationMode = () => Array.isArray(props.frames) && props.frames.length > 0
 
-// (Re)construir el pool de animación (altas/bajas de capa) puede por sí solo
-// hacer que OL dispare un 'moveend' — no es un MapBrowserEvent, así que la
-// librería no distingue "el usuario paneó/zoomeó" de "el render interno se
-// asentó tras un cambio de capas" (confirmado empíricamente: initOrUpdatePool
-// dispara uno sin que medie ningún gesto). El listener de abajo reenvía TODO
-// moveend como 'moveEnd' hacia animationMachine, que lo interpreta siempre
-// como pan/zoom real y pausa el playback — si ese moveend espurio llega justo
-// tras arrancar la animación, aborta el play recién iniciado. Se descarta
-// como mucho UN moveend inmediatamente después de tocar el pool; el timeout
-// es la red de seguridad si ese moveend nunca llega (no debe quedar
-// suprimiendo uno genuino más adelante).
-let suppressNextMoveEnd = false
-let suppressMoveEndTimer: ReturnType<typeof setTimeout> | undefined
-function armMoveEndSuppression() {
-  suppressNextMoveEnd = true
-  clearTimeout(suppressMoveEndTimer)
-  suppressMoveEndTimer = setTimeout(() => { suppressNextMoveEnd = false }, 500)
+// OL emite 'moveend' tanto tras un pan/zoom real como al asentarse su propio
+// render interno — no es un MapBrowserEvent, así que la librería no distingue
+// los dos casos (confirmado: reconstruir el pool de animación dispara uno sin
+// que medie ningún gesto). animationMachine lo interpreta siempre como pan/zoom
+// real y pausa el playback, así que un moveend espurio aborta el play recién
+// arrancado. El filtro es por ORIGEN, no por tiempo: un temporizador no sirve
+// — en una máquina lenta (SwiftShader, 2 núcleos) un frame de render ya pasa
+// de 200 ms, y cualquier ventana fija o se queda corta o se come un pan
+// genuino.
+//
+// El gesto se consume en 'movestart', de modo que el par (gesto, movimiento)
+// queda emparejado. Un click que no llega a mover el mapa (seleccionar una
+// celda) sí deja la marca puesta, así que `resetMoveOrigin()` la limpia justo
+// antes de cada reconstrucción del pool — el único momento en que la app
+// provoca un moveend por su cuenta.
+let userGesture = false
+let moveFromUser = false
+function markUserGesture() {
+  userGesture = true
+}
+function resetMoveOrigin() {
+  userGesture = false
+  moveFromUser = false
 }
 
 // 'true' cuando el raster vigente terminó de renderizar (rendercomplete de
@@ -449,7 +455,9 @@ function teardownPool() {
 
 function initOrUpdatePool() {
   if (!map || !props.productDef || !animationMode()) return
-  armMoveEndSuppression()
+  // altas/bajas de capa hacen que OL emita un moveend propio: que no herede
+  // un gesto viejo y se lo lleve puesto el playback recién arrancado
+  resetMoveOrigin()
   const frames = props.frames!
   const projCode = registerRadarProjection(props.radar.site_id, props.radar.proj4)
   const style = rasterStyle(
@@ -565,14 +573,24 @@ onMounted(() => {
     )
     emit('cursor', { lon, lat, level: sample?.level ?? null, value: sample?.value ?? null, rangeFolded: sample?.rangeFolded ?? false })
   })
-  map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
+  const viewport = map.getViewport()
+  viewport.addEventListener('pointerleave', () => emit('cursor', null))
+  // pointerdown cubre arrastre y los botones de zoom de OL (viven dentro del
+  // viewport); wheel y keydown cubren el resto de gestos de la vista. El
+  // pointerup NO sirve para descartar el click que no arrastró: los botones de
+  // zoom de OL disparan su animación después del click, así que el movestart
+  // llega más tarde que el pointerup.
+  viewport.addEventListener('pointerdown', markUserGesture)
+  viewport.addEventListener('wheel', markUserGesture, { passive: true })
+  viewport.addEventListener('keydown', markUserGesture)
+  map.on('movestart', () => {
+    moveFromUser = userGesture
+    userGesture = false
+  })
   map.on('moveend', () => {
     if (animationMode()) pool?.invalidateInactive()
-    if (suppressNextMoveEnd) {
-      suppressNextMoveEnd = false
-      clearTimeout(suppressMoveEndTimer)
-      return
-    }
+    if (!moveFromUser) return
+    moveFromUser = false
     emit('moveEnd')
   })
   // click en el marker de una celda → seleccionar (las líneas de track y
@@ -726,7 +744,6 @@ defineExpose(captureHandle)
 
 onBeforeUnmount(() => {
   teardownAnnotationTools()
-  clearTimeout(suppressMoveEndTimer)
   resizeObserver?.disconnect()
   resizeObserver = undefined
   rasterRequestId += 1 // invalida cualquier fetch de raster en curso
