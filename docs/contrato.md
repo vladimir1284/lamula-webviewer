@@ -79,6 +79,6 @@ Una fila por `(site_id, valid_time, level)`: `cycle_time`, `forecast_hour`, `mod
 1. ~~Extensión de `attrs` de NST~~ — cerrado jul-2026: tracks (packets 23/24), dbz_max y el tabular NMD completo fluyen; VIL/top/granizo quedan fuera de alcance (el feed no distribuye SS/HI — barrido verificado por el pipeline).
 2. `radars.icao` llega null en todo el feed del demo — si el pipeline puede mapear ICAO desde su config, el display mejora sin tocar el viewer.
 3. ~~Documentar claves de `attrs` en el pipeline~~ — hecho: tabla canónica en `db/README.md` de aquel repo.
-4. Acceso público de lectura + CORS del bucket R2 y `NUXT_PUBLIC_R2_BASE_URL` en el proyecto Pages del viewer — sin esto `cog_url` va null; bloqueante de F2, no de F1.
+4. ~~Acceso público de lectura + CORS del bucket R2 y `NUXT_PUBLIC_R2_BASE_URL`~~ — hecho: bucket con CORS (GET/HEAD + `Range`, dominio custom + `localhost:3000`), `cog_url` resuelve.
 5. Confirmar con el experto la semántica de `past`/`forecast`/`movement_deg` (orden y convención "desde") — parte de la puerta M4.
 6. ~~Viento GFS 10 m~~ — cerrado jul-2026: el pipeline mergeó `0003_wind_grids.sql` e ingesta activa; CORS (`localhost:3000`, pages.dev) y gzip del edge **verificados contra el dominio custom** el 2026-07-18. Queda del lado del viewer: re-grabar fixtures (incl. `wind.json` real + bajar los JSON u/v golden) en la próxima re-grabación completa.

@@ -17,6 +17,7 @@ Principios:
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 | `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
 | `annotationMachine` | `machines/annotation.ts` | Anotaciones del usuario sobre el mapa: modo de dibujo, herramienta, colección por sitio | implementada |
+| `feedbackMachine` | `machines/feedback.ts` | Feedback de usuarios (D39): identidad/nudge, diálogo, envío, hilo de respuestas | implementada |
 
 ## `viewerMachine`
 
@@ -388,6 +389,55 @@ stateDiagram-v2
 **Persistencia inyectada.** La acción `persist` la provee la página (`saveAnnotations`, clave `lamula:annotations`), igual que `syncQuery` en `viewerMachine`: la máquina sigue pura y los tests corren con `createActor` sin DOM.
 
 **Fuera de la URL — excepción a la decisión 23**, documentada en la 40: lo compartible vive en la URL, pero un trazo a mano alzada son cientos de puntos y reventaría su longitud. Las coordenadas se guardan en **metros EPSG:3857** (la proyección de la vista), no en píxeles: así la anotación queda clavada a la geografía y sobrevive a pan/zoom, a exportar con otro `pixelRatio` y a la secuencia de frames de F7.3.
+
+## `feedbackMachine`
+
+Feedback de usuarios (F-aparte, decisión 39): identidad por token opaco, nudge ocasional, diálogo de envío/hilo. `type: 'parallel'` con **cuatro** regiones — `identity`, `dialog`, `form`, `thread` — no tres como anticipaba el plan original (`docs/plan-feedback.md`): el diálogo abierto/cerrado se separó en su propia región en vez de vivir dentro de `form`, y no hay región `nudge` aparte — la política de snooze/shownCount vive dentro de `identity` (evento `NUDGE_ACTION`), orquestada por `utils/feedback/nudge.ts` desde la página.
+
+```mermaid
+stateDiagram-v2
+    state identity {
+        [*] --> ready
+        ready --> ready: SAVE_PROFILE / NUDGE_ACTION
+    }
+    state dialog {
+        [*] --> closed
+        closed --> open: OPEN_DIALOG
+        open --> closed: CLOSE_DIALOG
+        open --> open: SWITCH_TAB
+    }
+    state form {
+        [*] --> idle
+        idle --> submitting: SUBMIT_FEEDBACK
+        submitting --> idle: onDone
+        submitting --> error: onError
+        error --> submitting: SUBMIT_FEEDBACK
+    }
+    state thread {
+        [*] --> idle
+        idle --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+        loading --> ready: onDone
+        loading --> error: onError
+        ready --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+        ready --> ready: MARK_READ
+        error --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+    }
+```
+
+**Contexto:** `identity` (`FeedbackStorageV1` — token, perfil, estado del nudge), `sessionStartTimeMs`, `dialogOpen`, `activeTab` (`'submit' | 'mine'`), `submissionError`, `items` (hilos con respuestas), `unreadCount`.
+
+| Evento | Efecto |
+|---|---|
+| `OPEN_DIALOG` / `CLOSE_DIALOG` / `SWITCH_TAB` | región `dialog` — solo UI, nada de red |
+| `SUBMIT_FEEDBACK` | región `form`: invoca `submitFeedbackActor` (`POST /api/feedback` con `x-feedback-token`); al terminar fusiona el perfil enviado en `identity` y marca `nudge.submitted = true` (el pill sigue, el nudge no vuelve a aparecer). La misma transición dispara `thread` a `loading` para refrescar el hilo con el envío nuevo |
+| `FETCH_MINE` | región `thread`: invoca `fetchMineActor` (`GET /api/feedback/mine`); calcula `unreadCount` contando `replies` con `readAt` nulo |
+| `MARK_READ` | región `thread`: limpia `unreadCount` de forma optimista y dispara `sendMarkRead` (`POST /api/feedback/mine/read`), fire-and-forget |
+| `SAVE_PROFILE` | región `identity`: fusiona el perfil (precarga del formulario desde `localStorage`) |
+| `NUDGE_ACTION('open'\|'later'\|'never')` | región `identity`: `'open'` también abre el diálogo (`dialogOpen: true`); `'later'`/`'never'` fijan `nudge.snoozeUntil` vía `calcSnoozeUntil` (`utils/feedback/nudge.ts`, reloj inyectado — tests deterministas) |
+
+**Identidad y persistencia inyectadas.** `loadFeedbackIdentity`/`saveFeedbackIdentity` (`composables/useFeedbackIdentity.ts`) leen/escriben `lamula:feedback` en `localStorage` — clave propia, fuera de `lamula:prefs` (no es una preferencia de display) y **fuera de la URL** (no es estado compartible, mismo criterio que D28 para las prefs).
+
+**No va a la URL.** Ningún evento se maneja en la raíz de la máquina (mismo patrón que `overlayMachine`, decisión 27): la máquina vive orquestada por la página, con ciclo de vida propio que no debe reiniciarse con el del raster o la animación.
 
 ## Pool de capas WebGL (`utils/map/frame-pool.ts`)
 
