@@ -8,7 +8,7 @@
 // Ambos runners corren con cwd = raíz del repo.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LightningBucketRow, PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow, WindGridRow } from '../../shared/contract/types'
+import type { LightningBucketRow, MosaicDomainRow, MosaicRasterRow, PhenomenonRow, ProductRow, RadarRow, RasterRow, VwpRow, WindGridRow } from '../../shared/contract/types'
 import { dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract/time'
 
 type Recorded<T> = T & { created_at: string }
@@ -28,6 +28,10 @@ export const vwp = loadFixture<Recorded<VwpRow>[]>('vwp')
 export const windGrids = loadFixture<Recorded<WindGridRow>[]>('wind')
 // SINTÉTICO (scripts/make-lightning-fixture.mjs) hasta que el pipeline ingiera GLM
 export const lightningBuckets = loadFixture<Recorded<LightningBucketRow>[]>('lightning')
+// SINTÉTICO (scripts/make-mosaic-fixture.mjs) hasta la próxima re-grabación completa
+export const mosaicDomains = loadFixture<(MosaicDomainRow & { created_at: string, updated_at: string })[]>('mosaic-domains')
+export const mosaicDomainSites = loadFixture<{ domain_id: string, site_id: string }[]>('mosaic-domain-sites')
+export const mosaicRasters = loadFixture<Recorded<MosaicRasterRow>[]>('mosaic-rasters')
 
 function fail(msg: string): never {
   throw new Error(`fixtures insuficientes: ${msg} — re-grabar con scripts/record-fixtures.sh`)
@@ -237,6 +241,43 @@ export const lightningDay = (() => {
 export const lightningEmptySite = (() => {
   const withLightning = new Set(lightningBuckets.map(b => b.site_id))
   return siteIds.find(s => !withLightning.has(s)) ?? null
+})()
+
+/** Serie (dominio, producto, día UTC) más larga del mosaico, más el slot
+ * PARCIAL (menos radares que miembros del dominio) que necesita el overlay
+ * de cobertura. Derivado, no hardcodeado: cuando el fixture pase a ser una
+ * grabación real, esto sigue valiendo. */
+export const mosaicDay = (() => {
+  const groups = new Map<string, Recorded<MosaicRasterRow>[]>()
+  for (const m of mosaicRasters) {
+    const key = `${m.domain_id}|${m.product_code}|${m.slot_time.slice(0, 10)}`
+    groups.set(key, [...(groups.get(key) ?? []), m])
+  }
+  const best = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
+  if (!best) fail('no hay mosaicos grabados (sintético: scripts/make-mosaic-fixture.mjs)')
+  const [domain, product, day] = best[0].split('|') as [string, string, string]
+  const rows = best[1].sort((a, b) => a.slot_time.localeCompare(b.slot_time))
+  const members = mosaicDomainSites.filter(m => m.domain_id === domain).map(m => m.site_id)
+  const parse = (m: Recorded<MosaicRasterRow>) =>
+    JSON.parse(m.contributing) as { site: string, vol_time: string, lag_s: number }[]
+  const partial = rows.find(m => parse(m).length < members.length) ?? null
+  if (!partial) fail('ningún slot parcial: el overlay de cobertura se queda sin caso')
+  return {
+    domain,
+    product: Number(product),
+    day,
+    rows,
+    members: [...members].sort(),
+    slotTimes: rows.map(m => m.slot_time),
+    partial,
+    partialSites: parse(partial).map(c => c.site),
+  }
+})()
+
+/** Dominio del catálogo sin ningún slot — serie vacía. Null si todos tienen. */
+export const mosaicEmptyDomain = (() => {
+  const withRows = new Set(mosaicRasters.map(m => m.domain_id))
+  return mosaicDomains.map(d => d.domain_id).find(d => !withRows.has(d)) ?? null
 })()
 
 /** Instante naive-UTC desplazado n segundos respecto a un vol_time. */

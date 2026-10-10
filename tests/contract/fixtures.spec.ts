@@ -5,6 +5,9 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import lightning from '~/server/dal/fixtures/lightning.json'
+import mosaicDomainSites from '~/server/dal/fixtures/mosaic-domain-sites.json'
+import mosaicDomains from '~/server/dal/fixtures/mosaic-domains.json'
+import mosaicRasters from '~/server/dal/fixtures/mosaic-rasters.json'
 import phenomena from '~/server/dal/fixtures/phenomena.json'
 import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
@@ -14,6 +17,9 @@ import wind from '~/server/dal/fixtures/wind.json'
 import {
   zIsoNaive,
   zLightningBucketRow,
+  zMosaicContribution,
+  zMosaicDomainRow,
+  zMosaicRasterRow,
   zPhenomenonRow,
   zProductRow,
   zRadarRow,
@@ -27,6 +33,62 @@ import { createSeededDb } from '../helpers/pg-sqlite'
 // aunque el DAL no lo sirva.
 const withCreatedAt = <S extends z.ZodObject>(schema: S) =>
   schema.extend({ created_at: zIsoNaive })
+
+describe('fixtures del mosaico vs schemas Zod del contrato', () => {
+  it('mosaic_domains: malla par y centrada, dentro del cap de textura', () => {
+    expect(mosaicDomains.length).toBeGreaterThanOrEqual(1)
+    z.array(zMosaicDomainRow.extend({ created_at: zIsoNaive, updated_at: zIsoNaive }))
+      .parse(mosaicDomains)
+    for (const d of mosaicDomains) {
+      // Convención del COG por radar: malla par para que el centro caiga en
+      // una arista de pixel; cap 4096 porque por encima no sube a la GPU.
+      expect(d.width % 2, `${d.domain_id}: width par`).toBe(0)
+      expect(d.height % 2, `${d.domain_id}: height par`).toBe(0)
+      expect(Math.max(d.width, d.height)).toBeLessThanOrEqual(4096)
+    }
+  })
+
+  it('mosaic_domain_sites: cada dominio tiene al menos dos radares', () => {
+    const porDominio = Map.groupBy(mosaicDomainSites, m => m.domain_id)
+    for (const d of mosaicDomains) {
+      expect(porDominio.get(d.domain_id)?.length ?? 0, `${d.domain_id}: miembros`)
+        .toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('mosaic_rasters: contributing es procedencia válida y subconjunto del dominio', () => {
+    expect(mosaicRasters.length).toBeGreaterThanOrEqual(2)
+    z.array(withCreatedAt(zMosaicRasterRow)).parse(mosaicRasters)
+    const miembros = new Map(
+      mosaicDomains.map(d => [
+        d.domain_id,
+        new Set(mosaicDomainSites.filter(m => m.domain_id === d.domain_id).map(m => m.site_id)),
+      ]),
+    )
+    for (const row of mosaicRasters) {
+      const aportes = z.array(zMosaicContribution).parse(JSON.parse(row.contributing))
+      expect(aportes.length, `${row.slot_time}: sin aportes`).toBeGreaterThan(0)
+      for (const a of aportes) {
+        expect(miembros.get(row.domain_id)?.has(a.site), `${a.site} fuera del dominio`).toBe(true)
+        // La tolerancia del slot es la mitad de su duración como mucho.
+        expect(Math.abs(a.lag_s)).toBeLessThanOrEqual(row.slot_s / 2)
+      }
+      // slot_time alineado a la rejilla: la clave R2 depende de ello.
+      expect(Date.parse(`${row.slot_time}Z`) / 1000 % row.slot_s).toBe(0)
+    }
+  })
+
+  it('mosaic_rasters: hay al menos un slot PARCIAL (le falta un radar)', () => {
+    // El overlay de cobertura existe para ese caso; sin él no se puede
+    // probar que el viewer distingue "radar caído" de "sin ecos".
+    const parcial = mosaicRasters.some((row) => {
+      const aportes = JSON.parse(row.contributing) as { site: string }[]
+      const total = mosaicDomainSites.filter(m => m.domain_id === row.domain_id).length
+      return aportes.length < total
+    })
+    expect(parcial).toBe(true)
+  })
+})
 
 describe('fixtures grabadas vs schemas Zod del contrato', () => {
   it('radars', () => {

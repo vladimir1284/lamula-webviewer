@@ -9,12 +9,14 @@ import { describe, expect, it } from 'vitest'
 import { FixtureDal } from '~/server/dal/fixture'
 import { LiveDal } from '~/server/dal/live'
 import type { Dal } from '~/server/dal/types'
-import { FRESH_MAX_MINUTES, naiveUtcToEpochMs, zProductRow, zRadarRow } from '~/shared/contract'
+import { FRESH_MAX_MINUTES, naiveUtcToEpochMs, zMosaicContribution, zProductRow, zRadarRow } from '~/shared/contract'
 import { asPg, createSeededDb } from '../helpers/pg-sqlite'
 import {
   healthNow,
   lightningDay,
   lightningEmptySite,
+  mosaicDay,
+  mosaicEmptyDomain,
   phenDay,
   phenVolume,
   radars,
@@ -233,6 +235,68 @@ describe.each(adapters)('DAL %s', (_name, make) => {
     }
   })
 
+  it('listMosaicDomains: dominios con sus radares miembros', async () => {
+    const domains = await dal.listMosaicDomains()
+    const found = domains.find(d => d.domain_id === mosaicDay.domain)
+    expect(found, `dominio ${mosaicDay.domain} ausente`).toBeDefined()
+    expect(found!.site_ids).toEqual(mosaicDay.members)
+    // La malla es lo que el viewer usa para montar la vista: sin ella no
+    // puede registrar la proyección ni calcular la extensión.
+    expect(found!.proj4.startsWith('+proj=aeqd')).toBe(true)
+    expect(found!.width).toBeGreaterThan(0)
+    expect(found!.height).toBeGreaterThan(0)
+  })
+
+  it('listMosaicRasters: slots del día ascendentes, con URL y procedencia', async () => {
+    const rows = await dal.listMosaicRasters(mosaicDay.domain, mosaicDay.product, mosaicDay.day)
+    expect(rows.map(r => r.slot_time)).toEqual(mosaicDay.slotTimes)
+    for (const row of rows) {
+      expect(row.cog_url).toBe(`${R2_BASE}/${row.r2_key}`)
+      // contributing llega PARSEADO: el cliente no debe volver a parsear.
+      expect(Array.isArray(row.contributing)).toBe(true)
+      for (const c of row.contributing) zMosaicContribution.parse(c)
+      // Geometría por fila: es la que georreferencia ESTE COG.
+      expect(row.proj4.startsWith('+proj=aeqd')).toBe(true)
+    }
+  })
+
+  it('listMosaicRasters: el slot parcial expone qué radares faltan', async () => {
+    const rows = await dal.listMosaicRasters(mosaicDay.domain, mosaicDay.product, mosaicDay.day)
+    const parcial = rows.find(r => r.slot_time === mosaicDay.partial.slot_time)!
+    expect(parcial.contributing.map(c => c.site)).toEqual(mosaicDay.partialSites)
+    const ausentes = mosaicDay.members.filter(s => !mosaicDay.partialSites.includes(s))
+    expect(ausentes.length, 'el caso parcial perdió su radar ausente').toBeGreaterThan(0)
+  })
+
+  it('listMosaicRasters: día sin slots y dominio vacío → []', async () => {
+    expect(await dal.listMosaicRasters(mosaicDay.domain, mosaicDay.product, '2000-01-01'))
+      .toEqual([])
+    if (mosaicEmptyDomain !== null) {
+      expect(await dal.listMosaicRasters(mosaicEmptyDomain, mosaicDay.product, mosaicDay.day))
+        .toEqual([])
+    }
+  })
+
+  it('findMosaicRaster: closest/next/prev sobre slot_time, no vol_time', async () => {
+    const [primero, segundo] = mosaicDay.slotTimes as [string, string]
+    const casi = shiftIso(segundo, -1)
+    expect((await dal.findMosaicRaster(mosaicDay.domain, mosaicDay.product, casi, 'closest'))!
+      .slot_time).toBe(segundo)
+    expect((await dal.findMosaicRaster(mosaicDay.domain, mosaicDay.product, primero, 'next'))!
+      .slot_time).toBe(segundo)
+    expect((await dal.findMosaicRaster(mosaicDay.domain, mosaicDay.product, segundo, 'prev'))!
+      .slot_time).toBe(primero)
+  })
+
+  it('findMosaicRaster: en los extremos y sin producto → null', async () => {
+    const times = mosaicDay.slotTimes
+    expect(await dal.findMosaicRaster(mosaicDay.domain, mosaicDay.product, times[0]!, 'prev'))
+      .toBeNull()
+    expect(await dal.findMosaicRaster(mosaicDay.domain, mosaicDay.product, times.at(-1)!, 'next'))
+      .toBeNull()
+    expect(await dal.findMosaicRaster(mosaicDay.domain, 999, times[0]!, 'closest')).toBeNull()
+  })
+
   it('health: minutos desde el último scan y umbral de frescura', async () => {
     const health = await dal.health(healthNow)
     const expected = [...radars]
@@ -272,6 +336,19 @@ describe('paridad live ↔ fixture (puerta M1)', () => {
     ['listVwp', d => d.listVwp(vwpVolume.site, vwpVolume.volTime)],
     ['listWindTimes', d => d.listWindTimes(windDay.site, windDay.day, windDay.level)],
     ['listLightningBuckets', d => d.listLightningBuckets(lightningDay.site, lightningDay.day)],
+    ['listMosaicDomains', d => d.listMosaicDomains()],
+    ['listMosaicRasters', d =>
+      d.listMosaicRasters(mosaicDay.domain, mosaicDay.product, mosaicDay.day)],
+    ['findMosaicRaster closest', d =>
+      d.findMosaicRaster(
+        mosaicDay.domain, mosaicDay.product, shiftIso(mosaicDay.slotTimes[1]!, -1), 'closest',
+      )],
+    ['findMosaicRaster next', d =>
+      d.findMosaicRaster(mosaicDay.domain, mosaicDay.product, mosaicDay.slotTimes[0]!, 'next')],
+    ['findMosaicRaster prev', d =>
+      d.findMosaicRaster(mosaicDay.domain, mosaicDay.product, mosaicDay.slotTimes[1]!, 'prev')],
+    ['findMosaicRaster sin resultado', d =>
+      d.findMosaicRaster(mosaicDay.domain, 999, mosaicDay.slotTimes[0]!, 'closest')],
     ['health', d => d.health(healthNow)],
   ]
 

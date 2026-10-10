@@ -209,6 +209,15 @@ Decisiones confirmadas de la reconciliación del plan original (*LAMULA-WebViewe
 | Auth de sesión ligera | **Sin auth** | Demo público (decisión 13) |
 | Restos de Svelte en el texto ("SvelteKit server routes", "runes", "svelte-i18n") | **Purgados** | Inconsistencias de redacción del plan original; la decisión Vue 3 ya estaba tomada |
 
+43. **Mosaico: el compuesto lo produce el pipeline; el viewer lee un COG por slot y pinta la COBERTURA encima.** La decisión 12 original (N capas `WebGLTile` apiladas, una por radar) resuelve la vista pero no el dato: en el solape gana la capa de arriba, no la medida mejor, y la puerta de F5 pide tres radares animando dentro del presupuesto de frames con N fetch y N decodificaciones por frame. Se sustituye por composición en `nexrad-l3-pipeline` (promedio pesado en Z lineal por altura de haz, `0002_mosaic.sql`) y un solo COG por slot de 300 s. Lo que eso impone aquí:
+    - **Tablas propias, no `rasters`.** `mosaic_domains`/`mosaic_domain_sites`/`mosaic_rasters`. `rasters.site_id` tiene FK a `radars` y un mosaico no tiene sitio único: un pseudo-radar "GULF" aparecería en el selector de radares con lat/lon inventados y sin fenómenos ni VWP.
+    - **Sin código de producto nuevo.** `mosaic_rasters.product_code` reusa el código NEXRAD, así que `shared/products/<code>` y su paleta valen sin tocar nada. La calibración del compuesto es canónica y fija entre slots — si fuera heredada de una fila de `rasters`, la rampa cambiaría de un frame al siguiente.
+    - **Rejilla temporal propia.** `slot_time`, no `vol_time`: los radares no escanean sincronizados. `pickClosest` se generaliza a `pickClosestBy` para indexar por otra columna con la misma regla de desempate.
+    - **Geometría por fila, no solo por dominio.** Añadir un radar a un dominio recalcula su malla; sin `proj4`/`width`/`height`/`cell_m` en la fila, el viewer pintaría los COG anteriores desplazados.
+    - **`contributing` es contrato, no depuración.** Un slot se compone con los radares que haya dentro de tolerancia (un radar caído no apaga el mosaico), así que la cobertura cambia entre frames. El DAL sirve la procedencia ya parseada y `/api/mosaic/domains` da la lista completa de miembros: la resta es lo que permite pintar los AUSENTES. Sin eso, un hueco en el mapa es indistinguible de "no hay ecos".
+    - **Procedencia por píxel fuera de alcance.** Con `weighted` no hay ganador único, y servirla exigiría un COG extra por slot o una segunda banda que toca el camino de render del raster (puerta M2, goldens). Costeado, no construido.
+    - **`N0G` no se compone nunca.** La velocidad radial es relativa al radar.
+
 ## Riesgos residuales
 
 1. **Fidelidad del render GeoTIFF** (riesgo #1 del plan original, sigue vivo): el color-mapping WebGL debe reproducir la semántica de las paletas legadas sobre productos nuevos. Mitigación: es la primera rebanada vertical (F2), goldens desde el día uno, validación QGIS del experto de dominio.
