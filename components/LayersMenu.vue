@@ -59,6 +59,7 @@ const emit = defineEmits<{
   'open-panel': [panel: PanelId]
   'open-prefs': []
   'open-feedback': []
+  'open-export': []
 }>()
 
 const open = ref(false)
@@ -76,6 +77,11 @@ function openPrefs() {
 function openFeedback() {
   open.value = false
   emit('open-feedback')
+}
+
+function openExport() {
+  open.value = false
+  emit('open-export')
 }
 </script>
 
@@ -481,6 +487,14 @@ function openFeedback() {
             @click="openPrefs"
           >
             Unidades, hora, alcance del radar
+          </button>
+          <button
+            type="button"
+            data-testid="export-open"
+            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            @click="openExport"
+          >
+            Exportar imagen del mapa
           </button>
           <button
             type="button"

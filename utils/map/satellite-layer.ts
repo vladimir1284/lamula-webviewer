@@ -3,8 +3,8 @@
 // de CloudFront por path no mapeado, no bot-blocking). Nuevo stack: GeoServer
 // puro WMS, capturado desde el viewer oficial nowcoast.noaa.gov + confirmado
 // por GetCapabilities. TileLayer/TileWMS estándar (Canvas), no WebGLTileLayer:
-// es solo display, sin getData() para el cursor, así que no necesita
-// crossOrigin ni comparte el contexto WebGL del frame-pool.
+// es solo display, sin getData() para el cursor, y no comparte el contexto
+// WebGL del frame-pool. Sí necesita `crossOrigin` desde F7 (ver abajo).
 import TileLayer from 'ol/layer/Tile'
 import TileWMS from 'ol/source/TileWMS'
 
@@ -26,6 +26,10 @@ export function createSatelliteLayer(variant: SatVariant, opacity: number): Tile
     source: new TileWMS({
       url: SAT_WMS_URL,
       params: { LAYERS: SAT_LAYER_NAMES[variant], time: nowParam() },
+      // F7: igual que las teselas base — sin esto el canvas queda tainted y el
+      // export falla con SecurityError. nowcoast responde
+      // `access-control-allow-origin: *` (verificado). Decisión 40.
+      crossOrigin: 'anonymous',
     }),
     opacity,
   })

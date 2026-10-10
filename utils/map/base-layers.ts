@@ -7,9 +7,9 @@ import OSM from 'ol/source/OSM'
 import XYZ from 'ol/source/XYZ'
 import type TileSource from 'ol/source/Tile'
 import type { BaseMapId } from '#shared/basemaps'
+import { ATTRIBUTION_HTML } from '#shared/attributions'
 
-const CARTO_ATTRIBUTION
-  = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+const CARTO_ATTRIBUTION = ATTRIBUTION_HTML.carto
 
 // estilos raster de basemaps.cartocdn.com — voyager cuelga de rastertiles/,
 // positron/dark usan los nombres light_/dark_ del CDN
@@ -26,6 +26,12 @@ function cartoSource(style: string): XYZ {
     url: `https://{a-d}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}${retina ? '@2x' : ''}.png`,
     tilePixelRatio: retina ? 2 : 1,
     attributions: CARTO_ATTRIBUTION,
+    // F7: sin esto las teselas contaminan el canvas y `toBlob` del export
+    // lanza SecurityError. `ol/source/OSM` ya lo trae por defecto; XYZ no.
+    // basemaps.cartocdn.com responde `access-control-allow-origin: *`
+    // (verificado) — si algún día dejara de hacerlo, las teselas dejarían de
+    // VERSE, no solo de exportarse: es el riesgo asumido en la decisión 40.
+    crossOrigin: 'anonymous',
   })
 }
 

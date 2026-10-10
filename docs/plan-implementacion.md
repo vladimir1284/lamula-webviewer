@@ -74,6 +74,22 @@ Validación end-to-end contra el pipeline demo vivo (el criterio de éxito del p
 
 > **Puerta (M5):** el experto de dominio opera el viewer completo contra datos vivos durante una semana sin encontrar bloqueantes; charts/VWP/tracks correctos en al menos un episodio convectivo real; deploy reproducible desde cero documentado.
 
+### F7 — Exportación de capturas (fuera de orden: se construye antes que F5/F6)
+
+Compartir una vista hoy exige un deep-link, red y que el dato siga dentro de la retención de 72 h. F7 produce un artefacto autocontenido. Se adelanta a F5 y F6 por prioridad de producto; la consecuencia es que F5 (i18n) tendrá que traducir también los strings del export.
+
+**F7.1 — PNG WYSIWYG (hecho).** Compositor propio sobre los N canvas de `.ol-layers` (`utils/export/`), chrome opcional en Canvas2D (marca, sitio/producto/hora, leyenda, atribución) en franja inferior o superpuesto, descarga + copia al portapapeles, preferencias en `lamula:export`. Ver decisión 40 para por qué no sirve la receta oficial de OL y qué cuesta el `crossOrigin` global.
+
+> **Puerta (F7.1):** dos exports seguidos de la misma vista deep-linkeada dan un fichero byte-idéntico; con el mapa base encendido no se omite ninguna capa (guarda de CORS); el canario del contrato de DOM de OL pasa; y el experto valida un PNG del volumen con las ocho capas activas, franja legible y pegado correcto en un cliente de chat real.
+
+**F7.2 — Anotaciones, resaltado y marca.** Capa vectorial de anotaciones en coordenadas de mapa (`Draw`+`Modify`, zIndex 21), resaltado fijado de geometrías de fenómenos, marca de agua sutil del logo y avatar del usuario desde `localStorage`.
+
+> **Puerta (F7.2):** anotar, hacer pan+zoom de ida y vuelta, exportar y comprobar por píxel que la anotación cae en la posición proyectada esperada; recargar y recuperarla.
+
+**F7.3 — GIF y WebM.** Reloj inyectable en las capas de viento y rayos (sin pausarlas: pausar limpia su canvas), driver de frames sobre el `FramePool` existente, `gifenc` en un Worker con buffers transferibles, WebM por `captureStream`+`MediaRecorder`. GIF a 960×540 DPR 1 y 12 frames por defecto, tope duro de 8 MB.
+
+> **Puerta (F7.3):** dos exports GIF consecutivos de la misma secuencia son byte-idénticos (cubre semilla del viento, fase de rayos, sub-paso y determinismo del encoder); GIF de 12 frames bajo 8 MB en menos de 20 s, bucle sin costura, rayos y viento visibles en todos los frames.
+
 ## Hitos
 
 | Hito | Semana | Señal |
@@ -86,7 +102,7 @@ Validación end-to-end contra el pipeline demo vivo (el criterio de éxito del p
 
 ## Stage 2 (documentado, no construido)
 
-Render server-side (titiler) si el WebGL no alcanzara en hardware objetivo; paletas custom de usuario; export de animaciones a video/GIF; alertas sobre umbrales de fenómenos; PWA/offline; locales adicionales; re-apuntado al contrato LAMULA-Ingest (PostgreSQL + HTTP) vía nuevo adaptador DAL; base EPSG:2085 para radares cubanos.
+Render server-side (titiler) si el WebGL no alcanzara en hardware objetivo; paletas custom de usuario; alertas sobre umbrales de fenómenos; PWA/offline; locales adicionales; re-apuntado al contrato LAMULA-Ingest (PostgreSQL + HTTP) vía nuevo adaptador DAL; base EPSG:2085 para radares cubanos.
 
 ## Documentación
 

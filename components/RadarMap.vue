@@ -41,6 +41,7 @@ import { LightningLayer } from '../utils/map/lightning-layer'
 import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
 import { WindParticleLayer } from '../utils/map/wind-layer'
 import type { NormalizedStrike } from '../utils/overlay/lightning-join'
+import type { MapCaptureHandle } from '../utils/export/types'
 
 const props = withDefaults(defineProps<{
   radar: Radar
@@ -575,6 +576,44 @@ watch(() => props.satOpacity, o => satelliteLayer?.setOpacity(o))
 watch(() => props.satVariant, (v) => {
   if (satelliteLayer) setSatelliteVariant(satelliteLayer, v)
 })
+
+// ── Captura para el export (F7) ──────────────────────────────────────────
+// Se expone una CAPACIDAD, no la instancia `ol/Map`: `utils/export/` tiene que
+// seguir agnóstico al renderer para poder testearse sin navegador. Ver
+// `utils/export/types.ts`.
+const captureHandle: MapCaptureHandle = {
+  viewportEl: () => container.value ?? null,
+  size: () => {
+    const size = map?.getSize()
+    return size && size.length === 2 ? [size[0]!, size[1]!] as const : null
+  },
+  settle: (timeoutMs = 2000) => new Promise<boolean>((resolve) => {
+    if (!map) {
+      resolve(false)
+      return
+    }
+    // pinta ya lo que haya cargado: deja los canvas del DOM al día con el
+    // último frameState aunque nunca llegue el rendercomplete
+    map.renderSync()
+    let done = false
+    const timer = setTimeout(() => {
+      if (done) return
+      done = true
+      resolve(false)
+    }, timeoutMs)
+    map.once('rendercomplete', () => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      resolve(true)
+    })
+    // `rendercomplete` NO se vuelve a disparar si el mapa ya estaba en reposo
+    // cuando se enganchó el `once` — forzar un frame más garantiza el evento
+    map.render()
+  }),
+}
+
+defineExpose(captureHandle)
 
 onBeforeUnmount(() => {
   clearTimeout(suppressMoveEndTimer)

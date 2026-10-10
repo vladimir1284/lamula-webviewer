@@ -25,6 +25,7 @@ import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 
 import { shouldShowNudge } from '../../../utils/feedback/nudge'
+import type { MapCaptureHandle } from '../../../utils/export/types'
 import { formatFull, formatFullParts } from '../../../utils/time-display'
 import { dayWindow72h } from '../../../utils/time-window'
 import { computeGaps } from '../../../utils/timeline/gaps'
@@ -56,6 +57,9 @@ definePageMeta({
 const route = useRoute()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
+const exportDialog = ref<{ open: () => void }>()
+// handle de captura que expone RadarMap (F7) — no es la instancia de ol/Map
+const radarMap = ref<MapCaptureHandle | null>(null)
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
@@ -733,6 +737,12 @@ const volTimeParts = computed(() =>
   raster.value ? formatFullParts(raster.value.vol_time, ctx.value.clock) : null,
 )
 
+// identidad del producto tal como la lee alguien que recibe la imagen fuera
+// de la app: nombre legible + mnemónico (F7)
+const exportProductName = computed(() =>
+  productDef.value ? `${productDef.value.name} (${productDef.value.mnemonic})` : String(ctx.value.product),
+)
+
 // GOES no tiene vol_time propio (WMS en vivo): usa el mismo vol_time del
 // raster mostrado — coherente con currentDisplayTime() en RadarMap.vue.
 const satTimeLabel = computed(() =>
@@ -784,6 +794,21 @@ function onSatOpacityInput(event: Event) {
         @set-pref="send({ type: 'SET_PREF', patch: $event })"
       />
 
+      <ExportDialog
+        ref="exportDialog"
+        :handle="radarMap"
+        :site="ctx.site"
+        :site-name="radar?.icao && radar.icao !== ctx.site ? radar.icao : null"
+        :product-name="exportProductName"
+        :product-slug="productDef?.mnemonic ?? ctx.product"
+        :palette="ctx.showPalette ? (productDef?.palette ?? null) : null"
+        :vol-time="displayedVolTime"
+        :clock="ctx.clock"
+        :units="ctx.units"
+        :base="ctx.base"
+        :sat-enabled="ctx.sat"
+      />
+
       <TimelineMenu
         ref="timelineMenu"
         :animation-frames="ctx.animationFrames"
@@ -816,6 +841,7 @@ function onSatOpacityInput(event: Event) {
       <ClientOnly>
         <RadarMap
           v-if="radar"
+          ref="radarMap"
           :radar="radar"
           :raster="raster"
           :frames="animFrames"
@@ -992,6 +1018,7 @@ function onSatOpacityInput(event: Event) {
       @select-day="onSelectDay"
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
       @open-prefs="prefsDialog?.open()"
+      @open-export="exportDialog?.open()"
       @open-feedback="feedbackSend({ type: 'OPEN_DIALOG' })"
     />
   </div>
