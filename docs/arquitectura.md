@@ -9,7 +9,7 @@ Una sola aplicación **Nuxt 3** corriendo como servidor Node (preset `node-serve
 │                                                               │
 │  server routes (/api/*)          cliente (navegador)         │
 │  ┌──────────────────────┐        ┌────────────────────────┐ │
-│  │ DAL adaptador live   │  JSON  │ Pinia stores           │ │
+│  │ DAL adaptador live   │  JSON  │ Máquinas XState        │ │
 │  │ Postgres directo     │───────▶│ OpenLayers map         │ │
 │  │ (red interna Swarm)  │        │  WebGLTileLayer +      │ │
 │  │ claves R2 → URLs     │        │  ol/source/GeoTIFF ────┼─┼──▶ R2 (COGs,
@@ -36,11 +36,15 @@ Una sola aplicación **Nuxt 3** corriendo como servidor Node (preset `node-serve
 | **Map core** | Mapa OpenLayers, registro dinámico de proyecciones AEQD por radar (`proj4.defs` con la columna `radars.proj4` tal cual + `register`), base Web Mercator con OSM, capa de cobertura del radar. |
 | **Raster renderer** | `WebGLTileLayer` + `ol/source/GeoTIFF` leyendo el COG desde R2; paleta aplicada como expresión de estilo (color ramp) sobre niveles crudos con `value_scale`/`value_offset`; opacidad; valor físico bajo el cursor. |
 | **Timeline & animación** | Lista de datetimes (ventana de retención 72 h), stepping siguiente/anterior/más-cercano, playback con prefetch de frames. |
-| **Storm engine (UI)** | Overlay de celdas, tracks pasado/pronóstico, tabla ordenada por VIL, charts de tendencia (VIL/dBZ/top por volumen, construidos cliente-side como serie temporal por `cell_id`), markers meso/TVS/granizo. |
+| **Storm engine (UI)** | Overlay de celdas, tracks pasado/pronóstico, tabla ordenada por `dbz_max`, charts de tendencia (dBZ máx + altura por volumen, construidos cliente-side como serie temporal por `cell_id`), markers meso con flag TVS (sin granizo/VIL por celda — decisión 22, el feed no distribuye SS/HI). |
 | **Wind engine (UI)** | VWP: canvas, tabla, barbas de viento. u/v se derivan de dir/speed en cliente. |
+| **Capa de viento (opcional)** | Partículas sobre grilla GFS 10 m (y niveles de presión, decisión 34), canvas 2D propio (`utils/wind/`), join temporal por índice de `valid_time` (decisión 29) — fuente externa vía job propio del pipeline. |
+| **Capa de rayos (opcional)** | Bucle animado de descargas GLM, canvas 2D propio (`utils/map/lightning-layer.ts`), join por ventana de cubos de 300 s (decisión 31) — fuente externa vía Worker del pipeline. |
+| **Exportación** | Compositor propio de los canvas apilados del mapa a PNG WYSIWYG (chrome, leyenda, anotaciones, marca de agua — decisión 40, `utils/export/`); GIF/WebM pendiente (F7.3). |
+| **Feedback de usuarios** | Modal + nudge in-app y panel admin (sesión HMAC propia) sobre schema `viewer.*` propio (decisión 39) — única escritura del viewer en Postgres. |
 | **Paletas & leyenda** | Paletas versionadas **en este repo** (módulo TS por `product_code`: colores, stops, unidad, ticks); fuente única para el color ramp WebGL y el componente leyenda. |
-| **Mosaico** | Vista compuesta multi-radar: N capas WebGLTile AEQD reproyectadas en GPU sobre la vista común. |
-| **i18n** | `@nuxtjs/i18n`, catálogos `es` + `en`, locale en URL/preferencias. |
+| **Mosaico** | Vista compuesta multi-radar: N capas WebGLTile AEQD reproyectadas en GPU sobre la vista común (especificado, pendiente de construir — F5). |
+| **i18n** | `@nuxtjs/i18n`, catálogos `es` + `en` (especificado; strings aún hardcodeados en español — pendiente F5). |
 | **Observabilidad** | Logging estructurado cliente/servidor, endpoint de health (frescura por radar desde `radars.last_seen_at`), estados vacío/error explícitos — nada lanza excepción a la cara del usuario. |
 
 ## Stack
@@ -48,7 +52,7 @@ Una sola aplicación **Nuxt 3** corriendo como servidor Node (preset `node-serve
 | Capa | Elección | Nota |
 |---|---|---|
 | Framework | Nuxt 3 (Vue 3, Composition API, TypeScript) | preset Nitro `node-server` |
-| Estado / routing | Pinia + Vue Router (integrados en Nuxt) | |
+| Estado / routing | **XState v5 + `@xstate/vue`** (decisión 18), Vue Router (integrado en Nuxt) | Pinia sigue instalado (módulo Nuxt cargado) pero sin uso |
 | Estilos | Tailwind CSS | |
 | Componentes | PrimeVue v4 (modo unstyled + Tailwind) | DataTable/DatePicker/Slider pesados en esta app |
 | Mapa | OpenLayers ≥ 9 + proj4 | `ol/source/GeoTIFF`, `WebGLTileLayer` |

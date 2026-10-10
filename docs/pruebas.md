@@ -13,7 +13,7 @@ El proyecto sigue una estrategia basada en **puertas de validación por fase**. 
 ```mermaid
 flowchart TD
     subgraph Pipeline [nexrad-l3-pipeline]
-        Migrations["Migraciones SQL (D1)"]
+        Migrations["Migraciones SQL (Postgres)"]
     end
 
     subgraph CI [Integración Continua - GitHub Actions]
@@ -33,7 +33,7 @@ flowchart TD
     subgraph DAL [Capa de Acceso a Datos]
         DALSpec["tests/unit/dal.spec.ts"]
         FixtureDAL["FixtureDal (Archivos .json)"]
-        LiveDAL["LiveDal (D1 en producción)"]
+        LiveDAL["LiveDal (Postgres en producción)"]
         sqlite[(better-sqlite3 en memoria)]
         
         sqlite -- Inicializada con --> SQLSnapshot
@@ -83,10 +83,10 @@ La suite de pruebas se divide en 4 niveles bien diferenciados, cada uno atacando
 
 ### B. Pruebas del DAL (Data Access Layer Parity)
 * **Ubicación:** `tests/unit/dal.spec.ts`
-* **Objetivo:** Garantizar paridad exacta de comportamiento entre el adaptador de producción (`LiveDal` interactuando con D1/R2) y el adaptador local de desarrollo (`FixtureDal` que trabaja offline sobre respuestas JSON estáticas).
+* **Objetivo:** Garantizar paridad exacta de comportamiento entre el adaptador de producción (`LiveDal` interactuando con Postgres/R2) y el adaptador local de desarrollo (`FixtureDal` que trabaja offline sobre respuestas JSON estáticas).
 * **Mecanismo:**
     * Se utiliza un runner de Vitest parametrizado que ejecuta exactamente la misma suite de aserciones contra ambos adaptadores.
-    * Para simular la D1 de producción, se crea una base de datos `better-sqlite3` en memoria y se siembra con las mismas grabaciones en formato `.json` que usa el adaptador de fixtures.
+    * Para simular el Postgres de producción ([`tests/helpers/pg-sqlite.ts`](https://github.com/vladimir1284/lamula-webviewer/blob/main/tests/helpers/pg-sqlite.ts)), se crea una base de datos `better-sqlite3` en memoria con el schema Postgres real (`BIGSERIAL` traducido a `AUTOINCREMENT`) y se siembra con las mismas grabaciones en formato `.json` que usa el adaptador de fixtures.
     * Las expectativas y datos esperados (como los IDs de sitios de radares o el volumen de tormenta con mesociclones) no están hardcodeados; se derivan dinámicamente mediante [derive.ts](https://github.com/vladimir1284/lamula-webviewer/blob/main/tests/helpers/derive.ts) basándose en las grabaciones vigentes.
 
 ```mermaid
