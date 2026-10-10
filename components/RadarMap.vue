@@ -28,8 +28,19 @@ import 'ol/ol.css'
 import type { BaseMapId } from '#shared/basemaps'
 import type { Phenomenon, Radar, RasterMeta, WindGridFile } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
+import Collection from 'ol/Collection'
+import Draw from 'ol/interaction/Draw'
+import Modify from 'ol/interaction/Modify'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
+import type { Annotation, AnnotationKind } from '../utils/export/annotations'
+import {
+  ANNOTATION_PROP,
+  annotationFromGeometry,
+  annotationStyle,
+  buildAnnotationFeatures,
+  drawTypeFor,
+} from '../utils/map/annotation-layer'
 import { createBaseMapSources } from '../utils/map/base-layers'
 import { getCogBlob } from '../utils/map/cog-cache'
 import { buildDownsampledCogBlob } from '../utils/map/downsample-source'
@@ -77,6 +88,13 @@ const props = withDefaults(defineProps<{
   /** strikes normalizados de la ventana del frame (capa 'lightning');
    * null = capa limpia. Lista nueva ⇒ el bucle reinicia en fase 0 */
   lightningStrikes?: NormalizedStrike[] | null
+  /** anotaciones del sitio mostrado (F7.2); null = ninguna */
+  annotations?: Annotation[] | null
+  /** herramienta de dibujo activa; null = modo anotación apagado */
+  annotationTool?: AnnotationKind | null
+  annotationColor?: string
+  /** rótulo que usará el próximo punto con la herramienta 'text' */
+  annotationText?: string
   /** suavizado cliente de la capa raster estática: bilineal nativo GPU sobre el nivel
    * crudo + lerp de color (decisión 32) — modo estático únicamente */
   smooth?: boolean
@@ -103,6 +121,10 @@ const props = withDefaults(defineProps<{
   animPlaying: false,
   windGrid: null,
   lightningStrikes: null,
+  annotations: null,
+  annotationTool: null,
+  annotationColor: '#f8fafc',
+  annotationText: '',
 })
 
 const emit = defineEmits<{
@@ -112,6 +134,10 @@ const emit = defineEmits<{
   frameError: [index: number, message: string]
   moveEnd: []
   selectCell: [cellId: string]
+  /** trazo nuevo terminado (F7.2) — la página lo manda a annotationMachine */
+  annotationAdd: [annotation: Annotation]
+  /** trazo existente movido o reformado con Modify */
+  annotationUpdate: [annotation: Annotation]
 }>()
 
 const container = ref<HTMLDivElement>()
@@ -130,6 +156,9 @@ let lightningLayer: LightningLayer | undefined
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
+const annotationSource = new VectorSource()
+let drawInteraction: Draw | undefined
+let modifyInteraction: Modify | undefined
 
 const animationMode = () => Array.isArray(props.frames) && props.frames.length > 0
 
@@ -261,6 +290,72 @@ function centerOnSelectedCell() {
   if (geom instanceof Point) {
     map.getView().animate({ center: geom.getCoordinates(), duration: 300 })
   }
+}
+
+// ── Anotaciones (F7.2) ───────────────────────────────────────────────────
+// La fuente se reconstruye desde las props: el modelo (annotationMachine)
+// manda, la capa nunca guarda estado propio. Por eso el Draw NO escribe en
+// `annotationSource` (dibuja sobre una Collection suelta) — si lo hiciera, el
+// trazo entraría dos veces: una por OL y otra al volver por props.
+
+function updateAnnotations() {
+  annotationSource.clear()
+  if (!props.annotations || props.annotations.length === 0) return
+  annotationSource.addFeatures(buildAnnotationFeatures(props.annotations))
+}
+
+function teardownAnnotationTools() {
+  if (drawInteraction) {
+    map?.removeInteraction(drawInteraction)
+    drawInteraction.dispose()
+    drawInteraction = undefined
+  }
+  if (modifyInteraction) {
+    map?.removeInteraction(modifyInteraction)
+    modifyInteraction.dispose()
+    modifyInteraction = undefined
+  }
+}
+
+function updateAnnotationTools() {
+  teardownAnnotationTools()
+  const tool = props.annotationTool
+  if (!map || !tool) return
+
+  drawInteraction = new Draw({
+    type: drawTypeFor(tool),
+    features: new Collection(), // ver nota de arriba: la fuente la manda el modelo
+    freehand: tool === 'freehand',
+    maxPoints: tool === 'arrow' ? 2 : undefined,
+  })
+  drawInteraction.on('drawend', (event) => {
+    const geometry = event.feature.getGeometry()
+    if (!geometry) return
+    const annotation = annotationFromGeometry(tool, geometry, {
+      color: props.annotationColor,
+      text: props.annotationText,
+    })
+    // un rótulo vacío o un trazo degenerado devuelve null: se descarta en
+    // silencio, el usuario simplemente no ve aparecer nada
+    if (annotation) emit('annotationAdd', annotation)
+  })
+  map.addInteraction(drawInteraction)
+
+  modifyInteraction = new Modify({ source: annotationSource })
+  modifyInteraction.on('modifyend', (event) => {
+    event.features.forEach((feature) => {
+      const previous = feature.get(ANNOTATION_PROP) as Annotation | undefined
+      const geometry = feature.getGeometry()
+      if (!previous || !geometry) return
+      const annotation = annotationFromGeometry(previous.kind, geometry, {
+        color: previous.color,
+        text: previous.text,
+        id: previous.id,
+      })
+      if (annotation) emit('annotationUpdate', annotation)
+    })
+  })
+  map.addInteraction(modifyInteraction)
 }
 
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
@@ -422,6 +517,13 @@ onMounted(() => {
         declutter: true,
         style: overlayStyle,
       })),
+      // anotaciones del usuario por encima de todo (F7.2): son su lectura de
+      // la escena, nada del dato las puede tapar
+      new VectorLayer({
+        source: annotationSource,
+        zIndex: 21,
+        style: annotationStyle,
+      }),
     ],
     view: new View({
       center: fromLonLat([props.radar.lon, props.radar.lat]),
@@ -486,6 +588,8 @@ onMounted(() => {
 
   updateCoverage()
   updatePhenomena()
+  updateAnnotations()
+  updateAnnotationTools()
   updateWind()
   updateLightning()
   if (animationMode()) initOrUpdatePool()
@@ -556,6 +660,11 @@ watch(() => props.selectedCell, (cellId, prev) => {
   if (cellId !== null && cellId !== prev) centerOnSelectedCell()
 })
 
+watch(() => props.annotations, updateAnnotations)
+// la herramienta se recrea entera al cambiar: un Draw no cambia de tipo de
+// geometría en caliente
+watch(() => props.annotationTool, updateAnnotationTools)
+
 watch(() => props.opacity, (o) => {
   rasterLayer?.setOpacity(o)
   pool?.setOpacity(o)
@@ -616,6 +725,7 @@ const captureHandle: MapCaptureHandle = {
 defineExpose(captureHandle)
 
 onBeforeUnmount(() => {
+  teardownAnnotationTools()
   clearTimeout(suppressMoveEndTimer)
   resizeObserver?.disconnect()
   resizeObserver = undefined

@@ -82,7 +82,7 @@ Compartir una vista hoy exige un deep-link, red y que el dato siga dentro de la 
 
 > **Puerta (F7.1):** dos exports seguidos de la misma vista deep-linkeada dan un fichero byte-idéntico; con el mapa base encendido no se omite ninguna capa (guarda de CORS); el canario del contrato de DOM de OL pasa; y el experto valida un PNG del volumen con las ocho capas activas, franja legible y pegado correcto en un cliente de chat real.
 
-**F7.2 — Anotaciones, resaltado y marca.** Capa vectorial de anotaciones en coordenadas de mapa (`Draw`+`Modify`, zIndex 21), resaltado fijado de geometrías de fenómenos, marca de agua sutil del logo y avatar del usuario desde `localStorage`.
+**F7.2 — Anotaciones y marca (hecho).** Capa vectorial de anotaciones en coordenadas de mapa EPSG:3857 (`Draw`+`Modify`, zIndex 21, cuatro herramientas: flecha, círculo, trazo libre y rótulo), estado en `annotationMachine` y persistencia por sitio en `lamula:annotations`; marca de agua sutil del logo sobre el área del mapa y avatar del usuario normalizado a 128×128 en `lamula:export`, que nunca sale del navegador. El "resaltado de geometrías" del plan original no se construyó como mecanismo aparte: la celda seleccionada ya se dibuja distinta y el export es WYSIWYG, así que ya sale resaltada — para cualquier otra geometría está la herramienta de círculo (ver decisión 40).
 
 > **Puerta (F7.2):** anotar, hacer pan+zoom de ida y vuelta, exportar y comprobar por píxel que la anotación cae en la posición proyectada esperada; recargar y recuperarla.
 

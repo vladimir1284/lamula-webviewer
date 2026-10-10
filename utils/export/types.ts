@@ -36,6 +36,18 @@ export interface MapCaptureHandle {
   settle: (timeoutMs?: number) => Promise<boolean>
 }
 
+/**
+ * Imagen de marca ya decodificada (F7.2). Las dimensiones viajan aparte
+ * porque `CanvasImageSource` no las expone de forma uniforme (un SVG sin
+ * `width`/`height` no tiene tamaño intrínseco) y el dibujo tiene que ser
+ * síncrono: en F7.3 corre una vez por frame.
+ */
+export interface BrandImage {
+  image: CanvasImageSource
+  width: number
+  height: number
+}
+
 export interface ComposeOptions {
   /** píxeles de salida por píxel CSS; 1 o 2 en la práctica */
   pixelRatio: number

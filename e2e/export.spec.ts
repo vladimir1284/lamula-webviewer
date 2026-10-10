@@ -223,3 +223,30 @@ test('dos exports seguidos de la misma vista dan el MISMO fichero (puerta F7.1)'
   expect(a.length).toBeGreaterThan(1000)
   expect(b.equals(a)).toBe(true)
 })
+
+// F7.2: la marca de agua se dibuja sobre el ÁREA DEL MAPA en los tres modos
+// de chrome, así que su interruptor tiene que cambiar los bytes también con
+// el chrome apagado.
+test('la marca de agua se puede apagar y cambia la imagen', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openExportDialog(page, 'base=off')
+  await page.getByTestId('export-chrome-none').click()
+  await expect(page.getByTestId('export-download')).toBeEnabled({ timeout: 30_000 })
+
+  const grab = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-download').click(),
+    ])
+    return readFileSync(await download.path())
+  }
+
+  const conMarca = await grab()
+  await page.getByTestId('export-part-watermark').uncheck()
+  await expect(page.getByTestId('export-download')).toBeEnabled({ timeout: 30_000 })
+  const sinMarca = await grab()
+
+  expect(sinMarca.equals(conMarca)).toBe(false)
+  // sin foto cargada, incluir el avatar no es una opción activable
+  await expect(page.getByTestId('export-part-avatar')).toBeDisabled()
+})

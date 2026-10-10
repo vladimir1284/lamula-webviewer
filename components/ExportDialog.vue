@@ -11,9 +11,10 @@ import { attributionsFor } from '#shared/attributions'
 import type { ClockPref } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
 import type { ChromeMode, ChromeSpec } from '../utils/export/chrome'
-import type { MapCaptureHandle } from '../utils/export/types'
+import type { BrandImage, MapCaptureHandle } from '../utils/export/types'
 import { captureMap } from '../utils/export/capture'
 import { exportFilename } from '../utils/export/filename'
+import { fileToAvatarDataUrl, loadBrandImage } from '../utils/export/images'
 import { canCopyImages, canvasToBlob, copyCanvasToClipboard, downloadBlob } from '../utils/export/sink'
 import { loadExportPrefs, saveExportPrefs } from '../composables/useExportPrefs'
 
@@ -34,6 +35,9 @@ const props = defineProps<{
 }>()
 
 const TITLE = 'LAMULA WebViewer'
+/** mismo origen ⇒ no contamina el canvas; el SVG mide en mm, de ahí el fallback */
+const LOGO_SRC = '/logo.svg'
+const LOGO_SIZE = { width: 172, height: 167 }
 
 const dialog = ref<HTMLDialogElement>()
 const prefs = ref(loadExportPrefs())
@@ -47,6 +51,34 @@ const canCopy = canCopyImages()
 
 let rendered: HTMLCanvasElement | null = null
 
+// Imágenes de marca ya decodificadas (F7.2): el dibujo del chrome es
+// síncrono, así que la carga ocurre antes de capturar, nunca dentro.
+const logo = ref<BrandImage | null>(null)
+const avatarImage = ref<BrandImage | null>(null)
+let loadedAvatarSrc: string | null = null
+
+async function ensureBrand() {
+  if (!logo.value) {
+    try {
+      logo.value = await loadBrandImage(LOGO_SRC, LOGO_SIZE)
+    }
+    catch {
+      logo.value = null // sin logo se exporta igual; no es motivo de error visible
+    }
+  }
+  const wanted = prefs.value.avatarDataUrl
+  if (wanted === loadedAvatarSrc) return
+  loadedAvatarSrc = wanted
+  avatarImage.value = null
+  if (!wanted) return
+  try {
+    avatarImage.value = await loadBrandImage(wanted)
+  }
+  catch {
+    avatarImage.value = null
+  }
+}
+
 const spec = computed<ChromeSpec>(() => ({
   mode: prefs.value.chrome,
   title: TITLE,
@@ -59,6 +91,7 @@ const spec = computed<ChromeSpec>(() => ({
   palette: props.palette,
   attributions: attributionsFor(props.base, props.satEnabled),
   parts: prefs.value.parts,
+  avatar: avatarImage.value,
 }))
 
 const filename = computed(() => exportFilename({
@@ -87,9 +120,11 @@ async function render() {
   error.value = null
   notice.value = null
   try {
+    await ensureBrand()
     const result = await captureMap(props.handle, {
       pixelRatio: prefs.value.scale,
       chrome: spec.value,
+      watermark: logo.value,
       onTaint: 'skip',
     })
     rendered = result.canvas
@@ -119,6 +154,37 @@ function setPart(key: keyof typeof prefs.value.parts, value: boolean) {
 
 function setScale(scale: 1 | 2) {
   prefs.value = { ...prefs.value, scale }
+}
+
+async function pickAvatar(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  error.value = null
+  try {
+    // normalizado a 128×128 antes de tocar localStorage: una foto de cámara
+    // no cabe en la cuota, y el avatar nunca sale del navegador
+    const avatarDataUrl = await fileToAvatarDataUrl(file)
+    prefs.value = {
+      ...prefs.value,
+      avatarDataUrl,
+      parts: { ...prefs.value.parts, avatar: true },
+    }
+  }
+  catch {
+    error.value = 'No se pudo leer la imagen elegida.'
+  }
+  finally {
+    input.value = '' // re-elegir el mismo fichero tiene que volver a disparar change
+  }
+}
+
+function clearAvatar() {
+  prefs.value = {
+    ...prefs.value,
+    avatarDataUrl: null,
+    parts: { ...prefs.value.parts, avatar: false },
+  }
 }
 
 watch(prefs, (p) => {
@@ -243,6 +309,62 @@ defineExpose({
             >
             <span>Atribución</span>
           </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="rounded bg-slate-900/60 p-3">
+        <legend class="px-1 text-slate-400">Marca</legend>
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            data-testid="export-part-watermark"
+            :checked="prefs.parts.watermark"
+            @change="setPart('watermark', ($event.target as HTMLInputElement).checked)"
+          >
+          <span>Logo como marca de agua</span>
+        </label>
+
+        <div class="mt-3 flex items-center gap-3">
+          <img
+            v-if="prefs.avatarDataUrl"
+            :src="prefs.avatarDataUrl"
+            alt=""
+            data-testid="export-avatar-preview"
+            class="size-10 rounded-full object-cover"
+          >
+          <div class="min-w-0 flex-1">
+            <label class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                data-testid="export-part-avatar"
+                :checked="prefs.parts.avatar"
+                :disabled="!prefs.avatarDataUrl || prefs.chrome === 'none'"
+                @change="setPart('avatar', ($event.target as HTMLInputElement).checked)"
+              >
+              <span :class="!prefs.avatarDataUrl || prefs.chrome === 'none' ? 'text-slate-500' : ''">
+                Incluir mi foto
+              </span>
+            </label>
+            <p class="pt-1 text-xs text-slate-500">
+              Se guarda solo en este navegador y nunca se envía.
+            </p>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            data-testid="export-avatar-file"
+            class="w-36 shrink-0 text-xs text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-slate-200"
+            @change="pickAvatar"
+          >
+          <button
+            v-if="prefs.avatarDataUrl"
+            type="button"
+            data-testid="export-avatar-clear"
+            class="shrink-0 rounded border border-slate-600 px-2 py-1 text-xs hover:bg-slate-700"
+            @click="clearAvatar"
+          >
+            Quitar
+          </button>
         </div>
       </fieldset>
 

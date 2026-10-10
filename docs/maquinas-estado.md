@@ -16,6 +16,7 @@ Principios:
 | `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | implementada |
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 | `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
+| `annotationMachine` | `machines/annotation.ts` | Anotaciones del usuario sobre el mapa: modo de dibujo, herramienta, colección por sitio | implementada |
 
 ## `viewerMachine`
 
@@ -354,6 +355,39 @@ stateDiagram-v2
 **Bug real encontrado con e2e (no solo unitario):** el primer intento de `SET_FRAMES` reseteaba `index` a `0` incondicionalmente; la página mandaba un `SEEK` aparte para corregirlo, pero `buffering` no manejaba `SEEK` en ese momento (evento ignorado silenciosamente) — el buffer esperaba el frame equivocado durante ~1 s hasta que el fallback de "todos resueltos" lo rescataba. Fix: `SET_FRAMES` acepta `startIndex` y fija el índice correcto en el mismo paso (además, `buffering` ahora sí maneja `SEEK` por robustez). Ilustra por qué la puerta de animación necesita e2e real, no solo tests de la máquina en aislamiento — el bug era de *integración* (dos eventos separados con una ventana de estado inválida en medio), invisible probando la máquina con un solo evento a la vez.
 
 **Orquestación en la página** (`pages/[site]/[product]/[[time]].vue`): modo estático (F2, `RadarMap` con `:raster`) hasta que el usuario presiona play por primera vez (`animationEngaged`); a partir de ahí `RadarMap` pasa a modo pool (`:frames`) y lo mantiene aun en pausa (el scrubbing reutiliza el mismo pool, sin destruir/recrear capas). Mientras la animación está pausada, `context.time` de `viewerMachine` y `context.index` de `animationMachine` se mantienen sincronizados en ambas direcciones (stepping externo → `SEEK`; `PLAY`/`TOGGLE` al pausar → `SELECT_TIME` con replace) — decisión F3: **durante playback la URL no se toca**, solo al pausar.
+
+## `annotationMachine`
+
+Anotaciones que el usuario dibuja sobre el mapa (F7.2): flecha, círculo, trazo libre y rótulo. Dos estados nada más — el modo de dibujo está encendido o apagado —, y toda la colección vive en el contexto.
+
+```mermaid
+stateDiagram-v2
+    [*] --> off
+    off --> drawing: ENABLE
+    drawing --> off: DISABLE
+    drawing --> drawing: SET_TOOL / ADD
+    note right of off
+        En la raíz (válidos en los dos estados):
+        SITE_CHANGED, LOADED, SET_COLOR, SET_TEXT,
+        UPDATE, REMOVE, UNDO, CLEAR
+    end note
+```
+
+**Contexto:** `site` (radar mostrado), `tool`, `color`, `pendingText` (rótulo del próximo punto con la herramienta de texto), `bySite` (`Record<site_id, Annotation[]>`).
+
+| Evento | Efecto |
+|---|---|
+| `ENABLE` / `DISABLE` | entra/sale del modo dibujo. La página traduce `drawing` a la prop `annotationTool` de `RadarMap`, que crea o destruye las interacciones `Draw`/`Modify` de OL |
+| `SET_TOOL(tool)` | solo en `drawing` — un `Draw` no cambia de tipo de geometría en caliente, así que `RadarMap` lo recrea entero |
+| `ADD(annotation)` | solo en `drawing`: añade al sitio actual y persiste |
+| `UPDATE(annotation)` | reemplaza por `id` sin reordenar (llega del `modifyend` de OL) y persiste |
+| `REMOVE(id)` / `UNDO` / `CLEAR` | borran y persisten. Válidos con el modo apagado: corregir no obliga a volver a entrar a dibujar |
+| `SITE_CHANGED(site)` | cambia de colección. **Las anotaciones son por sitio**: un trazo sobre una tormenta de BYX no pinta en KTLX |
+| `LOADED(bySite)` | rehidratación desde `localStorage` tras montar (SSR no tiene `localStorage`). No persiste: escribir lo que se acaba de leer no aporta nada |
+
+**Persistencia inyectada.** La acción `persist` la provee la página (`saveAnnotations`, clave `lamula:annotations`), igual que `syncQuery` en `viewerMachine`: la máquina sigue pura y los tests corren con `createActor` sin DOM.
+
+**Fuera de la URL — excepción a la decisión 23**, documentada en la 40: lo compartible vive en la URL, pero un trazo a mano alzada son cientos de puntos y reventaría su longitud. Las coordenadas se guardan en **metros EPSG:3857** (la proyección de la vista), no en píxeles: así la anotación queda clavada a la geografía y sobrevive a pan/zoom, a exportar con otro `pixelRatio` y a la secuencia de frames de F7.3.
 
 ## Pool de capas WebGL (`utils/map/frame-pool.ts`)
 

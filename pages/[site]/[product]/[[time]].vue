@@ -16,7 +16,9 @@ import type {
 } from '#shared/contract'
 import { WIND_LEVEL_LABELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
+import { loadAnnotations, saveAnnotations } from '../../../composables/useAnnotations'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
+import { annotationMachine, annotationsOf } from '../../../machines/annotation'
 import { animationMachine } from '../../../machines/animation'
 import { feedbackMachine } from '../../../machines/feedback'
 import { overlayMachine } from '../../../machines/overlay'
@@ -24,6 +26,7 @@ import type { OverlayLayerId, PanelId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 
+import type { Annotation, AnnotationKind } from '../../../utils/export/annotations'
 import { shouldShowNudge } from '../../../utils/feedback/nudge'
 import type { MapCaptureHandle } from '../../../utils/export/types'
 import { formatFull, formatFullParts } from '../../../utils/time-display'
@@ -515,6 +518,40 @@ const displayedVolTime = computed(() =>
   animationEngaged.value ? animCurrentVolTime.value : raster.value?.vol_time ?? null,
 )
 
+// ── Anotaciones del mapa (F7.2) ─────────────────────────────────────────
+// La máquina es pura: la persistencia entra como acción inyectada, igual que
+// syncQuery en viewerMachine. Fuera de la URL a propósito (excepción a D23
+// documentada en la decisión 40).
+const { snapshot: annotationSnapshot, send: annotationSend } = useActor(
+  annotationMachine.provide({
+    actions: { persist: (_, bySite) => saveAnnotations(bySite) },
+  }),
+  { input: { site: initialRoute.site } },
+)
+const annotationCtx = computed(() => annotationSnapshot.value.context)
+const annotationDrawing = computed(() => annotationSnapshot.value.matches('drawing'))
+const siteAnnotations = computed(() => annotationsOf(annotationCtx.value))
+/** null apaga las interacciones de dibujo en RadarMap */
+const annotationTool = computed<AnnotationKind | null>(() =>
+  annotationDrawing.value ? annotationCtx.value.tool : null,
+)
+
+onMounted(() => {
+  // localStorage no existe en SSR: la colección entra tras montar, igual que
+  // las prefs de display
+  annotationSend({ type: 'LOADED', bySite: loadAnnotations() })
+})
+
+watch(() => ctx.value.site, site => annotationSend({ type: 'SITE_CHANGED', site }))
+
+function onAnnotationAdd(annotation: Annotation) {
+  annotationSend({ type: 'ADD', annotation })
+}
+
+function onAnnotationUpdate(annotation: Annotation) {
+  annotationSend({ type: 'UPDATE', annotation })
+}
+
 // ── Feedback ────────────────────────────────────────────────────────────
 const { snapshot: feedbackSnapshot, send: feedbackSend } = useActor(feedbackMachine)
 const feedbackCtx = computed(() => feedbackSnapshot.value.context)
@@ -864,6 +901,12 @@ function onSatOpacityInput(event: Event) {
           :lightning-strikes="lightningStrikesShown"
           :smooth="ctx.smooth"
           :smooth-radius="ctx.smoothRadius"
+          :annotations="siteAnnotations"
+          :annotation-tool="annotationTool"
+          :annotation-color="annotationCtx.color"
+          :annotation-text="annotationCtx.pendingText"
+          @annotation-add="onAnnotationAdd"
+          @annotation-update="onAnnotationUpdate"
           @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
           @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
           @raster-error="send({ type: 'COG_ERROR', message: $event })"
@@ -906,6 +949,20 @@ function onSatOpacityInput(event: Event) {
         :units="ctx.units"
         @select-site="onSelectSite"
         @select-product="onSelectProduct"
+      />
+
+      <AnnotationBar
+        v-if="annotationDrawing"
+        :tool="annotationCtx.tool"
+        :color="annotationCtx.color"
+        :text="annotationCtx.pendingText"
+        :count="siteAnnotations.length"
+        @set-tool="annotationSend({ type: 'SET_TOOL', tool: $event })"
+        @set-color="annotationSend({ type: 'SET_COLOR', color: $event })"
+        @set-text="annotationSend({ type: 'SET_TEXT', text: $event })"
+        @undo="annotationSend({ type: 'UNDO' })"
+        @clear="annotationSend({ type: 'CLEAR' })"
+        @close="annotationSend({ type: 'DISABLE' })"
       />
 
       <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
@@ -1019,6 +1076,7 @@ function onSatOpacityInput(event: Event) {
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
       @open-prefs="prefsDialog?.open()"
       @open-export="exportDialog?.open()"
+      @open-annotations="annotationSend({ type: 'ENABLE' })"
       @open-feedback="feedbackSend({ type: 'OPEN_DIALOG' })"
     />
   </div>
