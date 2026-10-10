@@ -17,6 +17,7 @@ Principios:
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 | `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
 | `annotationMachine` | `machines/annotation.ts` | Anotaciones del usuario sobre el mapa: modo de dibujo, herramienta, colección por sitio | implementada |
+| `mosaicViewerMachine` | `machines/mosaic-viewer.ts` | Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43): hermana reducida de `viewerMachine`, indexada por dominio+slot_time | implementada (sin animación — ver nota abajo) |
 
 ## `viewerMachine`
 
@@ -116,6 +117,72 @@ stateDiagram-v2
 **Day picker (`components/DayPicker.vue`):** botones de día UTC sobre la ventana de 72h anclada a `radar.last_seen_at` (`utils/time-window.ts::dayWindow72h`, decisión 11) — no wall-clock, así un radar muerto sigue mostrando sus días con datos y las fixtures no se pudren. Click → evento `SELECT_DAY`.
 
 **Timeline strip (`components/TimelineStrip.vue`):** strip proporcional al rango `[times[0], times.at(-1)]` del día cargado; un tick por `vol_time` (click → `SELECT_TIME`), huecos marcados cuando el intervalo excede `max(2×mediana, 10 min)` (`utils/timeline/gaps.ts::computeGaps` — con menos de 3 times no hay señal para una mediana, no se marcan huecos), botones prev/next (→ `STEP`) deshabilitados según `atStart`/`atEnd`. Teclado: `←`/`→` en `window` disparan `STEP`, ignorados con foco en `input`/`select`/`textarea`.
+
+## `mosaicViewerMachine`
+
+Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/P4): mismo patrón
+`type: 'parallel'` de `viewerMachine` (regiones `raster`/`timeline`, URL
+manda, `sameFrame`/`sameDay` evitan refetch, assign optimista de `time`),
+pero indexada por `domain`+`product`+`slot_time` contra `/api/mosaic/*` en
+vez de `site`+`product`+`vol_time`. Diagrama idéntico en forma al de
+`viewerMachine` arriba (mismos nombres de estado, sustituir `vol_time` por
+`slot_time` y `site` por `domain`) — no se repite acá para no duplicar
+mantenimiento; cualquier divergencia real entre las dos máquinas está en el
+contexto y en los eventos, listados abajo.
+
+**Alcance recortado a propósito** (no es una omisión): sin fenómenos/VWP/
+viento/rayos/anotaciones/export/feedback — esos overlays son por-radar por
+naturaleza y el dominio no tiene un `site_id` único al que atarlos (celdas
+multi-radar etiquetadas llegan en P5 con su propia región). **Sin animación
+todavía**: el pool de frames (`utils/map/frame-pool.ts`, genérico desde
+D43 sobre `CogFrame` para aceptar tanto `RasterMeta` como `MosaicRasterMeta`)
+asume una única proyección compartida por toda la ventana de frames, pero
+la geometría del mosaico es **por fila** (añadir un radar recalcula la
+malla del dominio) — animar una ventana que cruza ese recálculo
+reproyectaría mal los frames viejos. `MosaicMap.vue` solo renderiza el modo
+estático; `TimelineStrip.vue` gana un prop `showPlay` (default `true`, sin
+tocar el llamador existente) para ocultar el botón play/pause acá en vez de
+dejarlo inerte.
+
+**Contexto:** `domain`, `product`, `time` (ISO naive; `null` = vista live),
+`nowT`, `raster: MosaicRasterMeta | null`, `rasterError`, `day`, `times:
+MosaicRasterMeta[]`, `timelineError`, `liveRefresh`, `atStart`/`atEnd`,
+`opacity`, `base`, `coverage` (overlay de cobertura — default `true`,
+shareable vía `?coverage=0`, **sin** `lamula:prefs`: esta vista no persiste
+nada en localStorage todavía), `cogError`.
+
+| Evento | Región | Efecto |
+|---|---|---|
+| `ROUTE_CHANGED` | `raster` | igual que `viewerMachine`, sustituyendo `vol_time`→`slot_time` |
+| `ROUTE_CHANGED` | `timeline` | igual que `viewerMachine` |
+| `STEP(dir)` | `raster` | igual que `viewerMachine` |
+| `SELECT_TIME(time)` / `SELECT_DAY` / `SET_LIVE_REFRESH` | — / `timeline` | igual que `viewerMachine` |
+| `MOUNTED` | — | guard (time `null` + raster resuelto) → `navigate` replace al `slot_time` |
+| `SELECT_DOMAIN` / `SELECT_PRODUCT` | — | efecto `navigate` push |
+| `SET_OPACITY` / `SELECT_BASE` | — | asignan + `syncQuery` (`?opacity&base&coverage`, igual patrón de replace debounced 300 ms que `viewerMachine`, sin `persistPrefs`) |
+| `TOGGLE_COVERAGE` | — | invierte `context.coverage` + `syncQuery` — controla la capa de anillos de `MosaicMap.vue` (`coverageLayer`/`coverageCenterLayer`), no un fetch: la cobertura siempre se calcula, esto solo oculta el dibujo |
+| `COG_ERROR` | — | asigna contexto |
+
+**Overlay de cobertura (la pieza central de P4):** `raster.contributing`
+(`MosaicContribution[]`, ya parseado por el DAL) da quién aportó al slot
+mostrado; `MosaicDomain.site_ids` menos esos sites da los **ausentes**.
+`utils/map/coverage-rings-layer.ts` (puro, sin OL `Map`) construye un
+anillo + un marcador central por sitio miembro — sólido/teal si está en
+`contributing`, punteado/atenuado si no — usando `circular()` + reproyección
+a 3857 (mismo truco que la máscara de cobertura de un solo radar en
+`RadarMap.vue`, un círculo esférico centrado en el radar, no uno plano en
+3857 que a 460 km de radio ya se ve elíptico). `MosaicDomainChip.vue`
+repite el mismo dato en texto (listas "Aportan"/"Ausentes") para cuando la
+capa está apagada o es difícil de leer de un vistazo. Radio único por
+dominio (`MosaicDomainRow.radius_m`): el contrato no trae un alcance
+por-radar, así que los N anillos salen del mismo tamaño — aproximación
+visual, no el alcance físico exacto de cada antena.
+
+**Proyección por fila:** `utils/map/projection.ts::registerDomainProjection`
+registra por el **contenido** del `proj4` de la fila (hash FNV-1a), no por
+`domain_id` — dos filas del mismo dominio pueden traer geometría distinta
+si el dominio se recalculó entre medias, y una clave por `domain_id`
+pisaría la definición vieja con la nueva bajo el mismo código ya en uso.
 
 ## `overlayMachine`
 

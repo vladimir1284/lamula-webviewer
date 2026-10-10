@@ -27,6 +27,8 @@ const props = defineProps<{
   /** paleta de colores on/off (LayersMenu) — controla la leyenda de abajo */
   showPalette: boolean
   units: UnitsPref
+  /** ruta al mosaico que incluye este sitio (D43/P4); null = no pertenece a ninguno */
+  mosaicPath?: string | null
 }>()
 
 defineEmits<{
@@ -61,6 +63,15 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
           </span>
           <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
         </button>
+
+        <NuxtLink
+          v-if="mosaicPath"
+          :to="mosaicPath"
+          data-testid="mosaic-enter-link"
+          class="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-[11px] text-teal-400 underline hover:bg-slate-700"
+        >
+          mosaico
+        </NuxtLink>
 
         <button
           type="button"

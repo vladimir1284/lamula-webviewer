@@ -24,8 +24,16 @@ const PREFETCH_CONCURRENCY = 3
 /** tope de seguridad (memoria); 20 frames típicos caben sin evicción */
 const MAX_POOL = 24
 
-interface PoolEntry {
-  frame: RasterMeta
+/** Lo mínimo que un frame necesita para entrar al pool — RasterMeta y
+ * MosaicRasterMeta (D43/P4) cumplen esto por estructura, sin acoplar el
+ * pool a ninguno de los dos contratos. */
+export interface CogFrame {
+  r2_key: string
+  cog_url: string | null
+}
+
+interface PoolEntry<T extends CogFrame> {
+  frame: T
   layer?: WebGLTileLayer
   state: 'pending' | 'fetching' | 'loading' | 'ready' | 'error'
 }
@@ -35,8 +43,8 @@ export interface FramePoolCallbacks {
   onFrameError: (index: number, message: string) => void
 }
 
-export class FramePool {
-  private entries: PoolEntry[] = []
+export class FramePool<T extends CogFrame = RasterMeta> {
+  private entries: PoolEntry<T>[] = []
   private activeIndex = -1
   private opacity: number
 
@@ -60,7 +68,7 @@ export class FramePool {
   }
 
   /** Reemplaza toda la serie (cambio de site/product/día): dispone lo anterior. */
-  setFrames(frames: RasterMeta[]) {
+  setFrames(frames: T[]) {
     this.disposeEntries()
     this.activeIndex = -1
     this.entries = frames.slice(0, MAX_POOL).map(frame => ({ frame, state: 'pending' as const }))

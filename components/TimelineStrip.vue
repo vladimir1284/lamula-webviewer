@@ -28,7 +28,11 @@ const props = withDefaults(defineProps<{
   clock?: ClockPref
   playing: boolean
   liveRefresh: boolean
-}>(), { clock: 'utc' })
+  /** oculta el botón play/pause (D43/P4: la vista de mosaico aún no anima —
+   * geometría por fila, ver utils/map/frame-pool.ts) — default true, ningún
+   * llamador existente lo pasa */
+  showPlay?: boolean
+}>(), { clock: 'utc', showPlay: true })
 
 const emit = defineEmits<{
   select: [iso: string]
@@ -251,6 +255,7 @@ const tickLabels = computed(() => {
             ‹
           </button>
           <button
+            v-if="showPlay"
             type="button"
             data-testid="anim-play"
             :aria-label="playing ? 'Pausar' : 'Reproducir'"
