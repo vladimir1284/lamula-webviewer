@@ -11,9 +11,10 @@
 // caso común — proj4 estable en la ventana — y degradar con aviso si no).
 //
 // Capa propia (zIndex 10, igual que la máscara de cobertura de un solo
-// radar): anillos de alcance por sitio miembro del dominio, sólidos para
-// los que aportaron al slot mostrado y punteados/atenuados para los
-// ausentes — el usuario siempre sabe qué radares componen lo que ve.
+// radar en RadarMap.vue): máscara de opacidad que oscurece todo el mapa
+// salvo los círculos de los radares que aportaron al slot mostrado (D46) —
+// mismo criterio que RadarMap: sin dato ⇒ oscuro. Marcador+label (zIndex 11)
+// solo para los contribuyentes; los ausentes no llevan marca.
 import Map from 'ol/Map'
 import { defaults as defaultControls } from 'ol/control'
 import View from 'ol/View'
@@ -34,12 +35,8 @@ import { sampleFromLevel } from '../utils/map/cursor'
 import { createBaseMapSources } from '../utils/map/base-layers'
 import { getCogBlob } from '../utils/map/cog-cache'
 import type { CoverageSite } from '../utils/map/coverage-rings-layer'
-import {
-  buildCoverageCenterFeatures,
-  buildCoverageFeatures,
-  coverageCenterStyle,
-  coverageRingStyle,
-} from '../utils/map/coverage-rings-layer'
+import { buildCoverageCenterFeatures, coverageCenterStyle } from '../utils/map/coverage-rings-layer'
+import { buildMaskCircles, CoverageMaskLayer } from '../utils/map/coverage-mask-layer'
 import { registerDomainProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
 import { buildMosaicCellFeatures, mosaicCellStyle } from '../utils/map/mosaic-cells-layer'
@@ -74,12 +71,11 @@ let resizeObserver: ResizeObserver | undefined
 let map: Map | undefined
 let baseLayer: TileLayer<TileSource> | undefined
 let labelsLayer: TileLayer<TileSource> | undefined
-let coverageLayer: VectorLayer<VectorSource> | undefined
+let coverageMaskLayer: CoverageMaskLayer | undefined
 let coverageCenterLayer: VectorLayer<VectorSource> | undefined
 let cellsLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined
 let rasterRequestId = 0
-const coverageSource = new VectorSource()
 const coverageCenterSource = new VectorSource()
 const cellsSource = new VectorSource()
 
@@ -93,11 +89,11 @@ function domainCenter(): [number, number] {
 }
 
 function updateCoverage() {
-  coverageSource.clear()
-  coverageCenterSource.clear()
   const contributingSet = new Set(props.contributing)
-  coverageSource.addFeatures(buildCoverageFeatures(props.sites, props.radiusM, contributingSet))
-  coverageCenterSource.addFeatures(buildCoverageCenterFeatures(props.sites, contributingSet))
+  coverageMaskLayer?.setCircles(buildMaskCircles(props.sites, props.radiusM, contributingSet))
+  coverageCenterSource.clear()
+  const contributingSites = props.sites.filter(site => contributingSet.has(site.site_id))
+  coverageCenterSource.addFeatures(buildCoverageCenterFeatures(contributingSites, contributingSet))
 }
 
 function updateCells() {
@@ -173,12 +169,7 @@ onMounted(() => {
     controls: defaultControls({ zoom: false }),
     layers: [
       baseLayer,
-      (coverageLayer = new VectorLayer({
-        source: coverageSource,
-        zIndex: 10,
-        visible: props.showCoverage,
-        style: f => coverageRingStyle(f as never),
-      })),
+      (coverageMaskLayer = new CoverageMaskLayer({ zIndex: 10, visible: props.showCoverage })),
       (coverageCenterLayer = new VectorLayer({
         source: coverageCenterSource,
         zIndex: 11,
@@ -243,7 +234,7 @@ watch(() => [props.raster?.r2_key, props.productDef?.code], () => updateRasterLa
 watch(() => props.opacity, (opacity) => rasterLayer?.setOpacity(opacity))
 watch(() => props.baseMap, updateBaseMap)
 watch(() => props.showCoverage, (show) => {
-  coverageLayer?.setVisible(show)
+  coverageMaskLayer?.setVisible(show)
   coverageCenterLayer?.setVisible(show)
 })
 watch(() => props.contributing, updateCoverage)
