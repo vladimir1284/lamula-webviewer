@@ -66,6 +66,10 @@ const radarMap = ref<MapCaptureHandle | null>(null)
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
+// solo para el link "ver mosaico" del chip de marca (D43/P4) — no afecta
+// nada del flujo de un solo radar si falla o si el sitio no pertenece a
+// ningún dominio
+const { data: mosaicDomains } = await useFetch('/api/mosaic/domains')
 
 const initialRoute = parseViewerRoute(route)
 if (!initialRoute) {
@@ -236,6 +240,12 @@ function onDataModalUpdatePanel(panel: PanelId) {
   send({ type: 'SELECT_PANEL', panel })
 }
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
+const mosaicDomainForSite = computed(() =>
+  (mosaicDomains.value ?? []).find(d => d.site_ids.includes(ctx.value.site)) ?? null,
+)
+const mosaicPath = computed(() =>
+  mosaicDomainForSite.value ? `/mosaic/${mosaicDomainForSite.value.domain_id}/${ctx.value.product}` : null,
+)
 const rasterProducts = computed(() => ctx.value.products.filter(p => p.kind === 'raster'))
 const productDef = computed(() => rasterProductDef(ctx.value.product))
 const raster = computed(() => (snapshot.value.matches({ raster: 'shown' }) ? ctx.value.raster : null))
@@ -951,6 +961,7 @@ function onSatOpacityInput(event: Event) {
         :cursor-lat-lon-label="cursorLatLonLabel"
         :show-palette="ctx.showPalette"
         :units="ctx.units"
+        :mosaic-path="mosaicPath"
         @select-site="onSelectSite"
         @select-product="onSelectProduct"
       />

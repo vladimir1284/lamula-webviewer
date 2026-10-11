@@ -213,3 +213,75 @@ export interface Health {
   generated_at: string
   radars: RadarHealth[]
 }
+
+// ── Mosaico multi-radar (0002_mosaic.sql) ─────────────────────────────
+
+/** Reglas de composición que emite el pipeline (`mosaic_rasters.method`). */
+export const MOSAIC_METHODS = ['weighted', 'lowest_beam'] as const
+export type MosaicMethod = (typeof MOSAIC_METHODS)[number]
+
+/** `mosaic_domains` — malla AEQD común a N radares. Convención idéntica a
+ * la de los COG por radar: malla centrada, fila 0 al norte, origen
+ * implícito en (-width·cell_m/2, +height·cell_m/2). `proj4` se registra
+ * tal cual, igual que `radars.proj4`. */
+export interface MosaicDomainRow {
+  domain_id: string
+  name: string
+  proj4: string
+  width: number
+  height: number
+  cell_m: number
+  /** alcance nativo del producto que dimensionó la malla, metros */
+  radius_m: number
+}
+
+/** Un radar aportando a un slot (`mosaic_rasters.contributing`). */
+export interface MosaicContribution {
+  site: string
+  vol_time: string
+  /** desfase contra el centro del slot; negativo = volumen anterior al centro */
+  lag_s: number
+}
+
+/** `mosaic_rasters` — un COG compuesto por (dominio, producto, slot).
+ * Sin `id`/`created_at`: internos del pipeline. */
+export interface MosaicRasterRow {
+  domain_id: string
+  product_code: number
+  /** inicio del slot UTC — rejilla propia del mosaico, no el vol_time de
+   * ningún radar */
+  slot_time: string
+  slot_s: number
+  r2_key: string
+  size_bytes: number
+  /** calibración canónica del producto: fija entre slots, no heredada de
+   * ninguna fila de `rasters` */
+  value_scale: number
+  value_offset: number
+  max_level: number | null
+  /** geometría de ESTE COG, no la del dominio: añadir un radar a un dominio
+   * recalcula su malla y los COG viejos conservan la suya */
+  proj4: string
+  width: number
+  height: number
+  cell_m: number
+  method: MosaicMethod
+  /** JSON serializado: MosaicContribution[] */
+  contributing: string
+}
+
+// ── DTOs del mosaico (/api/mosaic/*) ──────────────────────────────────
+
+/** /api/mosaic/domains — el dominio más sus radares miembros.
+ * La lista completa es lo que permite al overlay de cobertura pintar los
+ * radares AUSENTES de un slot (miembros menos `contributing`). */
+export interface MosaicDomain extends MosaicDomainRow {
+  site_ids: string[]
+}
+
+/** /api/mosaic/rasters/* — fila con `contributing` parseado y URL resuelta. */
+export interface MosaicRasterMeta extends Omit<MosaicRasterRow, 'size_bytes' | 'contributing'> {
+  contributing: MosaicContribution[]
+  /** URL pública del COG; null si el origen R2 no está configurado */
+  cog_url: string | null
+}

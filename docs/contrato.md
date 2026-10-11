@@ -82,3 +82,26 @@ Una fila por `(site_id, valid_time, level)`: `cycle_time`, `forecast_hour`, `mod
 4. ~~Acceso público de lectura + CORS del bucket R2 y `NUXT_PUBLIC_R2_BASE_URL`~~ — hecho: bucket con CORS (GET/HEAD + `Range`, dominio custom + `localhost:3000`), `cog_url` resuelve.
 5. Confirmar con el experto la semántica de `past`/`forecast`/`movement_deg` (orden y convención "desde") — parte de la puerta M4.
 6. ~~Viento GFS 10 m~~ — cerrado jul-2026: el pipeline mergeó `0003_wind_grids.sql` e ingesta activa; CORS (`localhost:3000`, pages.dev) y gzip del edge **verificados contra el dominio custom** el 2026-07-18. Queda del lado del viewer: re-grabar fixtures (incl. `wind.json` real + bajar los JSON u/v golden) en la próxima re-grabación completa.
+
+### `mosaic_domains` / `mosaic_domain_sites` / `mosaic_rasters` — mosaico multi-radar
+
+Compuesto multi-radar producido por el pipeline (`0002_mosaic.sql`, decisión 43). El viewer lo lee como un producto más, con tres diferencias que importan.
+
+**Rejilla temporal propia.** `slot_time` son slots UTC fijos de 300 s, no los `vol_time` de ningún radar. Las consultas del viewer son las mismas que para `rasters` (día, más-cercano/siguiente/anterior) pero sobre esa columna.
+
+**Geometría por fila.** `mosaic_rasters` trae `proj4`/`width`/`height`/`cell_m` además de `mosaic_domains`: añadir un radar a un dominio recalcula la malla, y un COG anterior tiene que seguir georreferenciándose con la suya. `mosaic_domains` describe la malla **actual** (para montar la vista); cada fila describe la **suya** (para pintar ese COG).
+
+**`contributing` es parte del contrato.** JSON `[{"site","vol_time","lag_s"}]` con los radares que entraron en ese slot y su desfase contra el centro (negativo = volumen anterior al centro). Un slot se compone con los radares que haya dentro de tolerancia — un radar caído no apaga el mosaico — así que la cobertura varía entre frames. `mosaic_domain_sites` da los miembros del dominio; la resta son los **ausentes**, y eso es lo que pinta el overlay de cobertura. Sin ello, un hueco en el mapa es indistinguible de "no hay ecos".
+
+| Columna | Uso en el viewer |
+|---|---|
+| `domain_id` | identidad del dominio; no es un `site_id` (ni 3 chars ni vive en `radars`) |
+| `product_code` | código NEXRAD reusado — `shared/products/<code>` y su paleta valen sin cambios |
+| `slot_time`, `slot_s` | timeline del mosaico |
+| `r2_key` | → URL del COG (prefijo `mosaic/`) |
+| `value_scale`, `value_offset`, `max_level` | calibración **canónica del producto**, fija entre slots |
+| `proj4`, `width`, `height`, `cell_m` | geometría de ese COG |
+| `method` | `weighted` \| `lowest_beam` |
+| `contributing` | procedencia del slot |
+
+`N0G` nunca aparece: la velocidad radial es relativa al radar y no es componible. Detalle del cálculo en `docs/mosaico.md` del pipeline.

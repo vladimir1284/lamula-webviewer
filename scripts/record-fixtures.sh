@@ -74,5 +74,26 @@ query "SELECT site_id, bucket_start, bucket_s, strike_count, r2_key, size_bytes,
        WHERE bucket_start >= $SINCE_PHEN
        ORDER BY site_id, bucket_start" > "$OUT/lightning.json"
 
+# mosaico: dominios + miembros completos, y los slots de la misma ventana
+# que los rasters. OJO: el COG compuesto de los slots grabados hay que
+# bajarlo a tests/fixtures/cogs/r2/<r2_key> para que el render del mosaico
+# corra offline (mismo flujo que los COGs golden por radar).
+# Hasta la primera grabación real, estos tres ficheros los genera
+# scripts/make-mosaic-fixture.mjs — si el pipeline aún no ha compuesto
+# nada, las consultas devuelven [] y hay que volver a generar el sintético
+# en vez de commitear los vacíos.
+echo "→ mosaic_domains / mosaic_domain_sites / mosaic_rasters"
+query "SELECT domain_id, name, proj4, width, height, cell_m, radius_m, created_at, updated_at
+       FROM mosaic_domains
+       ORDER BY domain_id" > "$OUT/mosaic-domains.json"
+query "SELECT domain_id, site_id FROM mosaic_domain_sites
+       ORDER BY domain_id, site_id" > "$OUT/mosaic-domain-sites.json"
+query "SELECT domain_id, product_code, slot_time, slot_s, r2_key, size_bytes,
+              value_scale, value_offset, max_level, proj4, width, height, cell_m,
+              method, contributing, created_at
+       FROM mosaic_rasters
+       WHERE slot_time >= $SINCE_PHEN
+       ORDER BY domain_id, product_code, slot_time" > "$OUT/mosaic-rasters.json"
+
 wc -c "$OUT"/*.json
 echo "✓ fixtures grabadas en $OUT/ — ahora: pnpm test (contract tests) y revisar el diff"

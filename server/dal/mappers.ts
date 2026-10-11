@@ -3,6 +3,9 @@ import type {
   Health,
   LightningBucketMeta,
   LightningBucketRow,
+  MosaicContribution,
+  MosaicRasterMeta,
+  MosaicRasterRow,
   Phenomenon,
   PhenomenonRow,
   RadarHealth,
@@ -34,6 +37,28 @@ export function toLightningMeta(
   return { ...row, lightning_url: base && row.r2_key ? `${base}/${row.r2_key}` : null }
 }
 
+/** URL pública del COG compuesto + `contributing` TEXT → array.
+ * La procedencia es parte del contrato, no depuración: sin ella el viewer
+ * no puede decir qué radares está mirando el usuario. Una fila con JSON
+ * corrupto degrada a lista vacía en vez de tumbar la respuesta — misma
+ * política que `attrs`. */
+export function toMosaicMeta(
+  row: Omit<MosaicRasterRow, 'size_bytes'>,
+  r2BaseUrl: string | null,
+): MosaicRasterMeta {
+  const base = r2BaseUrl?.replace(/\/+$/, '')
+  const { contributing: raw, ...cols } = row
+  let contributing: MosaicContribution[] = []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (Array.isArray(parsed)) contributing = parsed as MosaicContribution[]
+  }
+  catch {
+    // procedencia ilegible → lista vacía; el COG sigue siendo pintable
+  }
+  return { ...cols, contributing, cog_url: base ? `${base}/${row.r2_key}` : null }
+}
+
 /** attrs TEXT → objeto; una fila corrupta no tumba la respuesta completa. */
 export function toPhenomenon(row: PhenomenonRow): Phenomenon {
   let attrs: Record<string, unknown> = {}
@@ -49,18 +74,29 @@ export function toPhenomenon(row: PhenomenonRow): Phenomenon {
   return { ...row, attrs }
 }
 
-/** Elige entre candidato anterior y siguiente el más cercano a t (empate → anterior). */
+/** Elige entre candidato anterior y siguiente el más cercano a t (empate → anterior).
+ * `get` existe porque el mosaico se indexa por `slot_time` (rejilla propia)
+ * y no por `vol_time`: misma regla de desempate, otra columna. */
+export function pickClosestBy<T>(
+  prev: T | null,
+  next: T | null,
+  t: string,
+  get: (row: T) => string,
+): T | null {
+  if (!prev) return next
+  if (!next) return prev
+  const target = naiveUtcToEpochMs(t)
+  const dPrev = Math.abs(target - naiveUtcToEpochMs(get(prev)))
+  const dNext = Math.abs(naiveUtcToEpochMs(get(next)) - target)
+  return dNext < dPrev ? next : prev
+}
+
 export function pickClosest<T extends { vol_time: string }>(
   prev: T | null,
   next: T | null,
   t: string,
 ): T | null {
-  if (!prev) return next
-  if (!next) return prev
-  const target = naiveUtcToEpochMs(t)
-  const dPrev = Math.abs(target - naiveUtcToEpochMs(prev.vol_time))
-  const dNext = Math.abs(naiveUtcToEpochMs(next.vol_time) - target)
-  return dNext < dPrev ? next : prev
+  return pickClosestBy(prev, next, t, r => r.vol_time)
 }
 
 export function buildHealth(

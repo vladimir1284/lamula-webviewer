@@ -1,7 +1,7 @@
 // Schemas Zod del contrato: validan filas D1 (contract/fixture tests) y
 // parámetros de query de las server routes. Espejo 1:1 de types.ts.
 import { z } from 'zod'
-import { DEFAULT_WIND_LEVEL, PHENOMENON_KINDS, PRODUCT_KINDS, WIND_LEVELS } from './types'
+import { DEFAULT_WIND_LEVEL, MOSAIC_METHODS, PHENOMENON_KINDS, PRODUCT_KINDS, WIND_LEVELS } from './types'
 
 /** Timestamp del contrato: ISO-8601 UTC naive, comparable lexicográficamente. */
 export const ISO_NAIVE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
@@ -175,4 +175,63 @@ export const zSiteVolTime = z.object({
 export const zSiteCell = z.object({
   site: zSiteId,
   cell_id: z.string().min(1).max(8),
+})
+
+// ── Mosaico multi-radar ────────────────────────────────────────────────
+
+/** `domain_id` no es un site_id: no son 3 chars y no vive en `radars`. */
+export const zDomainId = z.string().regex(/^[A-Z0-9]{2,12}$/, 'domain_id (GULF)')
+
+export const zMosaicDomainRow = z.object({
+  domain_id: zDomainId,
+  name: z.string().min(1),
+  proj4: z.string().startsWith('+proj=aeqd'),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  cell_m: z.number().positive(),
+  radius_m: z.number().positive(),
+})
+
+export const zMosaicContribution = z.object({
+  site: zSiteId,
+  vol_time: zIsoNaive,
+  lag_s: z.number().int(),
+})
+
+export const zMosaicRasterRow = z.object({
+  domain_id: zDomainId,
+  product_code: z.number().int().positive(),
+  slot_time: zIsoNaive,
+  slot_s: z.number().int().positive(),
+  r2_key: z.string().endsWith('.tif'),
+  size_bytes: z.number().int().positive(),
+  value_scale: z.number(),
+  value_offset: z.number(),
+  max_level: z.number().int().nullable(),
+  proj4: z.string().startsWith('+proj=aeqd'),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  cell_m: z.number().positive(),
+  method: z.enum(MOSAIC_METHODS),
+  // contributing viaja como TEXT JSON; el DAL lo parsea a array
+  contributing: z.string().refine((s) => {
+    try {
+      return Array.isArray(JSON.parse(s))
+    }
+    catch {
+      return false
+    }
+  }, 'contributing debe ser un array JSON serializado'),
+})
+
+export const zDomainProductDay = z.object({
+  domain: zDomainId,
+  product: zProductCode,
+  day: zDay,
+})
+
+export const zDomainProductTime = z.object({
+  domain: zDomainId,
+  product: zProductCode,
+  t: zIsoNaive,
 })

@@ -6,6 +6,9 @@ import Database from 'better-sqlite3'
 import type { PgLike } from '~/server/dal/types'
 
 import lightning from '~/server/dal/fixtures/lightning.json'
+import mosaicDomainSites from '~/server/dal/fixtures/mosaic-domain-sites.json'
+import mosaicDomains from '~/server/dal/fixtures/mosaic-domains.json'
+import mosaicRasters from '~/server/dal/fixtures/mosaic-rasters.json'
 import phenomena from '~/server/dal/fixtures/phenomena.json'
 import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
@@ -72,6 +75,9 @@ export function createSeededDb(): Database.Database {
   insertRows(db, 'vwp', vwp)
   insertRows(db, 'wind_grids', wind)
   insertRows(db, 'lightning_buckets', lightning)
+  insertRows(db, 'mosaic_domains', mosaicDomains)
+  insertRows(db, 'mosaic_domain_sites', mosaicDomainSites)
+  insertRows(db, 'mosaic_rasters', mosaicRasters)
   return db
 }
 
