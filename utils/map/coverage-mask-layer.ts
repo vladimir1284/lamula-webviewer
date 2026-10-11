@@ -88,8 +88,12 @@ export class CoverageMaskLayer extends Layer {
     ctx.fillStyle = '#000'
     for (const coords of this.circles) {
       ctx.beginPath()
+      // `applyTransform` muta su argumento in-place (ol/transform), y
+      // render() corre en cada repintado del mapa, no solo cuando cambian
+      // los círculos — clonar evita corromper `this.circles` tras el primer
+      // render (ver nota del módulo).
       coords.forEach((coord, i) => {
-        const [px, py] = applyTransform(frameState.coordinateToPixelTransform, coord) as [number, number]
+        const [px, py] = applyTransform(frameState.coordinateToPixelTransform, coord.slice()) as [number, number]
         if (i === 0) ctx.moveTo(px, py)
         else ctx.lineTo(px, py)
       })
