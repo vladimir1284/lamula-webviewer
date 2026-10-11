@@ -50,7 +50,8 @@ const RADIUS_MIN = 5
 const RADIUS_MAX = 14
 const RADIUS_FALLBACK = 7 // sin dbz_max: tamaño previo por defecto
 
-function dbzToRadius(dbzMax: number | null | undefined): number {
+/** compartida con utils/map/mosaic-cells-layer.ts (P5): misma curva, no duplicar la calibración */
+export function dbzToRadius(dbzMax: number | null | undefined): number {
   if (dbzMax === null || dbzMax === undefined || Number.isNaN(dbzMax)) return RADIUS_FALLBACK
   const clamped = Math.min(DBZ_MAX, Math.max(DBZ_MIN, dbzMax))
   const t = (clamped - DBZ_MIN) / (DBZ_MAX - DBZ_MIN)

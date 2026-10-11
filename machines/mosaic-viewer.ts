@@ -4,10 +4,18 @@
 // `slot_time` (no `site`+`vol_time`) contra /api/mosaic/*. Alcance recortado
 // a propósito (ver docs/decisiones.md D44): sin fenómenos/VWP/viento/rayos/
 // anotaciones/export en esta vista — esos overlays son por-radar por
-// naturaleza, el dominio no tiene un `site_id` único al que atarlos. Celdas
-// multi-radar etiquetadas llegan en P5 con su propia región.
+// naturaleza, el dominio no tiene un `site_id` único al que atarlos.
+//
+// Celdas multi-radar (P5, D45): región `cells` propia, unión de la fila de
+// fenómenos de CADA sitio del dominio contra el mismo slot_time mostrado
+// (nearestWithin por sitio, sin endpoint nuevo — ver fetchCells en la
+// página). Sin SSR: se dispara con CELLS_INIT desde onMounted (nunca en
+// servidor), así no hay doble fetch servidor+cliente. El dominio no
+// cambia dentro de la vida de un actor (la página remonta entera por
+// `key: route => route.params.domain`), así que el refetch por
+// ROUTE_CHANGED solo mira el slot_time.
 import type { BaseMapId } from '#shared/basemaps'
-import type { MosaicRasterMeta } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
 
 /** Lo compartible de la URL del mosaico, ya parseado (composables/useMosaicRoute.ts) */
@@ -21,6 +29,8 @@ export interface MosaicRouteState {
   /** overlay de cobertura (anillos contribuyentes/ausentes) — default true,
    * shareable como `sat` en el viewer de un solo radar; no se persiste */
   coverage: boolean
+  /** celda seleccionada, `SITE:ID` (P5/D45) — null = ninguna */
+  cell: string | null
 }
 
 export interface MosaicNavigatePatch {
@@ -66,6 +76,8 @@ export type MosaicViewerEvent =
   | { type: 'SELECT_BASE', base: BaseMapId }
   | { type: 'TOGGLE_COVERAGE' }
   | { type: 'COG_ERROR', message: string }
+  | { type: 'SELECT_CELL', cellId: string | null }
+  | { type: 'CELLS_INIT' }
 
 interface MosaicViewerContext {
   domain: string
@@ -84,6 +96,11 @@ interface MosaicViewerContext {
   base: BaseMapId
   coverage: boolean
   cogError: string
+  cells: Phenomenon[]
+  cellsError: string | null
+  selectedCell: string | null
+  /** slot_time ya resuelto por fetchCells — evita refetch si no cambió */
+  cellsKey: string | null
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10)
@@ -99,6 +116,7 @@ const assignRoute = assign<MosaicViewerContext, MosaicViewerEvent, undefined, Mo
       opacity: route.opacity,
       base: route.base,
       coverage: route.coverage,
+      selectedCell: route.cell,
       ...(identityChanged ? { liveRefresh: true } : {}),
     }
   },
@@ -128,12 +146,19 @@ export const mosaicViewerMachine = setup({
     >(async () => {
       throw new Error('fetchStep sin proveer (.provide)')
     }),
+    // unión por sitio del dominio contra el mismo slot_time (P5/D45); la
+    // página resuelve site_ids y hace el join nearestWithin por sitio, sin
+    // endpoint nuevo
+    fetchCells: fromPromise<Phenomenon[], { domain: string, t: string }>(async () => {
+      throw new Error('fetchCells sin proveer (.provide)')
+    }),
   },
   actions: {
     navigate: (_args, _params: MosaicNavigateParams) => {
       throw new Error('navigate sin proveer (.provide)')
     },
     syncQuery: (_args, _params: MosaicDisplayQueryParams) => {},
+    syncCellQuery: (_args, _params: { cellId: string | null }) => {},
   },
   guards: {
     sameFrame: ({ context }, route: MosaicRouteState) =>
@@ -169,6 +194,10 @@ export const mosaicViewerMachine = setup({
     base: input.route.base,
     coverage: input.route.coverage,
     cogError: '',
+    cells: [],
+    cellsError: null,
+    selectedCell: input.route.cell,
+    cellsKey: null,
   }),
   on: {
     SET_LIVE_REFRESH: { actions: assign({ liveRefresh: ({ event }) => event.value }) },
@@ -198,6 +227,12 @@ export const mosaicViewerMachine = setup({
       }),
     },
     COG_ERROR: { actions: assign({ cogError: ({ event }) => event.message }) },
+    SELECT_CELL: {
+      actions: [
+        assign({ selectedCell: ({ event }) => event.cellId }),
+        { type: 'syncCellQuery', params: ({ event }) => ({ cellId: event.cellId }) },
+      ],
+    },
     SELECT_DOMAIN: {
       actions: { type: 'navigate', params: ({ event }) => ({ patch: { domain: event.domain }, mode: 'push' as const }) },
     },
@@ -450,6 +485,51 @@ export const mosaicViewerMachine = setup({
             },
           },
         },
+      },
+    },
+    cells: {
+      on: {
+        CELLS_INIT: { target: '.loading', guard: ({ context }) => context.cellsKey === null },
+        ROUTE_CHANGED: {
+          // SIN reenter: true — el target ya es un estado distinto del
+          // actual (ready/error -> loading), así que ya es una transición
+          // externa (reinvoca igual); `reenter` sobra acá y, combinado con
+          // otra región paralela manejando el MISMO evento, hace que XState
+          // descarte esta transición en silencio (repro aislado, sin guard
+          // de por medio — ver tests/unit/mosaic-viewer-machine.spec.ts).
+          target: '.loading',
+          guard: ({ context, event }) => {
+            const { route } = event as Extract<MosaicViewerEvent, { type: 'ROUTE_CHANGED' }>
+            const key = route.time ?? context.nowT
+            return context.cellsKey !== null && key !== context.cellsKey
+          },
+        },
+      },
+      initial: 'idle',
+      states: {
+        idle: {},
+        loading: {
+          invoke: {
+            src: 'fetchCells',
+            input: ({ context }) => ({ domain: context.domain, t: context.time ?? context.nowT }),
+            onDone: {
+              target: 'ready',
+              actions: assign({
+                cells: ({ event }) => event.output,
+                cellsError: null,
+                cellsKey: ({ context }) => context.time ?? context.nowT,
+              }),
+            },
+            onError: {
+              target: 'error',
+              actions: assign({
+                cellsError: ({ event }) => (event.error instanceof Error ? event.error.message : String(event.error)),
+              }),
+            },
+          },
+        },
+        ready: {},
+        error: {},
       },
     },
   },

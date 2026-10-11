@@ -5,9 +5,11 @@
 // cobertura pinta en el mapa, acá en texto para quien no pueda leer el mapa
 // o tenga la capa apagada).
 import { computed, ref } from 'vue'
-import type { MosaicDomain, MosaicRasterMeta, Product } from '#shared/contract'
+import type { MosaicDomain, MosaicRasterMeta, Phenomenon, Product } from '#shared/contract'
+import { stormCellAttrs } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import { rasterProductDef } from '#shared/products'
+import { mosaicCellId, siteColor } from '../utils/overlay/mosaic-cells'
 import type { UnitsPref } from '../utils/units'
 
 const props = defineProps<{
@@ -26,11 +28,15 @@ const props = defineProps<{
   cursorLatLonLabel: string | null
   showPalette: boolean
   units: UnitsPref
+  /** celdas multi-radar del slot mostrado (P5/D45) */
+  cells: Phenomenon[]
+  selectedCell: string | null
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'select-domain': [event: Event]
   'select-product': [event: Event]
+  'select-cell': [cellId: string | null]
 }>()
 
 const expanded = ref(false)
@@ -40,6 +46,37 @@ const hasError = computed(() => Boolean(props.domainsError || props.rasterFetchE
 const currentDomain = computed(() => props.domains.find(d => d.domain_id === props.domain) ?? null)
 const contributingIds = computed(() => new Set((props.raster?.contributing ?? []).map(c => c.site)))
 const absentSites = computed(() => (currentDomain.value?.site_ids ?? []).filter(s => !contributingIds.value.has(s)))
+
+interface CellRow {
+  id: string
+  site: string
+  cellId: string
+  dbzMax: number | null
+  color: string
+}
+
+const cellRows = computed<CellRow[]>(() => {
+  const siteOrder = currentDomain.value?.site_ids ?? []
+  return props.cells
+    .filter(p => p.kind === 'storm_cell' && p.cell_id !== null)
+    .map((p) => {
+      const attrs = stormCellAttrs(p.attrs)
+      return {
+        id: mosaicCellId(p.site_id, p.cell_id!),
+        site: p.site_id,
+        cellId: p.cell_id!,
+        dbzMax: attrs.dbz_max ?? null,
+        color: siteColor(p.site_id, siteOrder),
+      }
+    })
+    .sort((a, b) => (b.dbzMax ?? -Infinity) - (a.dbzMax ?? -Infinity))
+})
+
+function onCellRow(id: string) {
+  emit('select-cell', id === props.selectedCell ? null : id)
+}
+
+const fmtDbz = (v: number | null) => (v === null ? '—' : v.toFixed(0))
 </script>
 
 <template>
@@ -175,6 +212,27 @@ const absentSites = computed(() => (currentDomain.value?.site_ids ?? []).filter(
           <dd data-testid="mosaic-absent" class="font-mono text-slate-500">{{ absentSites.join(', ') }}</dd>
         </div>
       </dl>
+
+      <!-- celdas multi-radar (P5/D45): mismo dato que los markers del mapa,
+           coloreadas por sitio de origen; sin deduplicar entre radares -->
+      <div v-if="cellRows.length > 0" data-testid="mosaic-cell-list" class="rounded bg-slate-900/95 p-2 text-xs shadow-lg">
+        <h3 class="mb-1 font-semibold text-slate-300">Celdas</h3>
+        <ul class="max-h-40 space-y-0.5 overflow-y-auto">
+          <li
+            v-for="row in cellRows"
+            :key="row.id"
+            :data-testid="`mosaic-cell-row-${row.id}`"
+            class="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5"
+            :class="row.id === selectedCell ? 'bg-yellow-400/10 text-yellow-200' : 'hover:bg-slate-800'"
+            @click="onCellRow(row.id)"
+          >
+            <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: row.color }" />
+            <span class="font-mono text-slate-400">{{ row.site }}</span>
+            <span class="font-mono font-semibold">{{ row.cellId }}</span>
+            <span class="ml-auto font-mono text-slate-400">{{ fmtDbz(row.dbzMax) }} dBZ</span>
+          </li>
+        </ul>
+      </div>
 
       <div
         v-if="showPalette && productDef"

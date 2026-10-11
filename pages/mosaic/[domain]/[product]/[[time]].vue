@@ -9,12 +9,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActor } from '@xstate/vue'
 import { fromPromise } from 'xstate'
 import type { BaseMapId } from '#shared/basemaps'
-import type { MosaicRasterMeta } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { mosaicQueryPatch, parseMosaicRoute, useMosaicNavigate } from '../../../../composables/useMosaicRoute'
 import { mosaicViewerMachine } from '../../../../machines/mosaic-viewer'
 import type { MosaicDisplayQueryParams, MosaicNavigateParams } from '../../../../machines/mosaic-viewer'
 import type { CoverageSite } from '../../../../utils/map/coverage-rings-layer'
+import { nearestWithin } from '../../../../utils/overlay/join'
 import { formatFullParts } from '../../../../utils/time-display'
 import { dayWindow72h } from '../../../../utils/time-window'
 import { computeGaps } from '../../../../utils/timeline/gaps'
@@ -82,6 +83,14 @@ function syncQuery(params: MosaicDisplayQueryParams) {
 }
 onBeforeUnmount(() => clearTimeout(queryTimer))
 
+// selección de celda (P5/D45): replace inmediato, sin debounce — igual que
+// SELECT_CELL en el viewer de un solo radar (D23), un click no debe sentirse
+// con latencia de slider
+function syncCellQuery(params: { cellId: string | null }) {
+  const query = { ...route.query, cell: params.cellId ?? undefined }
+  router.replace({ query: Object.fromEntries(Object.entries(query).filter(([, v]) => v !== undefined)) })
+}
+
 const machine = mosaicViewerMachine.provide({
   actors: {
     fetchClosest: fromPromise(async ({ input }) => {
@@ -113,10 +122,27 @@ const machine = mosaicViewerMachine.provide({
         throw err
       }
     }),
+    // unión por sitio del dominio contra el mismo slot_time (P5/D45): reusa
+    // los endpoints del viewer de un solo radar, sin API nueva. Un sitio que
+    // falla o no tiene volumen en tolerancia simplemente no aporta celdas —
+    // el mismo espíritu de "un radar caído no apaga el mosaico" (D43).
+    fetchCells: fromPromise(async ({ input }) => {
+      const dom = (domains.value ?? []).find(d => d.domain_id === input.domain)
+      const siteIds = dom?.site_ids ?? []
+      const day = input.t.slice(0, 10)
+      const results = await Promise.allSettled(siteIds.map(async (site) => {
+        const times = await $fetch<string[]>('/api/phenomena/times', { query: { site, day } })
+        const joined = nearestWithin(times, input.t)
+        if (joined === null) return []
+        return await $fetch<Phenomenon[]>('/api/phenomena', { query: { site, vol_time: joined } })
+      }))
+      return results.flatMap(r => (r.status === 'fulfilled' ? r.value : []))
+    }),
   },
   actions: {
     navigate: (_, params: MosaicNavigateParams) => navigate(params.patch, params.mode),
     syncQuery: (_, params: MosaicDisplayQueryParams) => syncQuery(params),
+    syncCellQuery: (_, params: { cellId: string | null }) => syncCellQuery(params),
   },
 })
 
@@ -142,7 +168,11 @@ watch(
     if (parsed) send({ type: 'ROUTE_CHANGED', route: parsed })
   },
 )
-onMounted(() => send({ type: 'MOUNTED' }))
+onMounted(() => {
+  send({ type: 'MOUNTED' })
+  // nunca en SSR (onMounted es client-only) — evita el doble fetch servidor+cliente
+  send({ type: 'CELLS_INIT' })
+})
 
 const ctx = computed(() => snapshot.value.context)
 const rasterProducts = computed(() => (products.value ?? []).filter(p => p.kind === 'raster'))
@@ -214,6 +244,9 @@ function onSelectProduct(event: Event) {
 function onSelectBase(base: BaseMapId) {
   send({ type: 'SELECT_BASE', base })
 }
+function onSelectCell(cellId: string | null) {
+  send({ type: 'SELECT_CELL', cellId })
+}
 
 const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
@@ -246,8 +279,11 @@ const singleRadarPath = computed(() => {
           :radius-m="currentDomain.radius_m"
           :contributing="contributingSites"
           :show-coverage="ctx.coverage"
+          :cells="ctx.cells"
+          :selected-cell="ctx.selectedCell"
           @cursor="onCursor"
           @raster-error="send({ type: 'COG_ERROR', message: $event })"
+          @select-cell="onSelectCell"
         />
       </ClientOnly>
 
@@ -279,8 +315,11 @@ const singleRadarPath = computed(() => {
         :cursor-lat-lon-label="cursorLatLonLabel"
         :show-palette="true"
         units="imperial"
+        :cells="ctx.cells"
+        :selected-cell="ctx.selectedCell"
         @select-domain="onSelectDomain"
         @select-product="onSelectProduct"
+        @select-cell="onSelectCell"
       />
 
       <!-- controles mínimos (D43/P4): opacidad, mapa base, overlay de

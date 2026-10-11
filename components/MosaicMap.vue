@@ -27,7 +27,7 @@ import VectorSource from 'ol/source/Vector'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
 import type { BaseMapId } from '#shared/basemaps'
-import type { MosaicRasterMeta } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
@@ -42,6 +42,7 @@ import {
 } from '../utils/map/coverage-rings-layer'
 import { registerDomainProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
+import { buildMosaicCellFeatures, mosaicCellStyle } from '../utils/map/mosaic-cells-layer'
 
 const props = withDefaults(defineProps<{
   raster: MosaicRasterMeta | null
@@ -52,14 +53,20 @@ const props = withDefaults(defineProps<{
   radiusM: number
   contributing: string[]
   showCoverage?: boolean
+  /** celdas multi-radar del slot mostrado (P5/D45), sin deduplicar entre sitios */
+  cells?: Phenomenon[]
+  selectedCell?: string | null
 }>(), {
   baseMap: 'osm',
   showCoverage: true,
+  cells: () => [],
+  selectedCell: null,
 })
 
 const emit = defineEmits<{
   cursor: [sample: CursorSample | null]
   rasterError: [message: string]
+  selectCell: [cellId: string | null]
 }>()
 
 const container = ref<HTMLDivElement>()
@@ -69,10 +76,12 @@ let baseLayer: TileLayer<TileSource> | undefined
 let labelsLayer: TileLayer<TileSource> | undefined
 let coverageLayer: VectorLayer<VectorSource> | undefined
 let coverageCenterLayer: VectorLayer<VectorSource> | undefined
+let cellsLayer: VectorLayer<VectorSource> | undefined
 let rasterLayer: WebGLTileLayer | undefined
 let rasterRequestId = 0
 const coverageSource = new VectorSource()
 const coverageCenterSource = new VectorSource()
+const cellsSource = new VectorSource()
 
 const rasterLoaded = ref('none')
 
@@ -89,6 +98,12 @@ function updateCoverage() {
   const contributingSet = new Set(props.contributing)
   coverageSource.addFeatures(buildCoverageFeatures(props.sites, props.radiusM, contributingSet))
   coverageCenterSource.addFeatures(buildCoverageCenterFeatures(props.sites, contributingSet))
+}
+
+function updateCells() {
+  cellsSource.clear()
+  const siteOrder = props.sites.map(s => s.site_id)
+  cellsSource.addFeatures(buildMosaicCellFeatures(props.cells, siteOrder, props.selectedCell))
 }
 
 function updateBaseMap() {
@@ -171,6 +186,11 @@ onMounted(() => {
         style: f => coverageCenterStyle(f as never),
       })),
       labelsLayer,
+      (cellsLayer = new VectorLayer({
+        source: cellsSource,
+        zIndex: 20,
+        style: f => mosaicCellStyle(f as never),
+      })),
     ],
     view: new View({ center: fromLonLat(domainCenter()), zoom: 6 }),
   })
@@ -193,7 +213,17 @@ onMounted(() => {
   const viewport = map.getViewport()
   viewport.addEventListener('pointerleave', () => emit('cursor', null))
 
+  map.on('singleclick', (evt) => {
+    const cellId = map!.forEachFeatureAtPixel(
+      evt.pixel,
+      f => (f.get('f4') === 'cell' ? (f.get('cellId') as string | null) ?? undefined : undefined),
+      { layerFilter: l => l === cellsLayer, hitTolerance: 6 },
+    )
+    if (cellId) emit('selectCell', cellId)
+  })
+
   updateCoverage()
+  updateCells()
   updateRasterLayer()
 
   resizeObserver = new ResizeObserver(() => map?.updateSize())
@@ -204,7 +234,10 @@ watch(() => props.sites, () => {
   if (!map) return
   map.getView().animate({ center: fromLonLat(domainCenter()), duration: 300 })
   updateCoverage()
+  updateCells()
 })
+watch(() => props.cells, updateCells)
+watch(() => props.selectedCell, updateCells)
 
 watch(() => [props.raster?.r2_key, props.productDef?.code], () => updateRasterLayer())
 watch(() => props.opacity, (opacity) => rasterLayer?.setOpacity(opacity))

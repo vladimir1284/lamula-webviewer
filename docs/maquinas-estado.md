@@ -17,7 +17,7 @@ Principios:
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 | `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
 | `annotationMachine` | `machines/annotation.ts` | Anotaciones del usuario sobre el mapa: modo de dibujo, herramienta, colección por sitio | implementada |
-| `mosaicViewerMachine` | `machines/mosaic-viewer.ts` | Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43): hermana reducida de `viewerMachine`, indexada por dominio+slot_time | implementada (sin animación — ver nota abajo) |
+| `mosaicViewerMachine` | `machines/mosaic-viewer.ts` | Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/D45): hermana reducida de `viewerMachine`, indexada por dominio+slot_time; región `cells` para celdas multi-radar (P5) | implementada (sin animación — ver nota abajo) |
 
 ## `viewerMachine`
 
@@ -120,20 +120,20 @@ stateDiagram-v2
 
 ## `mosaicViewerMachine`
 
-Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/P4): mismo patrón
-`type: 'parallel'` de `viewerMachine` (regiones `raster`/`timeline`, URL
-manda, `sameFrame`/`sameDay` evitan refetch, assign optimista de `time`),
-pero indexada por `domain`+`product`+`slot_time` contra `/api/mosaic/*` en
-vez de `site`+`product`+`vol_time`. Diagrama idéntico en forma al de
-`viewerMachine` arriba (mismos nombres de estado, sustituir `vol_time` por
-`slot_time` y `site` por `domain`) — no se repite acá para no duplicar
-mantenimiento; cualquier divergencia real entre las dos máquinas está en el
-contexto y en los eventos, listados abajo.
+Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/P4, D45/P5): mismo
+patrón `type: 'parallel'` de `viewerMachine` (URL manda, `sameFrame`/`sameDay`
+evitan refetch, assign optimista de `time`), pero indexada por
+`domain`+`product`+`slot_time` contra `/api/mosaic/*` en vez de
+`site`+`product`+`vol_time`. Tres regiones: `raster`/`timeline` (diagrama
+idéntico en forma al de `viewerMachine` arriba, sustituir `vol_time` por
+`slot_time` y `site` por `domain` — no se repite acá) y `cells` (P5, propia,
+ver abajo).
 
-**Alcance recortado a propósito** (no es una omisión): sin fenómenos/VWP/
-viento/rayos/anotaciones/export/feedback — esos overlays son por-radar por
-naturaleza y el dominio no tiene un `site_id` único al que atarlos (celdas
-multi-radar etiquetadas llegan en P5 con su propia región). **Sin animación
+**Alcance recortado a propósito** (no es una omisión): sin VWP/viento/rayos/
+anotaciones/export/feedback — esos overlays son por-radar por naturaleza y el
+dominio no tiene un `site_id` único al que atarlos. Celdas de tormenta SÍ
+llegan (P5, región `cells`), porque ahí la pregunta ("¿qué radares ven
+tormentas ahora?") es del dominio, no de un radar. **Sin animación
 todavía**: el pool de frames (`utils/map/frame-pool.ts`, genérico desde
 D43 sobre `CogFrame` para aceptar tanto `RasterMeta` como `MosaicRasterMeta`)
 asume una única proyección compartida por toda la ventana de frames, pero
@@ -149,19 +149,54 @@ dejarlo inerte.
 MosaicRasterMeta[]`, `timelineError`, `liveRefresh`, `atStart`/`atEnd`,
 `opacity`, `base`, `coverage` (overlay de cobertura — default `true`,
 shareable vía `?coverage=0`, **sin** `lamula:prefs`: esta vista no persiste
-nada en localStorage todavía), `cogError`.
+nada en localStorage todavía), `cogError`, `cells: Phenomenon[]`,
+`cellsError`, `selectedCell` (`SITE:ID` o `null`), `cellsKey` (P5, ver abajo).
 
 | Evento | Región | Efecto |
 |---|---|---|
 | `ROUTE_CHANGED` | `raster` | igual que `viewerMachine`, sustituyendo `vol_time`→`slot_time` |
 | `ROUTE_CHANGED` | `timeline` | igual que `viewerMachine` |
+| `ROUTE_CHANGED` | `cells` | refetch si `route.time` (o `nowT`) difiere de `cellsKey` — ver abajo |
 | `STEP(dir)` | `raster` | igual que `viewerMachine` |
 | `SELECT_TIME(time)` / `SELECT_DAY` / `SET_LIVE_REFRESH` | — / `timeline` | igual que `viewerMachine` |
 | `MOUNTED` | — | guard (time `null` + raster resuelto) → `navigate` replace al `slot_time` |
+| `CELLS_INIT` | `cells` | dispara el primer `fetchCells` — enviado por la página en `onMounted`, nunca en SSR |
 | `SELECT_DOMAIN` / `SELECT_PRODUCT` | — | efecto `navigate` push |
 | `SET_OPACITY` / `SELECT_BASE` | — | asignan + `syncQuery` (`?opacity&base&coverage`, igual patrón de replace debounced 300 ms que `viewerMachine`, sin `persistPrefs`) |
 | `TOGGLE_COVERAGE` | — | invierte `context.coverage` + `syncQuery` — controla la capa de anillos de `MosaicMap.vue` (`coverageLayer`/`coverageCenterLayer`), no un fetch: la cobertura siempre se calcula, esto solo oculta el dibujo |
+| `SELECT_CELL(cellId)` | — | asigna `selectedCell` + `syncCellQuery` (`?cell=SITE:ID`, replace **inmediato**, sin debounce — igual criterio que `SELECT_CELL` en `overlayMachine`, D23: un click no debe sentirse con latencia de slider) |
 | `COG_ERROR` | — | asigna contexto |
+
+**Celdas multi-radar (P5, D45):** región `cells` propia. `fetchCells` (provisto
+por la página, sin endpoint nuevo) resuelve, para cada `site_id` del dominio,
+el `vol_time` de fenómenos más cercano al `slot_time` mostrado
+(`nearestWithin`, mismo util que `overlayMachine`) y concatena las filas de
+`/api/phenomena` de cada sitio — **sin deduplicar**: dos radares que vean la
+misma tormenta aparecen dos veces, con su propio `cell_id` (el ID del RPG es
+local al sitio, no global). Un sitio que falla o no tiene volumen en
+tolerancia simplemente no aporta celdas — mismo espíritu que "un radar caído
+no apaga el mosaico" (D43). Identidad compuesta `SITE:ID`
+(`utils/overlay/mosaic-cells.ts::mosaicCellId`) para no colisionar entre
+sitios; color por sitio (`siteColor`, ciclado por posición en
+`MosaicDomain.site_ids`, no por hash) en vez de por severidad/selección como
+`phenomena-layer.ts`. Sin SSR: el primer fetch lo dispara `CELLS_INIT` desde
+`onMounted` (nunca en servidor), evitando un fetch servidor+cliente
+duplicado — el dominio no cambia dentro de la vida de un actor (la página
+remonta entera por `key: route => route.params.domain`), así que el refetch
+por `ROUTE_CHANGED` solo mira si cambió el `slot_time`.
+
+**Gotcha de XState v5 encontrado acá** (canario: el test "ROUTE_CHANGED a
+otro slot_time SÍ refetchea celdas" de `mosaic-viewer-machine.spec.ts` falla
+si se reintroduce): una transición de `cells` a un estado **distinto** del
+activo (p. ej. `ready`/`error` → `loading`) con `reenter: true` explícito,
+en una máquina `type: 'parallel'` donde **otra región sibling también
+maneja el mismo evento**, se descarta en silencio — ni se re-invoca el actor
+ni se re-ejecutan las acciones, sin error ni warning. Reproducido aislado
+(dos regiones paralelas mínimas, sin guards de por medio). `reenter` solo
+hace falta para forzar reentrada en una transición **al mismo** estado
+(self-transition); acá el target ya era distinto del origen, así que ya era
+una transición externa — quitar `reenter: true` lo arregla y además es el
+uso correcto.
 
 **Overlay de cobertura (la pieza central de P4):** `raster.contributing`
 (`MosaicContribution[]`, ya parseado por el DAL) da quién aportó al slot

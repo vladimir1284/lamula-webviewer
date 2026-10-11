@@ -1,10 +1,25 @@
 // mosaicViewerMachine pura (D43/P4) — hermana reducida de viewer-machine.spec.ts:
 // mismas regiones 'raster'/'timeline', indexadas por domain/product/slot_time.
-import type { MosaicRasterMeta } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise } from 'xstate'
 import type { MosaicRouteState, MosaicViewerInput } from '../../machines/mosaic-viewer'
 import { mosaicViewerMachine } from '../../machines/mosaic-viewer'
+
+function cell(site: string, cellId: string): Phenomenon {
+  return {
+    site_id: site,
+    product_code: 153,
+    vol_time: T0,
+    kind: 'storm_cell',
+    cell_id: cellId,
+    lat: 25,
+    lon: -80,
+    azimuth_deg: null,
+    range_km: null,
+    attrs: { dbz_max: 50 },
+  }
+}
 
 const T0 = '2026-07-11T03:15:00'
 const T1 = '2026-07-11T03:10:00'
@@ -38,6 +53,7 @@ const routeAt = (patch: Partial<MosaicRouteState> = {}): MosaicRouteState => ({
   opacity: 0.8,
   base: 'osm',
   coverage: true,
+  cell: null,
   ...patch,
 })
 
@@ -52,12 +68,15 @@ function boot(opts: {
   fetchStep?: (
     input: { domain: string, product: number, t: string, mode: 'next' | 'prev' }
   ) => Promise<MosaicRasterMeta | null>
+  fetchCells?: (input: { domain: string, t: string }) => Promise<Phenomenon[]>
 } = {}) {
   const navigate = vi.fn()
   const syncQuery = vi.fn()
+  const syncCellQuery = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
   const fetchDay = vi.fn(opts.fetchDay ?? (async () => []))
   const fetchStep = vi.fn(opts.fetchStep ?? (async () => null))
+  const fetchCells = vi.fn(opts.fetchCells ?? (async () => []))
   const input: MosaicViewerInput = {
     route: routeAt(opts.route),
     nowT: NOW_T,
@@ -72,16 +91,18 @@ function boot(opts: {
         fetchClosest: fromPromise(({ input: i }) => fetch(i)),
         fetchDay: fromPromise(({ input: i }) => fetchDay(i)),
         fetchStep: fromPromise(({ input: i }) => fetchStep(i)),
+        fetchCells: fromPromise(({ input: i }) => fetchCells(i)),
       },
       actions: {
         navigate: (_, params) => navigate(params),
         syncQuery: (_, params) => syncQuery(params),
+        syncCellQuery: (_, params) => syncCellQuery(params),
       },
     }),
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch, fetchDay, fetchStep, syncQuery }
+  return { actor, navigate, fetch, fetchDay, fetchStep, fetchCells, syncQuery, syncCellQuery }
 }
 
 describe('mosaicViewerMachine — región raster: estado inicial (SSR)', () => {
@@ -196,5 +217,75 @@ describe('mosaicViewerMachine — display prefs', () => {
     actor.send({ type: 'SET_OPACITY', value: 0.3 })
     expect(actor.getSnapshot().context.opacity).toBe(0.3)
     expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.3, base: 'osm', coverage: true })
+  })
+})
+
+describe('mosaicViewerMachine — región cells (P5/D45)', () => {
+  it('arranca en idle, sin fetch antes de CELLS_INIT (nunca en SSR)', () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
+    expect(actor.getSnapshot().matches({ cells: 'idle' })).toBe(true)
+    expect(fetchCells).not.toHaveBeenCalled()
+  })
+
+  it('CELLS_INIT dispara fetchCells con domain+time y resuelve a ready', async () => {
+    const { actor, fetchCells } = boot({
+      initialRaster: meta(T0),
+      fetchCells: async () => [cell('AMX', 'A0'), cell('BYX', 'A0')],
+    })
+    actor.send({ type: 'CELLS_INIT' })
+    expect(actor.getSnapshot().matches({ cells: 'loading' })).toBe(true)
+    expect(fetchCells).toHaveBeenCalledWith({ domain: 'GULF', t: T0 })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    expect(actor.getSnapshot().context.cells).toHaveLength(2)
+  })
+
+  it('CELLS_INIT repetido no vuelve a disparar fetch (cellsKey ya resuelto)', async () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'CELLS_INIT' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    actor.send({ type: 'CELLS_INIT' })
+    expect(fetchCells).toHaveBeenCalledTimes(1)
+  })
+
+  it('ROUTE_CHANGED con mismo slot_time no refetchea celdas', async () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'CELLS_INIT' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ opacity: 0.5 }) })
+    expect(fetchCells).toHaveBeenCalledTimes(1)
+  })
+
+  it('ROUTE_CHANGED a otro slot_time SÍ refetchea celdas', async () => {
+    const { actor, fetchCells } = boot({
+      initialRaster: meta(T0),
+      initialTimes: [meta(T1), meta(T0), meta(T2)],
+    })
+    actor.send({ type: 'CELLS_INIT' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T2 }) })
+    expect(actor.getSnapshot().matches({ cells: 'loading' })).toBe(true)
+    await vi.waitFor(() => expect(fetchCells).toHaveBeenCalledTimes(2))
+    expect(fetchCells).toHaveBeenLastCalledWith({ domain: 'GULF', t: T2 })
+  })
+
+  it('SELECT_CELL asigna selectedCell y sincroniza la query de inmediato', () => {
+    const { actor, syncCellQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SELECT_CELL', cellId: 'AMX:A0' })
+    expect(actor.getSnapshot().context.selectedCell).toBe('AMX:A0')
+    expect(syncCellQuery).toHaveBeenCalledWith({ cellId: 'AMX:A0' })
+  })
+
+  it('SELECT_CELL con null deselecciona', () => {
+    const { actor, syncCellQuery } = boot({ initialRaster: meta(T0), route: { cell: 'AMX:A0' } })
+    expect(actor.getSnapshot().context.selectedCell).toBe('AMX:A0')
+    actor.send({ type: 'SELECT_CELL', cellId: null })
+    expect(actor.getSnapshot().context.selectedCell).toBeNull()
+    expect(syncCellQuery).toHaveBeenCalledWith({ cellId: null })
+  })
+
+  it('ROUTE_CHANGED trae selectedCell desde la URL (atrás/adelante del navegador)', () => {
+    const { actor } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ cell: 'BYX:C3' }) })
+    expect(actor.getSnapshot().context.selectedCell).toBe('BYX:C3')
   })
 })

@@ -9,6 +9,10 @@ import type { MosaicDisplayQueryParams, MosaicNavigatePatch, MosaicRouteState } 
 export const DOMAIN_RE = /^[A-Z0-9]{2,12}$/
 export const MOSAIC_PRODUCT_RE = /^\d+$/
 export const MOSAIC_DEFAULT_OPACITY = 0.8
+/** `SITE:ID` (P5/D45) — distinto del `?cell=ID` del viewer de un solo radar:
+ * el cell_id del RPG es local al sitio, dos radares del dominio pueden
+ * repetirlo. */
+export const MOSAIC_CELL_RE = /^[A-Z0-9]{2,12}:[A-Z0-9]{1,8}$/
 
 /** null si la ruta actual no es una ruta del mosaico o trae params inválidos */
 export function parseMosaicRoute(
@@ -31,6 +35,9 @@ export function parseMosaicRoute(
   // que el usuario lo apague explícitamente — D43/P4)
   const coverage = route.query.coverage !== '0'
 
+  const rawCell = route.query.cell
+  const cell = typeof rawCell === 'string' && MOSAIC_CELL_RE.test(rawCell) ? rawCell : null
+
   return {
     domain,
     product: Number(product),
@@ -38,6 +45,7 @@ export function parseMosaicRoute(
     opacity,
     base: isBaseMapId(route.query.base) ? route.query.base : 'osm',
     coverage,
+    cell,
   }
 }
 
