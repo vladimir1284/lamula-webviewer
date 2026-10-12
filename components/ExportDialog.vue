@@ -40,6 +40,8 @@ const props = defineProps<{
   frameTimes?: string[] | null
 }>()
 
+const { t } = useI18n()
+
 const TITLE = 'LAMULA WebViewer'
 /** mismo origen ⇒ no contamina el canvas; el SVG mide en mm, de ahí el fallback */
 const LOGO_SRC = '/logo.svg'
@@ -136,14 +138,14 @@ async function render() {
     rendered = result.canvas
     outSize.value = { w: result.canvas.width, h: result.canvas.height }
     if (result.skipped.length > 0) {
-      notice.value = `Se omitieron ${result.skipped.length} capa(s) que el navegador no deja leer.`
+      notice.value = t('export.dialog.notices.skippedLayers', { n: result.skipped.length })
     }
     paintPreview(result.canvas)
   }
   catch (e) {
     rendered = null
     outSize.value = null
-    error.value = e instanceof Error ? e.message : 'No se pudo capturar el mapa'
+    error.value = e instanceof Error ? e.message : t('export.dialog.errors.captureFailed')
   }
   finally {
     busy.value = false
@@ -178,7 +180,7 @@ async function pickAvatar(event: Event) {
     }
   }
   catch {
-    error.value = 'No se pudo leer la imagen elegida.'
+    error.value = t('export.dialog.errors.avatarReadFailed')
   }
   finally {
     input.value = '' // re-elegir el mismo fichero tiene que volver a disparar change
@@ -204,7 +206,7 @@ async function download() {
     downloadBlob(await canvasToBlob(rendered), filename.value)
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'No se pudo generar el PNG'
+    error.value = e instanceof Error ? e.message : t('export.dialog.errors.downloadFailed')
   }
 }
 
@@ -214,8 +216,8 @@ function copy() {
   if (!rendered) return
   error.value = null
   copyCanvasToClipboard(rendered)
-    .then(() => { notice.value = 'Imagen copiada al portapapeles.' })
-    .catch(() => { error.value = 'El navegador no dejó copiar la imagen.' })
+    .then(() => { notice.value = t('export.dialog.notices.copied') })
+    .catch(() => { error.value = t('export.dialog.errors.copyFailed') })
 }
 
 // ── Animación (F7.3) ─────────────────────────────────────────────────────
@@ -290,7 +292,7 @@ async function generateAnimation() {
       isCancelled: () => animCancelled,
     })
     if (result.drive.cancelled) {
-      animNotice.value = `Cancelado tras ${result.drive.frames} frames.`
+      animNotice.value = t('export.dialog.notices.cancelled', { n: result.drive.frames })
     }
     downloadBlob(result.blob, exportFilename({
       site: props.site,
@@ -299,10 +301,15 @@ async function generateAnimation() {
       ext: result.ext,
     }))
     const kb = Math.round(result.blob.size / 1024)
-    animNotice.value = `${result.drive.frames} frames · ${result.drive.width}×${result.drive.height} · ${kb} kB`
+    animNotice.value = t('export.dialog.notices.animationSummary', {
+      frames: result.drive.frames,
+      width: result.drive.width,
+      height: result.drive.height,
+      kb,
+    })
   }
   catch (e) {
-    error.value = e instanceof Error ? e.message : 'No se pudo generar la animación'
+    error.value = e instanceof Error ? e.message : t('export.dialog.errors.animationFailed')
   }
   finally {
     animBusy.value = false
@@ -330,14 +337,14 @@ defineExpose({
     ref="dialog"
     data-testid="export-dialog"
     aria-labelledby="export-title"
-    class="w-[min(640px,92vw)] rounded-lg border border-slate-600 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
+    class="w-[min(640px,92vw)] rounded-lg border border-slate-500 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
   >
     <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
-      <h2 id="export-title" class="text-sm font-bold">Exportar imagen</h2>
+      <h2 id="export-title" class="text-sm font-bold">{{ t('export.dialog.title') }}</h2>
       <button
         type="button"
         data-testid="export-close"
-        aria-label="Cerrar"
+        :aria-label="t('export.dialog.close')"
         class="rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100"
         @click="dialog?.close()"
       >
@@ -352,14 +359,14 @@ defineExpose({
           data-testid="export-preview"
           class="mx-auto block max-w-full"
         />
-        <p v-if="busy" class="pt-2 text-center text-xs text-slate-400">Capturando…</p>
-        <p v-else-if="outSize" class="pt-2 text-center text-xs text-slate-500">
+        <p v-if="busy" class="pt-2 text-center text-xs text-slate-400">{{ t('export.dialog.capturing') }}</p>
+        <p v-else-if="outSize" class="pt-2 text-center text-xs text-slate-400">
           {{ outSize.w }} × {{ outSize.h }} px
         </p>
       </div>
 
       <fieldset class="rounded bg-slate-900/60 p-3">
-        <legend class="px-1 text-slate-400">Datos sobre la imagen</legend>
+        <legend class="px-1 text-slate-400">{{ t('export.chrome.legend') }}</legend>
         <div class="flex gap-2">
           <button
             v-for="mode in (['bar', 'overlay', 'none'] as ChromeMode[])"
@@ -370,10 +377,10 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5"
             :class="prefs.chrome === mode
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="setChrome(mode)"
           >
-            {{ mode === 'bar' ? 'Franja' : mode === 'overlay' ? 'Superpuesto' : 'Sin datos' }}
+            {{ t(`export.chrome.mode.${mode}`) }}
           </button>
         </div>
 
@@ -385,7 +392,7 @@ defineExpose({
               :checked="prefs.parts.title"
               @change="setPart('title', ($event.target as HTMLInputElement).checked)"
             >
-            <span>Marca</span>
+            <span>{{ t('export.chrome.parts.title') }}</span>
           </label>
           <label class="flex items-center gap-2">
             <input
@@ -394,7 +401,7 @@ defineExpose({
               :checked="prefs.parts.meta"
               @change="setPart('meta', ($event.target as HTMLInputElement).checked)"
             >
-            <span>Sitio, producto y hora</span>
+            <span>{{ t('export.chrome.parts.meta') }}</span>
           </label>
           <label class="flex items-center gap-2">
             <input
@@ -403,7 +410,7 @@ defineExpose({
               :checked="prefs.parts.legend"
               @change="setPart('legend', ($event.target as HTMLInputElement).checked)"
             >
-            <span>Paleta de colores</span>
+            <span>{{ t('export.chrome.parts.legend') }}</span>
           </label>
           <label class="flex items-center gap-2">
             <input
@@ -412,13 +419,13 @@ defineExpose({
               :checked="prefs.parts.attribution"
               @change="setPart('attribution', ($event.target as HTMLInputElement).checked)"
             >
-            <span>Atribución</span>
+            <span>{{ t('export.chrome.parts.attribution') }}</span>
           </label>
         </div>
       </fieldset>
 
       <fieldset class="rounded bg-slate-900/60 p-3">
-        <legend class="px-1 text-slate-400">Marca</legend>
+        <legend class="px-1 text-slate-400">{{ t('export.brand.legend') }}</legend>
         <label class="flex items-center gap-2">
           <input
             type="checkbox"
@@ -426,7 +433,7 @@ defineExpose({
             :checked="prefs.parts.watermark"
             @change="setPart('watermark', ($event.target as HTMLInputElement).checked)"
           >
-          <span>Logo como marca de agua</span>
+          <span>{{ t('export.brand.watermark') }}</span>
         </label>
 
         <div class="mt-3 flex items-center gap-3">
@@ -446,12 +453,12 @@ defineExpose({
                 :disabled="!prefs.avatarDataUrl || prefs.chrome === 'none'"
                 @change="setPart('avatar', ($event.target as HTMLInputElement).checked)"
               >
-              <span :class="!prefs.avatarDataUrl || prefs.chrome === 'none' ? 'text-slate-500' : ''">
-                Incluir mi foto
+              <span :class="!prefs.avatarDataUrl || prefs.chrome === 'none' ? 'text-slate-400' : ''">
+                {{ t('export.brand.includeAvatar') }}
               </span>
             </label>
-            <p class="pt-1 text-xs text-slate-500">
-              Se guarda solo en este navegador y nunca se envía.
+            <p class="pt-1 text-xs text-slate-400">
+              {{ t('export.brand.avatarNote') }}
             </p>
           </div>
           <input
@@ -465,16 +472,16 @@ defineExpose({
             v-if="prefs.avatarDataUrl"
             type="button"
             data-testid="export-avatar-clear"
-            class="shrink-0 rounded border border-slate-600 px-2 py-1 text-xs hover:bg-slate-700"
+            class="shrink-0 rounded border border-slate-500 px-2 py-1 text-xs hover:bg-slate-700"
             @click="clearAvatar"
           >
-            Quitar
+            {{ t('export.brand.removeAvatar') }}
           </button>
         </div>
       </fieldset>
 
       <fieldset class="rounded bg-slate-900/60 p-3">
-        <legend class="px-1 text-slate-400">Resolución</legend>
+        <legend class="px-1 text-slate-400">{{ t('export.resolution.legend') }}</legend>
         <div class="flex gap-2">
           <button
             v-for="s in ([1, 2] as const)"
@@ -485,7 +492,7 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5"
             :class="prefs.scale === s
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="setScale(s)"
           >
             {{ s }}×
@@ -494,7 +501,7 @@ defineExpose({
       </fieldset>
 
       <fieldset class="rounded bg-slate-900/60 p-3">
-        <legend class="px-1 text-slate-400">Animación</legend>
+        <legend class="px-1 text-slate-400">{{ t('export.animation.legend') }}</legend>
         <div class="flex gap-2">
           <button
             type="button"
@@ -504,10 +511,10 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
             :class="animKind === 'sequence'
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="animKindPref = 'sequence'"
           >
-            Secuencia del radar
+            {{ t('export.animation.sequence') }}
           </button>
           <button
             type="button"
@@ -517,16 +524,15 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
             :class="animKind === 'phase'
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="animKindPref = 'phase'"
           >
-            Bucle de rayos
+            {{ t('export.animation.phase') }}
           </button>
         </div>
 
-        <p v-if="!canSequence" class="pt-2 text-xs text-slate-500">
-          Para exportar la secuencia, reproduce primero la animación: los frames se
-          exportan del mismo pool que usa el reproductor.
+        <p v-if="!canSequence" class="pt-2 text-xs text-slate-400">
+          {{ t('export.animation.sequenceHint') }}
         </p>
 
         <div class="mt-3 flex gap-2">
@@ -538,7 +544,7 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
             :class="animFormat === 'gif'
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="animFormat = 'gif'"
           >
             GIF
@@ -552,10 +558,10 @@ defineExpose({
             class="flex-1 rounded border px-2 py-1.5 disabled:opacity-40"
             :class="animFormat === 'video'
               ? 'border-teal-400 bg-slate-700 text-teal-300'
-              : 'border-slate-600 bg-slate-900 hover:bg-slate-700'"
+              : 'border-slate-500 bg-slate-900 hover:bg-slate-700'"
             @click="animFormat = 'video'"
           >
-            Vídeo
+            {{ t('export.animation.formatVideo') }}
           </button>
         </div>
 
@@ -567,16 +573,16 @@ defineExpose({
             :disabled="animBusy || busy || !handle"
             @click="generateAnimation"
           >
-            {{ animBusy ? `Capturando ${animDone}/${animTotal}…` : 'Generar y descargar' }}
+            {{ animBusy ? t('export.animation.generating', { done: animDone, total: animTotal }) : t('export.animation.generate') }}
           </button>
           <button
             v-if="animBusy"
             type="button"
             data-testid="export-anim-cancel"
-            class="shrink-0 rounded border border-slate-600 px-2 py-2 hover:bg-slate-700"
+            class="shrink-0 rounded border border-slate-500 px-2 py-2 hover:bg-slate-700"
             @click="cancelAnimation"
           >
-            Cancelar
+            {{ t('export.animation.cancel') }}
           </button>
         </div>
         <p v-if="animNotice" data-testid="export-anim-notice" class="pt-2 text-xs text-slate-400">
@@ -599,20 +605,20 @@ defineExpose({
           :disabled="busy || !outSize"
           @click="download"
         >
-          Descargar PNG
+          {{ t('export.actions.downloadPng') }}
         </button>
         <button
           v-if="canCopy"
           type="button"
           data-testid="export-copy"
-          class="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-2 hover:bg-slate-700 disabled:opacity-40"
+          class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-2 hover:bg-slate-700 disabled:opacity-40"
           :disabled="busy || !outSize"
           @click="copy"
         >
-          Copiar
+          {{ t('export.actions.copy') }}
         </button>
       </div>
-      <p class="truncate text-xs text-slate-500">{{ filename }}</p>
+      <p class="truncate text-xs text-slate-400">{{ filename }}</p>
     </div>
   </dialog>
 </template>

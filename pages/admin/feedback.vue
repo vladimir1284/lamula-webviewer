@@ -3,8 +3,10 @@ import { onMounted, ref } from 'vue'
 import type { FeedbackAdminItem, FeedbackStatus } from '#shared/contract'
 import { FEEDBACK_APPS, FEEDBACK_ROLES, FEEDBACK_STATUSES } from '#shared/contract'
 
+const { t } = useI18n()
+
 useHead({
-  title: 'Gestión de Feedback — Admin LAMULA',
+  title: t('admin.feedback.pageTitle'),
   meta: [{ name: 'robots', content: 'noindex' }],
 })
 
@@ -37,7 +39,7 @@ async function loadFeedback() {
       await navigateTo('/admin/login')
     }
     else {
-      error.value = errorObj.statusMessage || errorObj.message || 'Error cargando feedback'
+      error.value = errorObj.statusMessage || errorObj.message || t('admin.feedback.loadError')
     }
   }
   finally {
@@ -59,7 +61,7 @@ async function onUpdateStatus(id: string, newStatus: FeedbackStatus) {
   }
   catch (err: unknown) {
     const errorObj = err as { statusMessage?: string; message?: string }
-    alert(errorObj.statusMessage || errorObj.message || 'Error actualizando estado')
+    alert(errorObj.statusMessage || errorObj.message || t('admin.feedback.statusUpdateError'))
   }
 }
 
@@ -78,7 +80,7 @@ async function onSendReply(id: string) {
   }
   catch (err: unknown) {
     const errorObj = err as { statusMessage?: string; message?: string }
-    alert(errorObj.statusMessage || errorObj.message || 'Error enviando respuesta')
+    alert(errorObj.statusMessage || errorObj.message || t('admin.feedback.replyError'))
   }
   finally {
     submittingReply.value = false
@@ -92,10 +94,10 @@ async function onSendReply(id: string) {
       <header class="flex items-center justify-between border-b border-slate-800 pb-4">
         <div>
           <h1 class="text-xl font-bold text-teal-400">
-            Administración de Feedback
+            {{ t('admin.feedback.title') }}
           </h1>
           <p class="text-xs text-slate-400">
-            Revisa y responde opiniones de usuarios de LAMULA WebViewer.
+            {{ t('admin.feedback.subtitle') }}
           </p>
         </div>
         <button
@@ -103,45 +105,45 @@ async function onSendReply(id: string) {
           class="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
           @click="loadFeedback"
         >
-          🔄 Refrescar
+          🔄 {{ t('admin.feedback.refresh') }}
         </button>
       </header>
 
       <!-- Filtros -->
       <div class="flex gap-4 bg-slate-900 p-4 rounded-lg border border-slate-800 text-xs">
         <label class="block">
-          <span class="block text-slate-400 mb-1">Estado</span>
+          <span class="block text-slate-400 mb-1">{{ t('admin.feedback.filters.statusLabel') }}</span>
           <select v-model="selectedStatus" class="rounded bg-slate-800 border border-slate-700 p-1.5 text-slate-100" @change="loadFeedback">
-            <option value="">Todos los estados</option>
-            <option v-for="s in FEEDBACK_STATUSES" :key="s" :value="s">{{ s }}</option>
+            <option value="">{{ t('admin.feedback.filters.allStatuses') }}</option>
+            <option v-for="s in FEEDBACK_STATUSES" :key="s" :value="s">{{ t(`admin.statuses.${s}`) }}</option>
           </select>
         </label>
 
         <label class="block">
-          <span class="block text-slate-400 mb-1">Ocupación / Rol</span>
+          <span class="block text-slate-400 mb-1">{{ t('admin.feedback.filters.roleLabel') }}</span>
           <select v-model="selectedRole" class="rounded bg-slate-800 border border-slate-700 p-1.5 text-slate-100" @change="loadFeedback">
-            <option value="">Todas las ocupaciones</option>
-            <option v-for="r in FEEDBACK_ROLES" :key="r" :value="r">{{ r }}</option>
+            <option value="">{{ t('admin.feedback.filters.allRoles') }}</option>
+            <option v-for="r in FEEDBACK_ROLES" :key="r" :value="r">{{ t(`feedback.roles.${r}`) }}</option>
           </select>
         </label>
 
         <label class="block">
-          <span class="block text-slate-400 mb-1">Producto</span>
+          <span class="block text-slate-400 mb-1">{{ t('admin.feedback.filters.appLabel') }}</span>
           <select v-model="selectedApp" class="rounded bg-slate-800 border border-slate-700 p-1.5 text-slate-100" @change="loadFeedback">
-            <option value="">Todos los productos</option>
-            <option v-for="a in FEEDBACK_APPS" :key="a" :value="a">{{ a }}</option>
+            <option value="">{{ t('admin.feedback.filters.allApps') }}</option>
+            <option v-for="a in FEEDBACK_APPS" :key="a" :value="a">{{ t(`admin.apps.${a}`) }}</option>
           </select>
         </label>
       </div>
 
       <p v-if="loading" class="text-xs text-slate-400 py-6 text-center">
-        Cargando mensajes...
+        {{ t('admin.feedback.loading') }}
       </p>
       <p v-else-if="error" class="text-xs text-red-400 py-6 text-center">
         {{ error }}
       </p>
-      <p v-else-if="items.length === 0" class="text-xs text-slate-500 py-6 text-center">
-        No hay mensajes registrados con estos filtros.
+      <p v-else-if="items.length === 0" class="text-xs text-slate-400 py-6 text-center">
+        {{ t('admin.feedback.empty') }}
       </p>
 
       <!-- Lista de items -->
@@ -154,9 +156,9 @@ async function onSendReply(id: string) {
           <div class="flex items-start justify-between text-xs border-b border-slate-800/80 pb-3">
             <div class="space-y-1">
               <div class="flex items-center gap-2">
-                <span class="font-bold text-teal-300 text-sm capitalize">{{ item.user.role }}</span>
+                <span class="font-bold text-teal-300 text-sm capitalize">{{ t(`feedback.roles.${item.user.role}`) }}</span>
                 <span v-if="item.user.roleOther" class="text-slate-400">({{ item.user.roleOther }})</span>
-                <span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-300 uppercase">{{ item.kind }}</span>
+                <span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-300 uppercase">{{ t(`feedback.kinds.${item.kind}`) }}</span>
                 <span
                   class="rounded px-2 py-0.5 font-mono text-[10px] uppercase"
                   :class="item.app === 'process' ? 'bg-indigo-900/60 text-indigo-200' : 'bg-slate-800 text-slate-400'"
@@ -172,13 +174,13 @@ async function onSendReply(id: string) {
             </div>
 
             <div class="flex items-center gap-3">
-              <span class="text-slate-500 text-[11px]">{{ item.createdAt.slice(0, 16).replace('T', ' ') }}</span>
+              <span class="text-slate-400 text-[11px]">{{ item.createdAt.slice(0, 16).replace('T', ' ') }}</span>
               <select
                 :value="item.status"
                 class="rounded bg-slate-800 border border-slate-700 p-1 text-xs text-slate-200"
                 @change="onUpdateStatus(item.id, ($event.target as HTMLSelectElement).value as FeedbackStatus)"
               >
-                <option v-for="s in FEEDBACK_STATUSES" :key="s" :value="s">{{ s }}</option>
+                <option v-for="s in FEEDBACK_STATUSES" :key="s" :value="s">{{ t(`admin.statuses.${s}`) }}</option>
               </select>
             </div>
           </div>
@@ -189,9 +191,9 @@ async function onSendReply(id: string) {
           </p>
 
           <!-- Contexto capturado -->
-          <details v-if="item.context && Object.keys(item.context).length > 0" class="text-xs text-slate-500">
+          <details v-if="item.context && Object.keys(item.context).length > 0" class="text-xs text-slate-400">
             <summary class="cursor-pointer hover:text-slate-300">
-              Contexto del mapa (site, producto, URL, visor)
+              {{ t('admin.feedback.contextSummary') }}
             </summary>
             <pre class="mt-2 rounded bg-slate-950 p-2 font-mono text-[10px] text-slate-400 overflow-x-auto">{{ JSON.stringify(item.context, null, 2) }}</pre>
           </details>
@@ -205,7 +207,7 @@ async function onSendReply(id: string) {
             >
               <div class="flex justify-between font-bold text-teal-400 mb-1">
                 <span>{{ r.author }}</span>
-                <span class="text-[10px] text-slate-500">{{ r.createdAt.slice(0, 16).replace('T', ' ') }} {{ r.readAt ? '(Leído)' : '(Pendiente)' }}</span>
+                <span class="text-[10px] text-slate-400">{{ r.createdAt.slice(0, 16).replace('T', ' ') }} {{ r.readAt ? t('admin.feedback.read') : t('admin.feedback.pending') }}</span>
               </div>
               <p class="text-slate-300 whitespace-pre-wrap">
                 {{ r.body }}
@@ -221,15 +223,15 @@ async function onSendReply(id: string) {
               class="text-xs text-teal-400 font-semibold hover:underline"
               @click="replyingId = item.id; replyText = ''"
             >
-              💬 Responder a este usuario
+              💬 {{ t('admin.feedback.replyButton') }}
             </button>
 
             <div v-else class="space-y-2 mt-2">
               <textarea
                 v-model="replyText"
                 rows="2"
-                class="w-full rounded border border-slate-700 bg-slate-800 p-2 text-xs text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:outline-none"
-                placeholder="Escribe la respuesta oficial para el usuario..."
+                class="w-full rounded border border-slate-700 bg-slate-800 p-2 text-xs text-slate-100 placeholder-slate-400 focus:border-teal-400"
+                :placeholder="t('admin.feedback.replyPlaceholder')"
               />
               <div class="flex justify-end gap-2">
                 <button
@@ -237,7 +239,7 @@ async function onSendReply(id: string) {
                   class="px-3 py-1 text-xs text-slate-400 hover:text-slate-200"
                   @click="replyingId = null"
                 >
-                  Cancelar
+                  {{ t('admin.feedback.cancel') }}
                 </button>
                 <button
                   type="button"
@@ -245,7 +247,7 @@ async function onSendReply(id: string) {
                   class="rounded bg-teal-600 px-3 py-1 text-xs font-bold text-slate-950 hover:bg-teal-500 disabled:opacity-50"
                   @click="onSendReply(item.id)"
                 >
-                  Enviar respuesta
+                  {{ t('admin.feedback.sendReply') }}
                 </button>
               </div>
             </div>

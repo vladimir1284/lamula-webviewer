@@ -63,6 +63,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { t } = useI18n()
 // sin export en esta vista todavía (P4 no lo incluye) — la ref solo existe
 // porque el template la asigna a MosaicMap vía `ref="radarMap"`
 const radarMap = ref(null)
@@ -299,20 +300,20 @@ const lightningStrikesShown = computed(() =>
 )
 const windInfo = computed(() => {
   if (!ctx.value.layers.includes('wind')) return null
-  if (snapshot.value.matches({ wind: 'error' })) return `Error cargando viento: ${ctx.value.windError}`
-  if (snapshot.value.matches({ wind: 'noData' })) return 'Sin dato de viento para este slot.'
-  if (snapshot.value.matches({ wind: 'loading' })) return 'Cargando viento…'
-  return 'Unión de las grillas GFS de los radares del dominio.'
+  if (snapshot.value.matches({ wind: 'error' })) return t('status.wind.error', { detail: ctx.value.windError })
+  if (snapshot.value.matches({ wind: 'noData' })) return t('status.wind.noDataSlot')
+  if (snapshot.value.matches({ wind: 'loading' })) return t('status.wind.loading')
+  return t('status.wind.mosaicUnion')
 })
 const lightningInfo = computed(() => {
   if (!ctx.value.layers.includes('lightning')) return null
-  if (snapshot.value.matches({ lightning: 'error' })) return `Error cargando rayos: ${ctx.value.lightningError}`
-  if (snapshot.value.matches({ lightning: 'loading' })) return 'Cargando rayos…'
+  if (snapshot.value.matches({ lightning: 'error' })) return t('status.lightning.error', { detail: ctx.value.lightningError })
+  if (snapshot.value.matches({ lightning: 'loading' })) return t('status.lightning.loading')
   const strikes = ctx.value.lightningStrikes
   if (strikes === null) return null
   return strikes.length === 0
-    ? 'Sin descargas dentro del intervalo del slot.'
-    : `${strikes.length} descargas en el intervalo del slot.`
+    ? t('status.lightning.emptySlot')
+    : t('status.lightning.countSlot', { n: strikes.length }, strikes.length)
 })
 const satTimeLabel = computed(() =>
   ctx.value.sat && raster.value ? formatFull(raster.value.slot_time, ctx.value.clock) : null,
@@ -451,6 +452,10 @@ const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target && EDITABLE_TAGS.has(target.tagName)) return
+  // El mapa es focusable (accesibilidad) y OL panea con las flechas. Sin este
+  // guard un ArrowLeft con el foco en el mapa paneaba Y retrocedía de frame.
+  // El dueño de las flechas es quien tiene el foco, no la página.
+  if (target?.closest('[role="application"]')) return
   if (event.key === 'ArrowLeft') onTimelineStep(-1)
   else if (event.key === 'ArrowRight') onTimelineStep(1)
 }
@@ -544,11 +549,11 @@ const singleRadarPath = computed(() => {
 
       <div class="pointer-events-none absolute bottom-6 left-4 right-4 z-10 md:left-8 md:right-8">
         <div class="pointer-events-auto">
-          <p v-if="timelineFetchError" data-testid="mosaic-timeline-error" class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow">
-            Error consultando la timeline del mosaico: {{ timelineFetchError }}
+          <p v-if="timelineFetchError" data-testid="mosaic-timeline-error" role="alert" class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow">
+            {{ t('status.timeline.mosaicError', { detail: timelineFetchError }) }}
           </p>
-          <p v-else-if="timelineEmpty" data-testid="mosaic-timeline-empty" class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow">
-            Sin mosaicos este día (UTC).
+          <p v-else-if="timelineEmpty" data-testid="mosaic-timeline-empty" role="status" class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow">
+            {{ t('status.timeline.mosaicEmpty') }}
           </p>
           <TimelineStrip
             v-else-if="timelineReady"

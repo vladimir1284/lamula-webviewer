@@ -1,0 +1,9 @@
+{
+  "map": {
+    "legendAriaLabel": "Leyenda ({unit})",
+    "rangeFoldedLegend": "RF — range folded",
+    "dayPickerAriaLabel": "Día (UTC)",
+    "ariaLabel": "Mapa de radar. Flechas para desplazar, + y − para acercar.",
+    "ariaRoleDescription": "mapa interactivo"
+  }
+}

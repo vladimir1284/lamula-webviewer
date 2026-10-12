@@ -11,6 +11,7 @@
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
 import { defaults as defaultControls } from 'ol/control'
+import { defaults as defaultInteractions } from 'ol/interaction'
 import View from 'ol/View'
 import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
@@ -139,6 +140,8 @@ const emit = defineEmits<{
   /** trazo existente movido o reformado con Modify */
   annotationUpdate: [annotation: Annotation]
 }>()
+
+const { t } = useI18n()
 
 const container = ref<HTMLDivElement>()
 let resizeObserver: ResizeObserver | undefined
@@ -497,6 +500,18 @@ onMounted(() => {
   map = new Map({
     target: container.value,
     controls: defaultControls({ zoom: false }),
+    // Interacciones explícitas en vez de las que `Map` monta solo: OL 10.9
+    // las construye con `onFocusOnly: true` (ver `ol/Map.js`), y esa opción
+    // SOLO muerde cuando el elemento target tiene `tabindex` — que es lo que
+    // pide la accesibilidad por teclado (D54). El efecto era que `DragPan` y
+    // `MouseWheelZoom` exigían que el mapa YA tuviera el foco: el foco llega
+    // en `mousedown`, posterior al `pointerdown` donde OL evalúa la condición,
+    // así que el PRIMER arrastre tras cargar la página no movía nada. Con
+    // `onFocusOnly: false` el comportamiento vuelve a ser el de antes de poner
+    // `tabindex` (sin el atributo, `focusWithTabindex` se cortocircuitaba a
+    // `true`), y el teclado sigue funcionando: KeyboardPan/KeyboardZoom no
+    // usan esta opción, solo necesitan que el keydown llegue al target.
+    interactions: defaultInteractions({ onFocusOnly: false }),
     layers: [
       baseLayer,
       satelliteLayer,
@@ -780,10 +795,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!--
+    `tabindex="0"` no es decorativo: sin él el viewport nunca recibe foco y las
+    interacciones KeyboardPan/KeyboardZoom que `defaults()` de OL ya monta no
+    disparan jamás. `role="application"` es lo único que hace que un lector de
+    pantalla entregue las flechas al mapa en vez de moverlas por el buffer
+    virtual; es aceptable acá porque dentro del div solo hay canvas — todo dato
+    legible (celdas, valor bajo el cursor, VWP) vive en paneles fuera del mapa.
+    El listener global de flechas de la página se desactiva mientras el foco
+    está acá dentro, si no un ArrowLeft paneaba Y saltaba de frame a la vez.
+  -->
   <div
     ref="container"
     data-testid="radar-map"
     :data-raster-loaded="rasterLoaded"
     class="h-full w-full"
+    tabindex="0"
+    role="application"
+    :aria-label="t('map.ariaLabel')"
+    :aria-roledescription="t('map.ariaRoleDescription')"
   />
 </template>

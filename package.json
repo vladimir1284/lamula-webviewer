@@ -11,6 +11,7 @@
     "build": "node scripts/build-assets.mjs && nuxt build",
     "preview": "node .output/server/index.mjs",
     "postinstall": "node scripts/build-assets.mjs && nuxt prepare",
+    "check:i18n": "node scripts/check-i18n.mjs && node scripts/check-i18n-raw.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "nuxt typecheck",
@@ -20,6 +21,7 @@
     "shot:export": "node scripts/shot-export.mjs"
   },
   "dependencies": {
+    "@nuxtjs/i18n": "^10.6.0",
     "@pinia/nuxt": "^0.11.2",
     "@xstate/vue": "^5.0.0",
     "geotiff": "^3.0.5",
@@ -49,6 +51,7 @@
     "happy-dom": "^17.4.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0",
+    "vue-i18n": "^11.4.14",
     "vue-tsc": "^2.2.10"
   }
 }

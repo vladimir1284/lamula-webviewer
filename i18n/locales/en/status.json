@@ -1,0 +1,28 @@
+{
+  "status": {
+    "wind": {
+      "error": "Error loading wind: {detail}",
+      "loading": "Loading wind…",
+      "noDataFrame": "No wind data for this frame.",
+      "noDataSlot": "No wind data for this slot.",
+      "mosaicUnion": "Union of the GFS grids of the radars in the domain.",
+      "gfs": "GFS cycle {cycle}Z f{forecastHour} · {valid}Z{levelSuffix}"
+    },
+    "lightning": {
+      "error": "Error loading lightning: {detail}",
+      "loading": "Loading lightning…",
+      "noDataFrame": "No strikes recorded for this frame.",
+      "emptyFrame": "No strikes within the frame interval.",
+      "countFrame": "{n} strike within the frame interval. | {n} strikes within the frame interval.",
+      "emptySlot": "No strikes within the slot interval.",
+      "countSlot": "{n} strike within the slot interval. | {n} strikes within the slot interval."
+    },
+    "timeline": {
+      "error": "Error fetching the timeline: {detail}",
+      "empty": "No volume scans on this day (UTC).",
+      "mosaicError": "Error fetching the mosaic timeline: {detail}",
+      "mosaicEmpty": "No mosaics on this day (UTC)."
+    },
+    "domainsUnavailable": "Mosaic domains unavailable: {detail}"
+  }
+}

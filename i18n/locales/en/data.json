@@ -1,0 +1,30 @@
+{
+  "data": {
+    "title": "Data",
+    "tabs": {
+      "cells": "Cells",
+      "trend": "Trend",
+      "vwp": "VWP"
+    },
+    "vwp": {
+      "tabChart": "Chart",
+      "tabTable": "Data",
+      "error": "Error querying VWP: {error}",
+      "empty": "No wind profile available up to this point in the day."
+    },
+    "cells": {
+      "title": "Storm cells",
+      "noJoin": "No cell data near this instant.",
+      "empty": "No cells detected in this volume.",
+      "dbzMaxHeader": "Max dBZ",
+      "altHeader": "Alt ({unit})",
+      "movHeader": "Mov",
+      "pastHeader": "Past",
+      "futureHeader": "Fut.",
+      "pastTitle": "Past track",
+      "futureTitle": "Future track",
+      "newBadge": "New"
+    },
+    "tabsAriaLabel": "Data sections"
+  }
+}

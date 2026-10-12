@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Ventana de retención de 72h explícita (decisión 11): 3-4 botones de día
 // UTC en vez de un calendario — dayWindow72h ya resuelve qué días existen.
+const { t } = useI18n()
+
 defineProps<{
   days: string[]
   modelValue: string
@@ -12,7 +14,7 @@ defineEmits<{
 </script>
 
 <template>
-  <div data-testid="day-picker" class="flex flex-wrap gap-1" role="group" aria-label="Día (UTC)">
+  <div data-testid="day-picker" class="flex flex-wrap gap-1" role="group" :aria-label="t('map.dayPickerAriaLabel')">
     <button
       v-for="day in days"
       :key="day"

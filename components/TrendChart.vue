@@ -11,6 +11,8 @@ import { clockSuffix, formatHhmm } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
 import { convertHeightKft, heightUnit } from '../utils/units'
 
+const { t } = useI18n()
+
 const props = withDefaults(defineProps<{
   /** serie cross-volumen de /api/phenomena/series, o null */
   series: Phenomenon[] | null
@@ -83,9 +85,9 @@ function buildChart(title: string, unit: string, pick: (a: ReturnType<typeof sto
 
 const charts = computed(() => {
   const list = [
-    buildChart('dBZ máx', 'dBZ', a => a.dbz_max),
+    buildChart(t('charts.trend.dbzMax'), 'dBZ', a => a.dbz_max),
     // convertir dentro del pick, ANTES de linearScale: ticks redondos en km
-    buildChart('Altura del máx', heightUnit(props.units, 'kft'), (a) => {
+    buildChart(t('charts.trend.maxHeight'), heightUnit(props.units, 'kft'), (a) => {
       const v = a.dbz_max_height_kft
       return v === undefined ? undefined : convertHeightKft(v, props.units)
     }),
@@ -97,24 +99,24 @@ const charts = computed(() => {
 <template>
   <div class="text-sm">
     <h2 class="mb-2 font-semibold">
-      Tendencia <span v-if="cellId" class="font-mono text-yellow-200">{{ cellId }}</span>
+      {{ t('charts.trend.title') }} <span v-if="cellId" class="font-mono text-yellow-200">{{ cellId }}</span>
     </h2>
     <p v-if="error" data-testid="trend-error" class="rounded bg-amber-900/40 p-3 text-amber-200">
-      Error consultando la serie: {{ error }}
+      {{ t('charts.trend.error', { error }) }}
     </p>
     <p
       v-else-if="!cellId"
       data-testid="trend-no-cell"
       class="rounded bg-slate-800 p-3 text-slate-400"
     >
-      Selecciona una celda en el mapa o en la tabla.
+      {{ t('charts.trend.noCell') }}
     </p>
     <p
       v-else-if="charts.length === 0"
       data-testid="trend-empty"
       class="rounded bg-slate-800 p-3 text-slate-400"
     >
-      La serie de esta celda no trae dBZ máx (GAB pagina de a 6 celdas).
+      {{ t('charts.trend.empty') }}
     </p>
     <template v-else>
       <figure

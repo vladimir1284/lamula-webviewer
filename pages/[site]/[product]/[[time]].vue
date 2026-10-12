@@ -14,7 +14,7 @@ import type {
   WindGridMeta,
   WindLevel,
 } from '#shared/contract'
-import { WIND_LEVEL_LABELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
+import { zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
 import { loadAnnotations, saveAnnotations } from '../../../composables/useAnnotations'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
@@ -58,6 +58,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { t } = useI18n()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 const exportDialog = ref<{ open: () => void }>()
@@ -417,8 +418,8 @@ function onToggleAnimation() {
   if (wasPlaying) {
     // decisión F3: durante playback la URL no se toca; al pausar, replace
     // con el frame que quedó visible
-    const t = animFrames.value?.[animSnapshot.value.context.index]?.vol_time
-    if (t) send({ type: 'SELECT_TIME', time: t })
+    const volTime = animFrames.value?.[animSnapshot.value.context.index]?.vol_time
+    if (volTime) send({ type: 'SELECT_TIME', time: volTime })
   }
 }
 
@@ -707,19 +708,22 @@ const windInfo = computed(() => {
   if (!ctx.value.layers.includes('wind')) return null
   const s = overlaySnapshot.value
   if (s.matches({ wind: 'error' })) {
-    return `Error cargando viento: ${overlayCtx.value.windError}`
+    return t('status.wind.error', { detail: overlayCtx.value.windError })
   }
-  if (s.matches({ wind: 'noData' })) return 'Sin dato de viento para este frame.'
+  if (s.matches({ wind: 'noData' })) return t('status.wind.noDataFrame')
   const meta = overlayCtx.value.windTimes?.find(
     w => w.valid_time === overlayCtx.value.windJoined,
   )
   if (!meta) return null
-  const cycleH = meta.cycle_time.slice(11, 13)
-  const validHm = meta.valid_time.slice(11, 16)
   // '10m' es el nivel por defecto (único ingerido en producción) — no se
   // repite en la etiqueta, que ya se lee en el <select> de nivel
-  const levelSuffix = meta.level === '10m' ? '' : ` · ${WIND_LEVEL_LABELS[meta.level]}`
-  return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z${levelSuffix}`
+  const levelSuffix = meta.level === '10m' ? '' : ` · ${t(`layers.wind.levels.${meta.level}`)}`
+  return t('status.wind.gfs', {
+    cycle: meta.cycle_time.slice(11, 13),
+    forecastHour: String(meta.forecast_hour).padStart(3, '0'),
+    valid: meta.valid_time.slice(11, 16),
+    levelSuffix,
+  })
 })
 
 // ── Capa de rayos (GLM) ──────────────────────────────────────────────────
@@ -732,16 +736,16 @@ const lightningInfo = computed(() => {
   if (!ctx.value.layers.includes('lightning')) return null
   const s = overlaySnapshot.value
   if (s.matches({ lightning: 'error' })) {
-    return `Error cargando rayos: ${overlayCtx.value.lightningError}`
+    return t('status.lightning.error', { detail: overlayCtx.value.lightningError })
   }
   if (s.matches({ lightning: 'noData' })) {
-    return 'Sin descargas registradas para este frame.'
+    return t('status.lightning.noDataFrame')
   }
   const strikes = overlayCtx.value.lightningStrikes
   if (strikes === null) return null
   return strikes.length === 0
-    ? 'Sin descargas dentro del intervalo del frame.'
-    : `${strikes.length} descargas en el intervalo del frame.`
+    ? t('status.lightning.emptyFrame')
+    : t('status.lightning.countFrame', { n: strikes.length }, strikes.length)
 })
 
 function onToggleLayer(layer: OverlayLayerId) {
@@ -760,6 +764,10 @@ const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target && EDITABLE_TAGS.has(target.tagName)) return
+  // El mapa es focusable (accesibilidad) y OL panea con las flechas. Sin este
+  // guard un ArrowLeft con el foco en el mapa paneaba Y retrocedía de frame.
+  // El dueño de las flechas es quien tiene el foco, no la página.
+  if (target?.closest('[role="application"]')) return
   if (event.key === 'ArrowLeft') onTimelineStep(-1)
   else if (event.key === 'ArrowRight') onTimelineStep(1)
 }
@@ -992,16 +1000,18 @@ function onSatOpacityInput(event: Event) {
           <p
             v-if="timelineFetchError"
             data-testid="timeline-error"
+            role="alert"
             class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
           >
-            Error consultando la timeline: {{ timelineFetchError }}
+            {{ t('status.timeline.error', { detail: timelineFetchError }) }}
           </p>
           <p
             v-else-if="timelineEmpty"
             data-testid="timeline-empty"
+            role="status"
             class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
           >
-            Sin volúmenes este día (UTC).
+            {{ t('status.timeline.empty') }}
           </p>
           <TimelineStrip
             v-else-if="timelineReady"

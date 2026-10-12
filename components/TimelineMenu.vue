@@ -7,6 +7,8 @@
 import { ref } from 'vue'
 import type { UserPrefsSlice } from '../machines/viewer'
 
+const { t } = useI18n()
+
 withDefaults(defineProps<{
   animationFrames: number
   speed?: number
@@ -34,14 +36,14 @@ defineExpose({
     ref="dialog"
     data-testid="timeline-menu-dialog"
     aria-labelledby="timeline-menu-title"
-    class="w-72 rounded-lg border border-slate-600 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
+    class="w-72 rounded-lg border border-slate-500 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
   >
     <form method="dialog">
       <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
-        <h2 id="timeline-menu-title" class="text-sm font-bold">{{ showSpeed ? 'Animación' : 'Línea de tiempo' }}</h2>
+        <h2 id="timeline-menu-title" class="text-sm font-bold">{{ showSpeed ? t('timeline.menuTitleAnimation') : t('timeline.menuTitleTimeline') }}</h2>
         <button
           data-testid="timeline-menu-close"
-          aria-label="Cerrar"
+          :aria-label="t('common.close')"
           class="rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100"
         >
           ✕
@@ -50,10 +52,10 @@ defineExpose({
 
       <div class="space-y-4 p-4 text-sm">
         <label class="flex items-center gap-2">
-          <span class="w-32">Observaciones:</span>
+          <span class="w-32">{{ t('timeline.observations') }}</span>
           <select
             data-testid="pref-animation-frames"
-            class="rounded border border-slate-600 bg-slate-800 px-2 py-1 flex-1"
+            class="rounded border border-slate-500 bg-slate-800 px-2 py-1 flex-1"
             :value="String(animationFrames)"
             @change="emit('setPref', { animationFrames: Number(($event.target as HTMLSelectElement).value) })"
           >
@@ -65,7 +67,7 @@ defineExpose({
         </label>
 
         <fieldset v-if="showSpeed" class="rounded bg-slate-900/60 p-3">
-          <legend class="px-1 text-slate-400">Velocidad</legend>
+          <legend class="px-1 text-slate-400">{{ t('timeline.speed') }}</legend>
           <label v-for="s in SPEEDS" :key="s" class="flex items-center gap-2">
             <input
               type="radio"

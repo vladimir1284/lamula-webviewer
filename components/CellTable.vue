@@ -10,6 +10,8 @@ import type { UnitsPref } from '../utils/units'
 import { formatHeightKft, formatSpeedKt, heightUnit, speedUnit } from '../utils/units'
 import { trackChain } from '../utils/overlay/tracks'
 
+const { t } = useI18n()
+
 const props = withDefaults(defineProps<{
   /** filas completas del volumen casado (todas las kinds), o null */
   phenomena: Phenomenon[] | null
@@ -83,31 +85,31 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
 
 <template>
   <div class="text-sm">
-    <h2 class="mb-2 font-semibold">Celdas de tormenta</h2>
+    <h2 class="mb-2 font-semibold">{{ t('data.cells.title') }}</h2>
     <p
       v-if="joined === null"
       data-testid="cells-no-join"
       class="rounded bg-slate-800 p-3 text-slate-400"
     >
-      Sin datos de celdas cerca de este instante.
+      {{ t('data.cells.noJoin') }}
     </p>
     <p
       v-else-if="rows.length === 0"
       data-testid="cells-empty"
       class="rounded bg-slate-800 p-3 text-slate-400"
     >
-      Sin celdas detectadas en este volumen.
+      {{ t('data.cells.empty') }}
     </p>
     <table v-else data-testid="cell-table" class="w-full border-collapse">
       <thead>
         <tr class="border-b border-slate-700 text-left text-xs text-slate-400">
           <th class="py-1 pr-2">ID</th>
-          <th class="py-1 pr-2 text-right">dBZ máx</th>
-          <th class="py-1 pr-2 text-right">Alt ({{ heightUnit(units, 'kft') }})</th>
-          <th class="py-1 pr-2 text-right">Mov</th>
+          <th class="py-1 pr-2 text-right">{{ t('data.cells.dbzMaxHeader') }}</th>
+          <th class="py-1 pr-2 text-right">{{ t('data.cells.altHeader', { unit: heightUnit(units, 'kft') }) }}</th>
+          <th class="py-1 pr-2 text-right">{{ t('data.cells.movHeader') }}</th>
           <th class="py-1">Flags</th>
-          <th class="py-1 pr-1 text-center" title="Trayectoria pasada">Pas.</th>
-          <th class="py-1 text-center" title="Trayectoria futura">Fut.</th>
+          <th class="py-1 pr-1 text-center" :title="t('data.cells.pastTitle')">{{ t('data.cells.pastHeader') }}</th>
+          <th class="py-1 text-center" :title="t('data.cells.futureTitle')">{{ t('data.cells.futureHeader') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -126,7 +128,7 @@ const fmt = (v: number | null, digits = 0) => (v === null ? '—' : v.toFixed(di
             {{ row.movementDeg === null ? '—' : `${row.movementDeg}°/${formatSpeedKt(row.movementKt, units)}${speedUnit(units)}` }}
           </td>
           <td class="py-1 text-xs">
-            <span v-if="row.isNew" class="mr-1 rounded bg-sky-900 px-1 text-sky-200">Nueva</span>
+            <span v-if="row.isNew" class="mr-1 rounded bg-sky-900 px-1 text-sky-200">{{ t('data.cells.newBadge') }}</span>
             <span v-if="row.hasMeso" class="mr-1 rounded bg-amber-900 px-1 text-amber-200">MESO</span>
             <span v-if="row.hasTvs" class="rounded bg-red-900 px-1 text-red-200">TVS</span>
           </td>

@@ -1,0 +1,25 @@
+{
+  "products": {
+    "N0B": {
+      "name": "Reflectividad base"
+    },
+    "N0G": {
+      "name": "Velocidad radial"
+    },
+    "EET": {
+      "name": "Topes de eco"
+    },
+    "DVL": {
+      "name": "VIL digital"
+    },
+    "DAA": {
+      "name": "Precipitación 1 h"
+    },
+    "DU3": {
+      "name": "Precipitación 3 h"
+    },
+    "DTA": {
+      "name": "Precipitación total de tormenta"
+    }
+  }
+}

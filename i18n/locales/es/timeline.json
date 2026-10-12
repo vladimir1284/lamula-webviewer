@@ -1,0 +1,17 @@
+{
+  "timeline": {
+    "prevVolume": "Volumen anterior",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "nextVolume": "Volumen siguiente",
+    "menu": "Menú",
+    "live": "En vivo",
+    "liveLabel": "EN VIVO",
+    "liveOn": "En vivo: siguiendo el dato más reciente",
+    "liveOff": "En vivo apagado",
+    "menuTitleAnimation": "Animación",
+    "menuTitleTimeline": "Línea de tiempo",
+    "observations": "Observaciones:",
+    "speed": "Velocidad"
+  }
+}

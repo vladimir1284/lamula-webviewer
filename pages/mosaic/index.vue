@@ -4,6 +4,8 @@
 // recorta localStorage de esta vista, ver machines/mosaic-viewer.ts).
 import { onMounted } from 'vue'
 
+const { t } = useI18n()
+
 const N0B = 153
 const { data: domains, error: domainsError } = await useFetch('/api/mosaic/domains')
 const { data: products } = await useFetch('/api/products')
@@ -31,9 +33,9 @@ onMounted(() => {
         data-testid="mosaic-domains-error"
         class="rounded bg-amber-900/40 p-3 text-sm text-amber-200"
       >
-        Dominios de mosaico no disponibles: {{ domainsError.statusMessage ?? domainsError.message }}
+        {{ t('status.domainsUnavailable', { detail: domainsError.statusMessage ?? domainsError.message }) }}
       </p>
-      <p v-else class="text-sm text-slate-400">Cargando…</p>
+      <p v-else class="text-sm text-slate-400">{{ t('common.loading') }}</p>
     </main>
   </div>
 </template>

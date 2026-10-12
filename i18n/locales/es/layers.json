@@ -1,0 +1,84 @@
+{
+  "layers": {
+    "pills": {
+      "menu": "Menú",
+      "feedback": "Feedback",
+      "satellite": "Satélite",
+      "phenomena": "Fenómenos",
+      "wind": "Viento",
+      "lightning": "Rayos"
+    },
+    "panel": {
+      "title": "Capas",
+      "close": "Cerrar"
+    },
+    "basemap": {
+      "label": "Mapa base",
+      "options": {
+        "osm": "OSM",
+        "carto-voyager": "CARTO Voyager",
+        "carto-positron": "CARTO Positron",
+        "carto-dark": "CARTO Oscuro"
+      }
+    },
+    "opacity": {
+      "label": "Opacidad"
+    },
+    "smooth": {
+      "toggle": "Suavizar celdas del raster",
+      "radiusLabel": "Radio de suavizado",
+      "radius1": "1× (sin remuestreo)",
+      "radius2": "2×",
+      "radius4": "4×",
+      "radius8": "8×",
+      "disabledDuringAnimation": "No disponible durante la animación."
+    },
+    "palette": {
+      "toggle": "Mostrar paleta de colores"
+    },
+    "satellite": {
+      "title": "Satélite",
+      "variantLabel": "Variante",
+      "variantIr": "Infrarrojo",
+      "variantVis": "Visible",
+      "opacityLabel": "Opacidad",
+      "hiddenDuringAnimation": "No se muestra durante la animación."
+    },
+    "phenomena": {
+      "title": "Fenómenos",
+      "trackPast": "Trayectoria pasada (todas)",
+      "trackFuture": "Trayectoria futura (todas)",
+      "meso": "Mesociclones / TVS"
+    },
+    "wind": {
+      "title": "Viento",
+      "levelLabel": "Nivel de altura",
+      "hiddenDuringAnimation": "No se muestra durante la animación.",
+      "levels": {
+        "10m": "Superficie (10 m)",
+        "850hPa": "850 hPa",
+        "700hPa": "700 hPa",
+        "500hPa": "500 hPa"
+      }
+    },
+    "lightning": {
+      "title": "Rayos",
+      "hiddenDuringAnimation": "No se muestra durante la animación."
+    },
+    "data": {
+      "legend": "Datos",
+      "cells": "Celdas",
+      "trend": "Tendencia",
+      "vwp": "VWP"
+    },
+    "prefs": {
+      "legendRadar": "Preferencias y Opinión",
+      "legendMosaic": "Preferencias",
+      "openRadar": "Unidades, hora, alcance del radar",
+      "openMosaic": "Unidades, hora, cobertura",
+      "annotations": "Anotar el mapa",
+      "export": "Exportar imagen del mapa",
+      "feedback": "Dejar opinión / Sugerencia"
+    }
+  }
+}

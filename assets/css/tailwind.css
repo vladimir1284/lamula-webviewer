@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Indicador de foco global (F5 / accesibilidad, WCAG 2.4.7).
+   *
+   * Antes de esto el repo no definía NINGÚN estilo de foco y varios inputs
+   * usaban `focus:outline-none`, así que el único rastro de dónde estaba el
+   * foco era el anillo por defecto del navegador — borrado en esos seis
+   * casos y, sobre el mapa, invisible de todos modos.
+   *
+   * `:focus-visible` y no `:focus`: el anillo aparece con teclado y no al
+   * hacer clic, que es la heurística del propio navegador.
+   *
+   * El doble trazo (outline teal + box-shadow slate casi opaco) existe porque
+   * los controles flotan SOBRE el mapa: el fondo bajo un botón es imagen
+   * arbitraria, así que un solo color no garantiza los 3:1 de 1.4.11. El halo
+   * oscuro le da al teal un fondo conocido pase lo que pase debajo.
+   */
+  :focus-visible {
+    outline: 2px solid #5eead4;
+    outline-offset: 2px;
+    /*
+     * `!important` deliberado, no pereza: doce controles focusables llevan una
+     * utilidad `shadow-*` de Tailwind (el botón de capas, play/prev/next del
+     * timebar) y las utilidades ganan siempre a `@layer base`. Sin esto el halo
+     * desaparecía justo en los controles que flotan sobre el mapa, que son los
+     * que lo necesitan. La sombra decorativa se pierde solo mientras el
+     * elemento tiene el foco por teclado.
+     */
+    box-shadow: 0 0 0 4px rgb(15 23 42 / 0.9) !important;
+  }
+
+  /* El viewport del mapa es un contenedor grande: el halo exterior se sale de
+     la pantalla y el offset lo despega del borde. Anillo interior en su caso. */
+  .ol-viewport:focus-visible,
+  [data-testid='radar-map']:focus-visible,
+  [data-testid='mosaic-map']:focus-visible {
+    outline-offset: -3px;
+    box-shadow: inset 0 0 0 5px rgb(15 23 42 / 0.9) !important;
+  }
+}

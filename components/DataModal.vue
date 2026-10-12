@@ -9,11 +9,13 @@
 // página). `active` es tab local (antes vivía en TabModal) — cambiar de
 // tab con el panel ya abierto emite update:panel sin pasar por el prop
 // `panel` (evita el flash de resetear a la primera tab).
-import { ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { Phenomenon, VwpLevel } from '#shared/contract'
 import type { PanelId } from '../machines/overlay'
 import type { ClockPref } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   panel: PanelId | null
@@ -45,11 +47,11 @@ const emit = defineEmits<{
   'toggle-future-track': [cellId: string]
 }>()
 
-const TABS: { id: PanelId, label: string }[] = [
-  { id: 'cells', label: 'Celdas' },
-  { id: 'trend', label: 'Tendencia' },
-  { id: 'vwp', label: 'VWP' },
-]
+const TABS = computed<{ id: PanelId, label: string }[]>(() => [
+  { id: 'cells', label: t('data.tabs.cells') },
+  { id: 'trend', label: t('data.tabs.trend') },
+  { id: 'vwp', label: t('data.tabs.vwp') },
+])
 
 const active = ref<PanelId>(props.panel ?? 'cells')
 watch(() => props.panel, (p) => {
@@ -59,6 +61,33 @@ watch(() => props.panel, (p) => {
 function setActive(id: PanelId) {
   active.value = id
   emit('update:panel', id)
+}
+
+// Navegación por teclado del tablist (patrón ARIA tabs): las flechas mueven
+// entre pestañas, Home/End saltan a los extremos, y el foco sigue a la
+// pestaña recién activada (activación automática).
+function onTabKeydown(event: KeyboardEvent) {
+  const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+  if (!keys.includes(event.key)) return
+  // Las flechas pertenecen al tablist mientras el foco esté acá: sin
+  // stopPropagation el listener global de la página saltaría además de frame.
+  event.preventDefault()
+  event.stopPropagation()
+  const ids: PanelId[] = TABS.value.map(tab => tab.id)
+  const current = ids.indexOf(active.value)
+  let next: number
+  if (event.key === 'Home') next = 0
+  else if (event.key === 'End') next = ids.length - 1
+  else if (event.key === 'ArrowLeft') next = (current - 1 + ids.length) % ids.length
+  else next = (current + 1) % ids.length
+  const id = ids[next]
+  if (id === undefined) return
+  setActive(id)
+  // El foco debe seguir a la pestaña recién activada (activación automática).
+  nextTick(() => {
+    const el = document.getElementById(`data-modal-tab-${id}`)
+    el?.focus()
+  })
 }
 
 const vwpSubTab = ref<'chart' | 'table'>('chart')
@@ -75,11 +104,11 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
     </div>
 
     <div class="mb-3 flex items-center justify-between">
-      <h2 class="text-sm font-bold">Datos</h2>
+      <h2 class="text-sm font-bold">{{ t('data.title') }}</h2>
       <button
         type="button"
         data-testid="data-modal-close"
-        aria-label="Cerrar"
+        :aria-label="t('common.close')"
         class="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
         @click="emit('close')"
       >
@@ -87,45 +116,76 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
       </button>
     </div>
 
-    <div class="mb-3 flex gap-1 border-b border-slate-700 pb-2">
+    <div
+      class="mb-3 flex gap-1 border-b border-slate-700 pb-2"
+      role="tablist"
+      :aria-label="t('data.tabsAriaLabel')"
+    >
       <button
         v-for="tab in TABS"
+        :id="`data-modal-tab-${tab.id}`"
         :key="tab.id"
+        type="button"
         :data-testid="`data-modal-tab-${tab.id}`"
+        role="tab"
+        :aria-selected="active === tab.id"
+        :aria-controls="`data-modal-panel-${tab.id}`"
+        :tabindex="active === tab.id ? 0 : -1"
         class="rounded px-3 py-1.5 text-sm"
         :class="active === tab.id
           ? 'bg-slate-700 text-slate-100'
           : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'"
         @click="setActive(tab.id)"
+        @keydown="onTabKeydown"
       >
         {{ tab.label }}
       </button>
     </div>
 
     <div class="text-sm">
-      <CellTable
+      <div
         v-if="active === 'cells'"
-        :phenomena="phenomena"
-        :joined="joined"
-        :selected-cell="selectedCell"
-        :past-cell-ids="pastCellIds"
-        :future-cell-ids="futureCellIds"
-        :units="units"
-        @select="emit('select-cell', $event)"
-        @toggle-past-track="emit('toggle-past-track', $event)"
-        @toggle-future-track="emit('toggle-future-track', $event)"
-      />
+        id="data-modal-panel-cells"
+        role="tabpanel"
+        aria-labelledby="data-modal-tab-cells"
+        tabindex="0"
+      >
+        <CellTable
+          :phenomena="phenomena"
+          :joined="joined"
+          :selected-cell="selectedCell"
+          :past-cell-ids="pastCellIds"
+          :future-cell-ids="futureCellIds"
+          :units="units"
+          @select="emit('select-cell', $event)"
+          @toggle-past-track="emit('toggle-past-track', $event)"
+          @toggle-future-track="emit('toggle-future-track', $event)"
+        />
+      </div>
 
-      <TrendChart
+      <div
         v-else-if="active === 'trend'"
-        :series="series"
-        :cell-id="selectedCell"
-        :error="seriesError"
-        :units="units"
-        :clock="clock"
-      />
+        id="data-modal-panel-trend"
+        role="tabpanel"
+        aria-labelledby="data-modal-tab-trend"
+        tabindex="0"
+      >
+        <TrendChart
+          :series="series"
+          :cell-id="selectedCell"
+          :error="seriesError"
+          :units="units"
+          :clock="clock"
+        />
+      </div>
 
-      <template v-else>
+      <div
+        v-else
+        id="data-modal-panel-vwp"
+        role="tabpanel"
+        aria-labelledby="data-modal-tab-vwp"
+        tabindex="0"
+      >
         <div class="mb-2 flex gap-1 border-b border-slate-700 pb-2">
           <button
             type="button"
@@ -134,7 +194,7 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
             :class="vwpSubTab === 'chart' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
             @click="vwpSubTab = 'chart'"
           >
-            Gráfico
+            {{ t('data.vwp.tabChart') }}
           </button>
           <button
             type="button"
@@ -143,18 +203,18 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
             :class="vwpSubTab === 'table' ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:bg-slate-800'"
             @click="vwpSubTab = 'table'"
           >
-            Datos
+            {{ t('data.vwp.tabTable') }}
           </button>
         </div>
         <p v-if="vwpError" data-testid="vwp-error" class="rounded bg-amber-900/40 p-3 text-sm text-amber-200">
-          Error consultando el VWP: {{ vwpError }}
+          {{ t('data.vwp.error', { error: vwpError }) }}
         </p>
         <p
           v-else-if="vwpEmpty || vwpWindow.length === 0"
           data-testid="vwp-empty"
           class="rounded bg-slate-800 p-3 text-sm text-slate-400"
         >
-          Sin perfil de viento hasta este instante del día.
+          {{ t('data.vwp.empty') }}
         </p>
         <VwpChart
           v-else-if="vwpSubTab === 'chart'"
@@ -170,7 +230,7 @@ const vwpSubTab = ref<'chart' | 'table'>('chart')
           :joined="vwpJoined"
           :units="units"
         />
-      </template>
+      </div>
     </div>
   </div>
 </template>

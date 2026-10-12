@@ -1,0 +1,48 @@
+{
+  "admin": {
+    "login": {
+      "title": "Administración LAMULA",
+      "subtitle": "Inicia sesión con la contraseña de administrador.",
+      "passwordLabel": "Contraseña",
+      "submit": "Iniciar sesión",
+      "loggingIn": "Ingresando...",
+      "invalidPassword": "Contraseña incorrecta"
+    },
+    "feedback": {
+      "pageTitle": "Gestión de Feedback — Admin LAMULA",
+      "title": "Administración de Feedback",
+      "subtitle": "Revisa y responde opiniones de usuarios de LAMULA WebViewer.",
+      "refresh": "Refrescar",
+      "filters": {
+        "statusLabel": "Estado",
+        "allStatuses": "Todos los estados",
+        "roleLabel": "Ocupación / Rol",
+        "allRoles": "Todas las ocupaciones",
+        "appLabel": "Producto",
+        "allApps": "Todos los productos"
+      },
+      "loading": "Cargando mensajes...",
+      "loadError": "Error cargando feedback",
+      "empty": "No hay mensajes registrados con estos filtros.",
+      "contextSummary": "Contexto del mapa (site, producto, URL, visor)",
+      "read": "(Leído)",
+      "pending": "(Pendiente)",
+      "replyButton": "Responder a este usuario",
+      "replyPlaceholder": "Escribe la respuesta oficial para el usuario...",
+      "cancel": "Cancelar",
+      "sendReply": "Enviar respuesta",
+      "statusUpdateError": "Error actualizando estado",
+      "replyError": "Error enviando respuesta"
+    },
+    "statuses": {
+      "nuevo": "Nuevo",
+      "leido": "Leído",
+      "respondido": "Respondido",
+      "cerrado": "Cerrado"
+    },
+    "apps": {
+      "webviewer": "WebViewer",
+      "process": "Proceso"
+    }
+  }
+}

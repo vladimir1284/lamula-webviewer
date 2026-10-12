@@ -1,0 +1,50 @@
+{
+  "feedback": {
+    "dialog": {
+      "title": "Feedback and Suggestions",
+      "tabSubmit": "Send feedback",
+      "tabMine": "My messages ({n})"
+    },
+    "form": {
+      "roleLabel": "Occupation / Profile",
+      "kindLabel": "Message type",
+      "roleOtherLabel": "Specify occupation",
+      "roleOtherPlaceholder": "E.g.: Weather enthusiast",
+      "ratingLabel": "Rating (optional)",
+      "messageLabel": "Message",
+      "messagePlaceholder": "Write your opinion, bug report, or suggestion here...",
+      "aboutMeToggle": "Optional contact info (about you)",
+      "nameLabel": "Name",
+      "emailLabel": "Email",
+      "organizationLabel": "Institution",
+      "countryLabel": "Country",
+      "cancel": "Cancel",
+      "submit": "Send feedback",
+      "submitting": "Sending..."
+    },
+    "messages": {
+      "empty": "You haven't sent any messages from this browser yet."
+    },
+    "nudge": {
+      "title": "What do you think of the viewer?",
+      "body": "Your opinion as a meteorologist or specialist helps us improve the service.",
+      "open": "Leave feedback",
+      "later": "Later",
+      "never": "No, thanks"
+    },
+    "roles": {
+      "profesor": "Teacher",
+      "meteorologo": "Meteorologist",
+      "investigador": "Researcher",
+      "estudiante": "Student",
+      "aficionado": "Enthusiast",
+      "otro": "Other"
+    },
+    "kinds": {
+      "mejora": "Improvement",
+      "bug": "Bug",
+      "dato": "Data",
+      "otro": "Other"
+    }
+  }
+}

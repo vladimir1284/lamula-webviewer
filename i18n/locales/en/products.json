@@ -1,0 +1,25 @@
+{
+  "products": {
+    "N0B": {
+      "name": "Base reflectivity"
+    },
+    "N0G": {
+      "name": "Base velocity"
+    },
+    "EET": {
+      "name": "Enhanced echo tops"
+    },
+    "DVL": {
+      "name": "Digital VIL"
+    },
+    "DAA": {
+      "name": "One-hour accumulation"
+    },
+    "DU3": {
+      "name": "Three-hour accumulation"
+    },
+    "DTA": {
+      "name": "Storm total accumulation"
+    }
+  }
+}

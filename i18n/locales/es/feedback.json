@@ -1,0 +1,50 @@
+{
+  "feedback": {
+    "dialog": {
+      "title": "Opinión y Sugerencias",
+      "tabSubmit": "Enviar opinión",
+      "tabMine": "Mis mensajes ({n})"
+    },
+    "form": {
+      "roleLabel": "Ocupación / Perfil",
+      "kindLabel": "Tipo de mensaje",
+      "roleOtherLabel": "Especificar ocupación",
+      "roleOtherPlaceholder": "Ej: Aficionado a la meteorología",
+      "ratingLabel": "Valoración (opcional)",
+      "messageLabel": "Mensaje",
+      "messagePlaceholder": "Escribe aquí tu opinión, reporte de bug o sugerencia...",
+      "aboutMeToggle": "Contacto opcional (sobre ti)",
+      "nameLabel": "Nombre",
+      "emailLabel": "Email",
+      "organizationLabel": "Institución",
+      "countryLabel": "País",
+      "cancel": "Cancelar",
+      "submit": "Enviar opinión",
+      "submitting": "Enviando..."
+    },
+    "messages": {
+      "empty": "Aún no has enviado mensajes desde este navegador."
+    },
+    "nudge": {
+      "title": "¿Qué te parece el visor?",
+      "body": "Tu opinión como meteorólogo o especialista nos ayuda a mejorar el servicio.",
+      "open": "Dejar opinión",
+      "later": "Más tarde",
+      "never": "No, gracias"
+    },
+    "roles": {
+      "profesor": "Profesor",
+      "meteorologo": "Meteorólogo",
+      "investigador": "Investigador",
+      "estudiante": "Estudiante",
+      "aficionado": "Aficionado",
+      "otro": "Otro"
+    },
+    "kinds": {
+      "mejora": "Mejora",
+      "bug": "Fallo",
+      "dato": "Dato",
+      "otro": "Otro"
+    }
+  }
+}

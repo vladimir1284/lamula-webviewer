@@ -13,5 +13,8 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['tests/unit/**/*.spec.ts', 'tests/contract/**/*.spec.ts'],
+    // Los componentes usan el `useI18n()` auto-importado de Nuxt (F5); fuera
+    // del runtime de Nuxt hay que proveerlo. Ver tests/setup/i18n.ts.
+    setupFiles: ['tests/setup/i18n.ts'],
   },
 })

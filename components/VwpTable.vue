@@ -9,6 +9,8 @@ import type { UnitsPref } from '../utils/units'
 import { convertHeightFt, convertSpeedKt, heightUnit, speedUnit } from '../utils/units'
 import { uvFromDirSpeed } from '../utils/wind/uv'
 
+const { t } = useI18n()
+
 const props = withDefaults(defineProps<{
   /** cache de perfiles por vol_time (contexto de overlayMachine) */
   profiles: Record<string, VwpLevel[]>
@@ -46,14 +48,14 @@ const tableRows = computed(() => {
     data-testid="vwp-no-join"
     class="rounded bg-slate-800 p-3 text-sm text-slate-400"
   >
-    Sin perfil cerca de este instante — el grid muestra el resto del día.
+    {{ t('charts.vwp.table.noJoin') }}
   </p>
   <table v-else data-testid="vwp-table" class="w-full border-collapse">
     <thead>
       <tr class="border-b border-slate-700 text-left text-xs text-slate-400">
-        <th class="py-1 pr-2 text-right">Alt ({{ heightUnit(units, 'ft') }})</th>
-        <th class="py-1 pr-2 text-right">Dir</th>
-        <th class="py-1 pr-2 text-right">Vel ({{ speedUnit(units) }})</th>
+        <th class="py-1 pr-2 text-right">{{ t('charts.vwp.table.altHeader', { unit: heightUnit(units, 'ft') }) }}</th>
+        <th class="py-1 pr-2 text-right">{{ t('charts.vwp.table.dirHeader') }}</th>
+        <th class="py-1 pr-2 text-right">{{ t('charts.vwp.table.speedHeader', { unit: speedUnit(units) }) }}</th>
         <th class="py-1 pr-2 text-right">RMS</th>
         <th class="py-1 pr-2 text-right">u</th>
         <th class="py-1 text-right">v</th>

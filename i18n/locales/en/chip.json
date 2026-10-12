@@ -1,0 +1,16 @@
+{
+  "chip": {
+    "noPaletteShort": "no palette",
+    "mosaicLink": "mosaic",
+    "radarLabel": "Radar site",
+    "productLabel": "Product",
+    "radarsUnavailable": "Database unavailable: {detail}",
+    "noPaletteCatalog": "Product has no palette in the viewer catalog.",
+    "rasterFetchError": "Error fetching rasters: {detail}",
+    "rasterEmpty": "No raster for this selection.",
+    "vcpHelpAriaLabel": "What is this VCP",
+    "elevLabel": "Elev",
+    "cursorValueLabel": "Value under cursor",
+    "latLonLabel": "Lat/lon"
+  }
+}

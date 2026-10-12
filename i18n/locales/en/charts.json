@@ -1,0 +1,24 @@
+{
+  "charts": {
+    "trend": {
+      "title": "Trend",
+      "dbzMax": "Max dBZ",
+      "maxHeight": "Max dBZ height",
+      "error": "Error querying the series: {error}",
+      "noCell": "Select a cell on the map or in the table.",
+      "empty": "This cell's series has no max dBZ (GAB paginates in batches of 6)."
+    },
+    "vwp": {
+      "chart": {
+        "caption": "Height ({unit}) × time {clock} — WMO wind barbs (kt); amber = RMS > {rms} {speedUnit}, gray = no RMS",
+        "localTime": "local"
+      },
+      "table": {
+        "noJoin": "No profile near this instant — the grid shows the rest of the day.",
+        "altHeader": "Alt ({unit})",
+        "dirHeader": "Dir",
+        "speedHeader": "Speed ({unit})"
+      }
+    }
+  }
+}

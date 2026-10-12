@@ -63,6 +63,12 @@ export default defineConfig({
         HOST: '127.0.0.1',
         NUXT_DAL_ADAPTER: 'fixture',
         NUXT_PUBLIC_R2_BASE_URL: 'http://127.0.0.1:8790',
+        // Origen canónico de i18n (D52). Va por runtimeConfig
+        // (`NUXT_PUBLIC_I18N_BASE_URL`), no por una variable leída en
+        // nuxt.config.ts: eso se evalúa en build y no llegaría al server.
+        // Sin esto cada SSR avisa «I18n baseUrl is required» y no se emiten
+        // los <link hreflang>.
+        NUXT_PUBLIC_I18N_BASE_URL: 'http://127.0.0.1:8788',
       },
       url: 'http://127.0.0.1:8788',
       reuseExistingServer: !process.env.CI,

@@ -6,6 +6,13 @@
 import { ref } from 'vue'
 import type { UserPrefsSlice } from '../machines/viewer'
 
+// El idioma NO viaja en `lamula:prefs`: lo posee la URL (prefijo `/en`) con la
+// cookie `lamula_i18n` como memoria, igual que el resto del estado de UI (D23).
+// Duplicarlo en localStorage daría dos fuentes de verdad que se desincronizan.
+// `setLocale` navega, así que el <dialog> se cierra al cambiar — querido: el
+// usuario ve el chrome ya traducido detrás.
+const { t, locale, locales, setLocale } = useI18n()
+
 defineProps<{
   coverage: boolean
   units: 'imperial' | 'si'
@@ -28,14 +35,14 @@ defineExpose({
     ref="dialog"
     data-testid="prefs-dialog"
     aria-labelledby="prefs-title"
-    class="w-80 rounded-lg border border-slate-600 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
+    class="w-80 rounded-lg border border-slate-500 bg-slate-800 p-0 text-slate-100 backdrop:bg-slate-950/60"
   >
     <form method="dialog">
       <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
-        <h2 id="prefs-title" class="text-sm font-bold">Preferencias</h2>
+        <h2 id="prefs-title" class="text-sm font-bold">{{ t('prefs.title') }}</h2>
         <button
           data-testid="prefs-close"
-          aria-label="Cerrar"
+          :aria-label="t('common.close')"
           class="rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100"
         >
           ✕
@@ -50,11 +57,29 @@ defineExpose({
             :checked="coverage"
             @change="emit('setPref', { coverage: ($event.target as HTMLInputElement).checked })"
           >
-          <span>Mostrar alcance del radar</span>
+          <span>{{ t('prefs.coverage') }}</span>
         </label>
 
         <fieldset class="rounded bg-slate-900/60 p-3">
-          <legend class="px-1 text-slate-400">Unidades</legend>
+          <legend class="px-1 text-slate-400">{{ t('locale.legend') }}</legend>
+          <label
+            v-for="l in locales"
+            :key="l.code"
+            class="mt-1 flex items-center gap-2 first:mt-0"
+          >
+            <input
+              type="radio"
+              name="pref-locale"
+              :data-testid="`pref-locale-${l.code}`"
+              :checked="locale === l.code"
+              @change="setLocale(l.code)"
+            >
+            <span>{{ l.name }}</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="rounded bg-slate-900/60 p-3">
+          <legend class="px-1 text-slate-400">{{ t('prefs.units.legend') }}</legend>
           <label class="flex items-center gap-2">
             <input
               type="radio"
@@ -63,7 +88,7 @@ defineExpose({
               :checked="units === 'imperial'"
               @change="emit('setPref', { units: 'imperial' })"
             >
-            <span>Aeronáuticas (kt, kft)</span>
+            <span>{{ t('prefs.units.imperial') }}</span>
           </label>
           <label class="mt-1 flex items-center gap-2">
             <input
@@ -73,12 +98,12 @@ defineExpose({
               :checked="units === 'si'"
               @change="emit('setPref', { units: 'si' })"
             >
-            <span>Sistema internacional (km/h, km)</span>
+            <span>{{ t('prefs.units.si') }}</span>
           </label>
         </fieldset>
 
         <fieldset class="rounded bg-slate-900/60 p-3">
-          <legend class="px-1 text-slate-400">Hora</legend>
+          <legend class="px-1 text-slate-400">{{ t('prefs.clock.legend') }}</legend>
           <label class="flex items-center gap-2">
             <input
               type="radio"
@@ -87,7 +112,7 @@ defineExpose({
               :checked="clock === 'local'"
               @change="emit('setPref', { clock: 'local' })"
             >
-            <span>Local (tu zona horaria)</span>
+            <span>{{ t('prefs.clock.local') }}</span>
           </label>
           <label class="mt-1 flex items-center gap-2">
             <input
@@ -97,10 +122,10 @@ defineExpose({
               :checked="clock === 'utc'"
               @change="emit('setPref', { clock: 'utc' })"
             >
-            <span>UTC</span>
+            <span>{{ t('prefs.clock.utc') }}</span>
           </label>
           <p class="mt-2 text-xs text-slate-400">
-            Los días de la timeline siguen siendo UTC.
+            {{ t('prefs.clock.note') }}
           </p>
         </fieldset>
       </div>

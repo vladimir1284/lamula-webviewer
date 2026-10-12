@@ -19,6 +19,7 @@
 // solo para los contribuyentes; los ausentes no llevan marca.
 import Map from 'ol/Map'
 import { defaults as defaultControls } from 'ol/control'
+import { defaults as defaultInteractions } from 'ol/interaction'
 import View from 'ol/View'
 import TileLayer from 'ol/layer/Tile'
 import VectorLayer from 'ol/layer/Vector'
@@ -84,6 +85,8 @@ const emit = defineEmits<{
   rasterError: [message: string]
   selectCell: [cellId: string | null]
 }>()
+
+const { t } = useI18n()
 
 const container = ref<HTMLDivElement>()
 let resizeObserver: ResizeObserver | undefined
@@ -189,7 +192,7 @@ function updateRasterLayer() {
       })
       source.on('change', () => {
         if (source.getState() === 'error') {
-          emit('rasterError', `No se pudo cargar el COG del mosaico (${raster.r2_key})`)
+          emit('rasterError', t('mosaic.cogLoadError', { key: raster.r2_key }))
         }
       })
       const style = rasterStyle(productDef.palette, raster.value_scale, raster.value_offset, raster.max_level)
@@ -202,7 +205,7 @@ function updateRasterLayer() {
     })
     .catch(() => {
       if (requestId !== rasterRequestId) return
-      emit('rasterError', `No se pudo cargar el COG del mosaico (${raster.r2_key})`)
+      emit('rasterError', t('mosaic.cogLoadError', { key: raster.r2_key }))
     })
 }
 
@@ -216,6 +219,18 @@ onMounted(() => {
   map = new Map({
     target: container.value,
     controls: defaultControls({ zoom: false }),
+    // Interacciones explícitas en vez de las que `Map` monta solo: OL 10.9
+    // las construye con `onFocusOnly: true` (ver `ol/Map.js`), y esa opción
+    // SOLO muerde cuando el elemento target tiene `tabindex` — que es lo que
+    // pide la accesibilidad por teclado (D54). El efecto era que `DragPan` y
+    // `MouseWheelZoom` exigían que el mapa YA tuviera el foco: el foco llega
+    // en `mousedown`, posterior al `pointerdown` donde OL evalúa la condición,
+    // así que el PRIMER arrastre tras cargar la página no movía nada. Con
+    // `onFocusOnly: false` el comportamiento vuelve a ser el de antes de poner
+    // `tabindex` (sin el atributo, `focusWithTabindex` se cortocircuitaba a
+    // `true`), y el teclado sigue funcionando: KeyboardPan/KeyboardZoom no
+    // usan esta opción, solo necesitan que el keydown llegue al target.
+    interactions: defaultInteractions({ onFocusOnly: false }),
     layers: [
       baseLayer,
       satelliteLayer,
@@ -321,5 +336,15 @@ defineExpose({ rasterLoaded })
 </script>
 
 <template>
-  <div ref="container" class="h-full w-full" :data-raster-loaded="rasterLoaded" />
+  <!-- Mismo contrato de teclado que RadarMap.vue — ver el comentario de allá. -->
+  <div
+    ref="container"
+    data-testid="mosaic-map"
+    class="h-full w-full"
+    :data-raster-loaded="rasterLoaded"
+    tabindex="0"
+    role="application"
+    :aria-label="t('map.ariaLabel')"
+    :aria-roledescription="t('map.ariaRoleDescription')"
+  />
 </template>

@@ -46,6 +46,9 @@ jobs:
       - name: Contract drift (schema del pipeline)
         run: bash scripts/check-contract-drift.sh
 
+      - name: i18n (paridad de catálogos + strings crudos)
+        run: pnpm check:i18n
+
       - name: Build (node-server)
         run: pnpm build
 

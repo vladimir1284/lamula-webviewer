@@ -1,0 +1,24 @@
+{
+  "charts": {
+    "trend": {
+      "title": "Tendencia",
+      "dbzMax": "dBZ máx",
+      "maxHeight": "Altura del máx",
+      "error": "Error consultando la serie: {error}",
+      "noCell": "Selecciona una celda en el mapa o en la tabla.",
+      "empty": "La serie de esta celda no trae dBZ máx (GAB pagina de a 6 celdas)."
+    },
+    "vwp": {
+      "chart": {
+        "caption": "Altura ({unit}) × hora {clock} — barbas WMO (kt); ámbar = RMS > {rms} {speedUnit}, gris = sin RMS",
+        "localTime": "local"
+      },
+      "table": {
+        "noJoin": "Sin perfil cerca de este instante — el grid muestra el resto del día.",
+        "altHeader": "Alt ({unit})",
+        "dirHeader": "Dir",
+        "speedHeader": "Vel ({unit})"
+      }
+    }
+  }
+}

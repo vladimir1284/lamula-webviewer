@@ -1,0 +1,17 @@
+{
+  "timeline": {
+    "prevVolume": "Previous volume scan",
+    "play": "Play",
+    "pause": "Pause",
+    "nextVolume": "Next volume scan",
+    "menu": "Menu",
+    "live": "Live",
+    "liveLabel": "LIVE",
+    "liveOn": "Live: following the latest data",
+    "liveOff": "Live off",
+    "menuTitleAnimation": "Animation",
+    "menuTitleTimeline": "Timeline",
+    "observations": "Observations:",
+    "speed": "Speed"
+  }
+}

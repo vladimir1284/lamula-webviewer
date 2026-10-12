@@ -109,6 +109,9 @@ export type VwpLevel = VwpRow
 export const WIND_LEVELS = ['10m', '850hPa', '700hPa', '500hPa'] as const
 export type WindLevel = (typeof WIND_LEVELS)[number]
 
+// Respaldo en español. Lo que ve el usuario sale del catálogo i18n
+// (`layers.wind.levels.<level>`, F5/D52): el contrato es puro y no importa
+// nada de Vue. Mantener ambas listas en sync al añadir un nivel.
 export const WIND_LEVEL_LABELS: Record<WindLevel, string> = {
   '10m': 'Superficie (10 m)',
   '850hPa': '850 hPa',
