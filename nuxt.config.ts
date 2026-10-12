@@ -165,6 +165,7 @@ export default defineNuxtConfig({
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',
       turnstileSiteKey: '',
       buildId: process.env.GIT_SHA || 'dev',
+      cartoApiKey: process.env.NUXT_PUBLIC_CARTO_API_KEY || 'cb1_4iib_1_1dfa4e98cff8bebc4902181e',
     },
   },
 

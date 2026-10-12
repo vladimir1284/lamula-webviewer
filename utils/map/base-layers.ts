@@ -19,11 +19,12 @@ const CARTO_STYLES: Record<string, { base: string, labels: string }> = {
   'carto-dark': { base: 'dark_nolabels', labels: 'dark_only_labels' },
 }
 
-function cartoSource(style: string): XYZ {
+function cartoSource(style: string, apiKey?: string): XYZ {
   // OL no expande el token {r} de CARTO — resolver @2x aquí una vez
   const retina = typeof devicePixelRatio !== 'undefined' && devicePixelRatio > 1
+  const queryParam = apiKey ? `?api_key=${apiKey}` : ''
   return new XYZ({
-    url: `https://{a-d}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}${retina ? '@2x' : ''}.png`,
+    url: `https://{a-d}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}${retina ? '@2x' : ''}.png${queryParam}`,
     tilePixelRatio: retina ? 2 : 1,
     attributions: CARTO_ATTRIBUTION,
     // F7: sin esto las teselas contaminan el canvas y `toBlob` del export
@@ -41,9 +42,21 @@ export interface BaseMapSources {
   labels: TileSource | null
 }
 
-export function createBaseMapSources(id: BaseMapId): BaseMapSources {
+export function createBaseMapSources(id: BaseMapId, apiKey?: string): BaseMapSources {
   if (id === 'off') return { base: null, labels: null }
   if (id === 'osm') return { base: new OSM(), labels: null }
   const style = CARTO_STYLES[id]!
-  return { base: cartoSource(style.base), labels: cartoSource(style.labels) }
+  let key = apiKey
+  if (!key) {
+    try {
+      const config = useRuntimeConfig()
+      if (config?.public?.cartoApiKey) {
+        key = config.public.cartoApiKey as string
+      }
+    }
+    catch {
+      // fuera de contexto Nuxt (tests unitarios aislados, etc.)
+    }
+  }
+  return { base: cartoSource(style.base, key), labels: cartoSource(style.labels, key) }
 }
