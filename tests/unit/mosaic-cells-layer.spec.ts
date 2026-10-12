@@ -1,9 +1,31 @@
 // buildMosaicCellFeatures/mosaicCellStyle (P5/D45): puro salvo OL — una
-// feature por celda, SIN deduplicar entre sitios, coloreada por sitio de
-// origen (no por severidad/selección como phenomena-layer.ts).
+// feature por celda, SIN deduplicar entre sitios. Marker idéntico al del
+// viewer de un solo radar (cellIcon); lo propio del mosaico es la etiqueta,
+// coloreada por sitio de origen.
 import type { Phenomenon } from '#shared/contract'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildMosaicCellFeatures, mosaicCellStyle } from '../../utils/map/mosaic-cells-layer'
+
+// happy-dom no implementa canvas 2D y el marker ahora es el `cellIcon`
+// compartido con phenomena-layer.ts, que dibuja en un canvas propio —
+// mismo stub que tests/unit/phenomena-layer.spec.ts
+beforeAll(() => {
+  if (document.createElement('canvas').getContext('2d') !== null) return
+  const noop = () => {}
+  const ctx = {
+    lineWidth: 0,
+    strokeStyle: '',
+    fillStyle: '',
+    beginPath: noop,
+    arc: noop,
+    fill: noop,
+    stroke: noop,
+    moveTo: noop,
+    lineTo: noop,
+  }
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(ctx as unknown as ReturnType<HTMLCanvasElement['getContext']>)
+})
 
 const ORDER = ['AMX', 'BYX']
 

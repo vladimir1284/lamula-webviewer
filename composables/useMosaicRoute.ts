@@ -3,12 +3,15 @@
 // de `site`.
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { isBaseMapId } from '#shared/basemaps'
+import { DEFAULT_WIND_LEVEL, WIND_LEVELS } from '#shared/contract'
 import { isoToPath, pathToIso } from '#shared/url/time-path'
-import type { MosaicDisplayQueryParams, MosaicNavigatePatch, MosaicRouteState } from '../machines/mosaic-viewer'
+import { MOSAIC_LAYERS } from '../machines/mosaic-viewer'
+import type { MosaicDisplayQueryParams, MosaicLayerId, MosaicLayersQueryParams, MosaicNavigatePatch, MosaicRouteState } from '../machines/mosaic-viewer'
 
 export const DOMAIN_RE = /^[A-Z0-9]{2,12}$/
 export const MOSAIC_PRODUCT_RE = /^\d+$/
 export const MOSAIC_DEFAULT_OPACITY = 0.8
+export const MOSAIC_DEFAULT_SAT_OPACITY = 0.6
 /** `SITE:ID` (P5/D45) — distinto del `?cell=ID` del viewer de un solo radar:
  * el cell_id del RPG es local al sitio, dos radares del dominio pueden
  * repetirlo. */
@@ -38,6 +41,27 @@ export function parseMosaicRoute(
   const rawCell = route.query.cell
   const cell = typeof rawCell === 'string' && MOSAIC_CELL_RE.test(rawCell) ? rawCell : null
 
+  // overlays: mismo formato que el viewer de un solo radar (`?layers=`),
+  // filtrado a las capas que existen acá; inválidos degradan al default
+  const layers = [...new Set(
+    String(route.query.layers ?? '')
+      .split(',')
+      .filter((l): l is MosaicLayerId => (MOSAIC_LAYERS as readonly string[]).includes(l)),
+  )]
+
+  // satélite GOES: mismos params que el viewer de un solo radar
+  const sat = route.query.sat === '1'
+  const satVariant = route.query.satVariant === 'vis' ? 'vis' as const : 'ir' as const
+  const rawSatOpacity = Number.parseFloat(String(route.query.satOpacity ?? ''))
+  const satOpacity = Number.isFinite(rawSatOpacity)
+    ? Math.min(1, Math.max(0, rawSatOpacity))
+    : MOSAIC_DEFAULT_SAT_OPACITY
+
+  const rawWindLevel = route.query.windLevel
+  const windLevel = typeof rawWindLevel === 'string' && (WIND_LEVELS as readonly string[]).includes(rawWindLevel)
+    ? rawWindLevel as (typeof WIND_LEVELS)[number]
+    : DEFAULT_WIND_LEVEL
+
   return {
     domain,
     product: Number(product),
@@ -46,6 +70,11 @@ export function parseMosaicRoute(
     base: isBaseMapId(route.query.base) ? route.query.base : 'osm',
     coverage,
     cell,
+    layers,
+    sat,
+    satVariant,
+    satOpacity,
+    windLevel,
   }
 }
 
@@ -54,6 +83,17 @@ export function mosaicQueryPatch(params: MosaicDisplayQueryParams): Record<strin
     opacity: params.opacity !== MOSAIC_DEFAULT_OPACITY ? String(params.opacity) : undefined,
     base: params.base !== 'osm' ? params.base : undefined,
     coverage: params.coverage ? undefined : '0',
+    sat: params.sat ? '1' : undefined,
+    satVariant: params.sat && params.satVariant !== 'ir' ? params.satVariant : undefined,
+    satOpacity: params.sat && params.satOpacity !== MOSAIC_DEFAULT_SAT_OPACITY ? String(params.satOpacity) : undefined,
+  }
+}
+
+/** ausencia = default (capas apagadas), igual que overlayQueryPatch */
+export function mosaicLayersQueryPatch(params: MosaicLayersQueryParams): Record<string, string | undefined> {
+  return {
+    layers: params.layers.length > 0 ? params.layers.join(',') : undefined,
+    windLevel: params.windLevel !== DEFAULT_WIND_LEVEL ? params.windLevel : undefined,
   }
 }
 

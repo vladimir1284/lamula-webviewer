@@ -15,8 +15,26 @@
 // `key: route => route.params.domain`), así que el refetch por
 // ROUTE_CHANGED solo mira el slot_time.
 import type { BaseMapId } from '#shared/basemaps'
-import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon, WindGridFile, WindLevel } from '#shared/contract'
 import { assign, enqueueActions, fromPromise, setup } from 'xstate'
+import type { ViewerPrefs } from '../composables/useViewerPrefs'
+import type { NormalizedStrike } from '../utils/overlay/lightning-join'
+
+/** capas de overlay que SÍ existen en el mosaico — subconjunto del
+ * OVERLAY_LAYERS del viewer de un solo radar (machines/overlay.ts): meso,
+ * tracks, viento y rayos son por-radar y no se dibujan acá. El nombre de la
+ * claves y el formato del query param se comparten a propósito:
+ * `?layers=cells,wind` significa lo mismo en las dos vistas. Viento y rayos
+ * son datos POR SITIO: acá se unen los N sitios del dominio (D49). */
+export const MOSAIC_LAYERS = ['cells', 'wind', 'lightning'] as const
+export type MosaicLayerId = (typeof MOSAIC_LAYERS)[number]
+
+/** preferencias de display del usuario que aplican al mosaico (no van en la
+ * URL; mismo localStorage que el viewer de un solo radar) */
+export type MosaicPrefsSlice = Pick<ViewerPrefs, 'units' | 'clock' | 'animationFrames' | 'showPalette'>
+
+/** patch persistible en localStorage (composables/useViewerPrefs.ts) */
+export type MosaicPrefsParams = Partial<Omit<ViewerPrefs, 'v'>>
 
 /** Lo compartible de la URL del mosaico, ya parseado (composables/useMosaicRoute.ts) */
 export interface MosaicRouteState {
@@ -31,6 +49,15 @@ export interface MosaicRouteState {
   coverage: boolean
   /** celda seleccionada, `SITE:ID` (P5/D45) — null = ninguna */
   cell: string | null
+  /** overlays activos (`?layers=cells,wind,lightning`), mismo contrato de URL
+   * que el viewer de un solo radar; default vacío (todo apagado) */
+  layers: MosaicLayerId[]
+  /** capa GOES de fondo (`?sat=1`), igual que en el viewer de un solo radar */
+  sat: boolean
+  satVariant: 'ir' | 'vis'
+  satOpacity: number
+  /** nivel del campo de viento (`?windLevel=`); ausente = 10m */
+  windLevel: WindLevel
 }
 
 export interface MosaicNavigatePatch {
@@ -49,6 +76,15 @@ export interface MosaicDisplayQueryParams {
   opacity: number
   base: BaseMapId
   coverage: boolean
+  sat: boolean
+  satVariant: 'ir' | 'vis'
+  satOpacity: number
+}
+
+/** toggles de overlay en la query — replace inmediato, sin debounce (D23) */
+export interface MosaicLayersQueryParams {
+  layers: MosaicLayerId[]
+  windLevel: WindLevel
 }
 
 export interface MosaicViewerInput {
@@ -77,7 +113,14 @@ export type MosaicViewerEvent =
   | { type: 'TOGGLE_COVERAGE' }
   | { type: 'COG_ERROR', message: string }
   | { type: 'SELECT_CELL', cellId: string | null }
-  | { type: 'CELLS_INIT' }
+  | { type: 'OVERLAY_INIT' }
+  | { type: 'TOGGLE_LAYER', layer: MosaicLayerId }
+  | { type: 'TOGGLE_SAT' }
+  | { type: 'SELECT_SAT_VARIANT', variant: 'ir' | 'vis' }
+  | { type: 'SET_SAT_OPACITY', value: number }
+  | { type: 'SELECT_WIND_LEVEL', level: WindLevel }
+  | { type: 'PREFS_LOADED', prefs: MosaicPrefsSlice }
+  | { type: 'SET_PREF', patch: Partial<MosaicPrefsSlice> }
 
 interface MosaicViewerContext {
   domain: string
@@ -101,9 +144,42 @@ interface MosaicViewerContext {
   selectedCell: string | null
   /** slot_time ya resuelto por fetchCells — evita refetch si no cambió */
   cellsKey: string | null
+  layers: MosaicLayerId[]
+  sat: boolean
+  satVariant: 'ir' | 'vis'
+  satOpacity: number
+  windLevel: WindLevel
+  /** campo u/v YA UNIDO de los sitios del dominio (D49); null = sin dato */
+  windGrid: WindGridFile | null
+  windError: string | null
+  /** `${slot_time}|${level}` ya resuelto — evita refetch si no cambió */
+  windKey: string | null
+  /** descargas de la ventana del slot, unidas y deduplicadas entre sitios */
+  lightningStrikes: NormalizedStrike[] | null
+  lightningError: string | null
+  /** `${prev_slot_time}|${slot_time}` ya resuelto */
+  lightningKey: string | null
+  // prefs de display (localStorage, nunca la URL) — placeholders hasta
+  // PREFS_LOADED, igual que viewerMachine
+  units: MosaicPrefsSlice['units']
+  clock: MosaicPrefsSlice['clock']
+  animationFrames: number
+  showPalette: boolean
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10)
+
+/** slot anterior al mostrado dentro del día cargado; null en el borde (la
+ * ventana de rayos cae entonces al fallback de 600 s de lightning-join.ts) */
+function prevSlotOf(context: MosaicViewerContext): string | null {
+  const t = context.time ?? context.nowT
+  const idx = context.times.findIndex(r => r.slot_time === t)
+  return idx > 0 ? context.times[idx - 1]!.slot_time : null
+}
+
+const windKeyOf = (context: MosaicViewerContext) => `${context.time ?? context.nowT}|${context.windLevel}`
+const lightningKeyOf = (context: MosaicViewerContext) =>
+  `${prevSlotOf(context) ?? ''}|${context.time ?? context.nowT}`
 
 const assignRoute = assign<MosaicViewerContext, MosaicViewerEvent, undefined, MosaicViewerEvent, never>(
   ({ context, event }) => {
@@ -117,6 +193,11 @@ const assignRoute = assign<MosaicViewerContext, MosaicViewerEvent, undefined, Mo
       base: route.base,
       coverage: route.coverage,
       selectedCell: route.cell,
+      layers: route.layers,
+      sat: route.sat,
+      satVariant: route.satVariant,
+      satOpacity: route.satOpacity,
+      windLevel: route.windLevel,
       ...(identityChanged ? { liveRefresh: true } : {}),
     }
   },
@@ -152,6 +233,21 @@ export const mosaicViewerMachine = setup({
     fetchCells: fromPromise<Phenomenon[], { domain: string, t: string }>(async () => {
       throw new Error('fetchCells sin proveer (.provide)')
     }),
+    // viento y rayos son datos POR SITIO (D49): la página consulta el índice
+    // de cada `site_id` del dominio, hace el join (nearestWithin para viento,
+    // ventana de observación para rayos) y UNE el resultado — grillas u/v
+    // con `mergeWindGrids`, descargas concatenadas y deduplicadas.
+    fetchWind: fromPromise<WindGridFile | null, { domain: string, t: string, level: WindLevel }>(
+      async () => {
+        throw new Error('fetchWind sin proveer (.provide)')
+      },
+    ),
+    fetchLightning: fromPromise<
+      NormalizedStrike[] | null,
+      { domain: string, t: string, prevT: string | null }
+    >(async () => {
+      throw new Error('fetchLightning sin proveer (.provide)')
+    }),
   },
   actions: {
     navigate: (_args, _params: MosaicNavigateParams) => {
@@ -159,6 +255,8 @@ export const mosaicViewerMachine = setup({
     },
     syncQuery: (_args, _params: MosaicDisplayQueryParams) => {},
     syncCellQuery: (_args, _params: { cellId: string | null }) => {},
+    syncLayersQuery: (_args, _params: MosaicLayersQueryParams) => {},
+    persistPrefs: (_args, _params: MosaicPrefsParams) => {},
   },
   guards: {
     sameFrame: ({ context }, route: MosaicRouteState) =>
@@ -198,6 +296,21 @@ export const mosaicViewerMachine = setup({
     cellsError: null,
     selectedCell: input.route.cell,
     cellsKey: null,
+    layers: input.route.layers,
+    sat: input.route.sat,
+    satVariant: input.route.satVariant,
+    satOpacity: input.route.satOpacity,
+    windLevel: input.route.windLevel,
+    windGrid: null,
+    windError: null,
+    windKey: null,
+    lightningStrikes: null,
+    lightningError: null,
+    lightningKey: null,
+    units: 'imperial',
+    clock: 'utc',
+    animationFrames: 12,
+    showPalette: true,
   }),
   on: {
     SET_LIVE_REFRESH: { actions: assign({ liveRefresh: ({ event }) => event.value }) },
@@ -206,7 +319,14 @@ export const mosaicViewerMachine = setup({
         assign({ opacity: ({ event }) => event.value }),
         {
           type: 'syncQuery',
-          params: ({ context, event }) => ({ opacity: event.value, base: context.base, coverage: context.coverage }),
+          params: ({ context, event }) => ({
+            opacity: event.value,
+            base: context.base,
+            coverage: context.coverage,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          }),
         },
       ],
     },
@@ -215,7 +335,14 @@ export const mosaicViewerMachine = setup({
         assign({ base: ({ event }) => event.base }),
         {
           type: 'syncQuery',
-          params: ({ context, event }) => ({ opacity: context.opacity, base: event.base, coverage: context.coverage }),
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: event.base,
+            coverage: context.coverage,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          }),
         },
       ],
     },
@@ -223,10 +350,82 @@ export const mosaicViewerMachine = setup({
       actions: enqueueActions(({ context, enqueue }) => {
         const coverage = !context.coverage
         enqueue.assign({ coverage })
-        enqueue({ type: 'syncQuery', params: { opacity: context.opacity, base: context.base, coverage } })
+        enqueue({
+          type: 'syncQuery',
+          params: {
+            opacity: context.opacity,
+            base: context.base,
+            coverage,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          },
+        })
       }),
     },
     COG_ERROR: { actions: assign({ cogError: ({ event }) => event.message }) },
+    // Satélite (GOES/WMS): puro display, sin fetch propio — igual que en el
+    // viewer de un solo radar, y la única capa de este grupo que no es
+    // por-sitio (WMS global, no depende del dominio).
+    TOGGLE_SAT: {
+      actions: enqueueActions(({ context, enqueue }) => {
+        const sat = !context.sat
+        enqueue.assign({ sat })
+        enqueue({
+          type: 'syncQuery',
+          params: {
+            opacity: context.opacity,
+            base: context.base,
+            coverage: context.coverage,
+            sat,
+            satVariant: context.satVariant,
+            satOpacity: context.satOpacity,
+          },
+        })
+      }),
+    },
+    SELECT_SAT_VARIANT: {
+      actions: [
+        assign({ satVariant: ({ event }) => event.variant }),
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: context.base,
+            coverage: context.coverage,
+            sat: context.sat,
+            satVariant: event.variant,
+            satOpacity: context.satOpacity,
+          }),
+        },
+      ],
+    },
+    SET_SAT_OPACITY: {
+      actions: [
+        assign({ satOpacity: ({ event }) => event.value }),
+        {
+          type: 'syncQuery',
+          params: ({ context, event }) => ({
+            opacity: context.opacity,
+            base: context.base,
+            coverage: context.coverage,
+            sat: context.sat,
+            satVariant: context.satVariant,
+            satOpacity: event.value,
+          }),
+        },
+      ],
+    },
+    // Preferencias de display (mismas semánticas que viewerMachine):
+    // PREFS_LOADED solo asigna (post-mount, leído de localStorage);
+    // SET_PREF asigna y persiste el patch exacto.
+    PREFS_LOADED: { actions: assign(({ event }) => ({ ...event.prefs })) },
+    SET_PREF: {
+      actions: [
+        assign(({ event }) => ({ ...event.patch })),
+        { type: 'persistPrefs', params: ({ event }) => event.patch },
+      ],
+    },
     SELECT_CELL: {
       actions: [
         assign({ selectedCell: ({ event }) => event.cellId }),
@@ -489,7 +688,21 @@ export const mosaicViewerMachine = setup({
     },
     cells: {
       on: {
-        CELLS_INIT: { target: '.loading', guard: ({ context }) => context.cellsKey === null },
+        OVERLAY_INIT: {
+          target: '.loading',
+          guard: ({ context }) => context.cellsKey === null && context.layers.includes('cells'),
+        },
+        // Solo la transición de carga: el assign de `layers` y el sync de la
+        // query los hace la región `layers` (ver abajo). Guard por PAYLOAD —
+        // en la difusión a regiones paralelas los guards leen el snapshot
+        // previo, así que "encender" es `!context.layers.includes(...)`.
+        TOGGLE_LAYER: {
+          target: '.loading',
+          guard: ({ context, event }) =>
+            event.layer === 'cells'
+            && !context.layers.includes('cells')
+            && context.cellsKey !== (context.time ?? context.nowT),
+        },
         ROUTE_CHANGED: {
           // SIN reenter: true — el target ya es un estado distinto del
           // actual (ready/error -> loading), así que ya es una transición
@@ -498,8 +711,12 @@ export const mosaicViewerMachine = setup({
           // descarte esta transición en silencio (repro aislado, sin guard
           // de por medio — ver tests/unit/mosaic-viewer-machine.spec.ts).
           target: '.loading',
+          // el guard lee las capas del PAYLOAD, no del contexto: en la
+          // difusión a regiones paralelas los guards ven el snapshot previo
+          // (assignRoute corre en la región 'raster', que va primero)
           guard: ({ context, event }) => {
             const { route } = event as Extract<MosaicViewerEvent, { type: 'ROUTE_CHANGED' }>
+            if (!route.layers.includes('cells')) return false
             const key = route.time ?? context.nowT
             return context.cellsKey !== null && key !== context.cellsKey
           },
@@ -529,6 +746,189 @@ export const mosaicViewerMachine = setup({
           },
         },
         ready: {},
+        error: {},
+      },
+    },
+    // Región sin estados útiles: solo posee el assign de `layers` y el sync
+    // de la query para TOGGLE_LAYER. Vive aparte para que las regiones de
+    // datos (cells/wind/lightning) puedan declarar el MISMO evento sin que
+    // el assign corra tres veces — en una máquina paralela el evento se
+    // difunde a todas las regiones que lo declaran, pero un `on` de la raíz
+    // quedaría ensombrecido por ellas (gotcha de D45).
+    layers: {
+      on: {
+        TOGGLE_LAYER: {
+          actions: enqueueActions(({ context, event, enqueue }) => {
+            const layers = context.layers.includes(event.layer)
+              ? context.layers.filter(l => l !== event.layer)
+              : [...context.layers, event.layer]
+            enqueue.assign({ layers })
+            enqueue({ type: 'syncLayersQuery', params: { layers, windLevel: context.windLevel } })
+          }),
+        },
+      },
+      initial: 'idle',
+      states: { idle: {} },
+    },
+    // Viento (D49): unión de las grillas u/v de los N sitios del dominio.
+    // `windKey` = `${slot_time}|${level}` — cambiar de nivel con la capa
+    // encendida invalida y recarga, igual que en overlayMachine.
+    wind: {
+      on: {
+        OVERLAY_INIT: {
+          target: '.loading',
+          guard: ({ context }) => context.windKey === null && context.layers.includes('wind'),
+        },
+        TOGGLE_LAYER: {
+          target: '.loading',
+          guard: ({ context, event }) =>
+            event.layer === 'wind'
+            && !context.layers.includes('wind')
+            && context.windKey !== windKeyOf(context),
+        },
+        // el assign del nivel vive ACA, no en la región `layers`: así corre
+        // antes de entrar a `.loading` y el input del invoke ya lee el nivel
+        // nuevo (el orden entre acciones de regiones distintas no lo es)
+        SELECT_WIND_LEVEL: [
+          { guard: ({ context, event }) => event.level === context.windLevel },
+          {
+            target: '.loading',
+            guard: ({ context }) => context.layers.includes('wind'),
+            actions: enqueueActions(({ context, event, enqueue }) => {
+              enqueue.assign({ windLevel: event.level, windGrid: null })
+              enqueue({ type: 'syncLayersQuery', params: { layers: context.layers, windLevel: event.level } })
+            }),
+          },
+          {
+            actions: enqueueActions(({ context, event, enqueue }) => {
+              enqueue.assign({ windLevel: event.level, windGrid: null, windKey: null })
+              enqueue({ type: 'syncLayersQuery', params: { layers: context.layers, windLevel: event.level } })
+            }),
+          },
+        ],
+        ROUTE_CHANGED: {
+          target: '.loading',
+          guard: ({ context, event }) => {
+            const { route } = event as Extract<MosaicViewerEvent, { type: 'ROUTE_CHANGED' }>
+            if (!route.layers.includes('wind')) return false
+            const key = `${route.time ?? context.nowT}|${route.windLevel}`
+            return context.windKey !== null && key !== context.windKey
+          },
+        },
+      },
+      initial: 'idle',
+      states: {
+        idle: {},
+        loading: {
+          invoke: {
+            src: 'fetchWind',
+            input: ({ context }) => ({
+              domain: context.domain,
+              t: context.time ?? context.nowT,
+              level: context.windLevel,
+            }),
+            onDone: [
+              {
+                guard: ({ event }) => event.output !== null,
+                target: 'ready',
+                actions: assign({
+                  windGrid: ({ event }) => event.output,
+                  windError: null,
+                  windKey: ({ context }) => windKeyOf(context),
+                }),
+              },
+              {
+                target: 'noData',
+                actions: assign({
+                  windGrid: null,
+                  windError: null,
+                  windKey: ({ context }) => windKeyOf(context),
+                }),
+              },
+            ],
+            onError: {
+              target: 'error',
+              actions: assign({
+                windGrid: null,
+                windError: ({ event }) => (event.error instanceof Error ? event.error.message : String(event.error)),
+              }),
+            },
+          },
+        },
+        ready: {},
+        noData: {},
+        error: {},
+      },
+    },
+    // Rayos (D49): mismos cubos de 300 s por sitio que el viewer de un solo
+    // radar, unidos y DEDUPLICADOS (dos radares vecinos reciben la misma
+    // descarga). La ventana es `(slot anterior, slot]` — el slot anterior
+    // sale de `context.times`, no de restar 300 s: un hueco del feed no debe
+    // inventar un intervalo que no se observó.
+    lightning: {
+      on: {
+        OVERLAY_INIT: {
+          target: '.loading',
+          guard: ({ context }) => context.lightningKey === null && context.layers.includes('lightning'),
+        },
+        TOGGLE_LAYER: {
+          target: '.loading',
+          guard: ({ context, event }) =>
+            event.layer === 'lightning'
+            && !context.layers.includes('lightning')
+            && context.lightningKey !== lightningKeyOf(context),
+        },
+        ROUTE_CHANGED: {
+          target: '.loading',
+          guard: ({ context, event }) => {
+            const { route } = event as Extract<MosaicViewerEvent, { type: 'ROUTE_CHANGED' }>
+            if (!route.layers.includes('lightning')) return false
+            const t = route.time ?? context.nowT
+            return context.lightningKey !== null && !context.lightningKey.endsWith(`|${t}`)
+          },
+        },
+      },
+      initial: 'idle',
+      states: {
+        idle: {},
+        loading: {
+          invoke: {
+            src: 'fetchLightning',
+            input: ({ context }) => ({
+              domain: context.domain,
+              t: context.time ?? context.nowT,
+              prevT: prevSlotOf(context),
+            }),
+            onDone: [
+              {
+                guard: ({ event }) => event.output !== null && event.output.length > 0,
+                target: 'ready',
+                actions: assign({
+                  lightningStrikes: ({ event }) => event.output,
+                  lightningError: null,
+                  lightningKey: ({ context }) => lightningKeyOf(context),
+                }),
+              },
+              {
+                target: 'noData',
+                actions: assign({
+                  lightningStrikes: ({ event }) => event.output ?? [],
+                  lightningError: null,
+                  lightningKey: ({ context }) => lightningKeyOf(context),
+                }),
+              },
+            ],
+            onError: {
+              target: 'error',
+              actions: assign({
+                lightningStrikes: null,
+                lightningError: ({ event }) => (event.error instanceof Error ? event.error.message : String(event.error)),
+              }),
+            },
+          },
+        },
+        ready: {},
+        noData: {},
         error: {},
       },
     },

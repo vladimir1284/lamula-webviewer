@@ -162,8 +162,12 @@ const cellIconCache = new Map<string, Icon>()
  * pinta UN `image` por feature del grupo — el resto se descartaba según
  * el orden del índice espacial, que cambia con el zoom (por eso el marker
  * alternaba entre círculo y X, y la X entre blanca/azul según cuál ganara).
+ *
+ * Compartido con utils/map/mosaic-cells-layer.ts (P5): la simbología de celda
+ * es la MISMA en las dos vistas — el mosaico solo cambia el color de la
+ * etiqueta (por sitio de origen), nunca el marker.
  */
-function cellIcon(radiusKey: number, selected: boolean): Icon {
+export function cellIcon(radiusKey: number, selected: boolean): Icon {
   const key = `${radiusKey}|${selected}`
   let icon = cellIconCache.get(key)
   if (!icon) {

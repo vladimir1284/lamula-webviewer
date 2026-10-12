@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Mapa del mosaico multi-radar (D43/P4). Hermano reducido de RadarMap.vue:
-// mismo patrón de fondo OSM + raster WebGL desde un COG de R2, pero SIN
-// fenómenos/VWP/viento/rayos/anotaciones/export (alcance recortado a
-// propósito, ver machines/mosaic-viewer.ts) y SOLO modo estático — el pool
+// mismo patrón de fondo OSM + raster WebGL desde un COG de R2. Desde D49
+// monta también satélite (zIndex 3), viento (15) y rayos (19) con las
+// MISMAS clases de capa que RadarMap.vue — lo que sigue fuera a propósito
+// es VWP/meso/trayectorias, anotaciones y export (ver
+// machines/mosaic-viewer.ts). SOLO modo estático — el pool
 // de animación (utils/map/frame-pool.ts) asume una única proyección
 // compartida por toda la ventana de frames, y la geometría del mosaico es
 // POR FILA (añadir un radar recalcula la malla, docs/decisiones.md D43):
@@ -28,7 +30,7 @@ import VectorSource from 'ol/source/Vector'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'ol/ol.css'
 import type { BaseMapId } from '#shared/basemaps'
-import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon, WindGridFile } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
@@ -40,6 +42,10 @@ import { buildMaskCircles, CoverageMaskLayer } from '../utils/map/coverage-mask-
 import { registerDomainProjection } from '../utils/map/projection'
 import { rasterStyle } from '../utils/map/raster-style'
 import { buildMosaicCellFeatures, mosaicCellStyle } from '../utils/map/mosaic-cells-layer'
+import { createSatelliteLayer, setSatelliteTime, setSatelliteVariant, type SatVariant } from '../utils/map/satellite-layer'
+import { WindParticleLayer } from '../utils/map/wind-layer'
+import { LightningLayer } from '../utils/map/lightning-layer'
+import type { NormalizedStrike } from '../utils/overlay/lightning-join'
 
 const props = withDefaults(defineProps<{
   raster: MosaicRasterMeta | null
@@ -53,11 +59,24 @@ const props = withDefaults(defineProps<{
   /** celdas multi-radar del slot mostrado (P5/D45), sin deduplicar entre sitios */
   cells?: Phenomenon[]
   selectedCell?: string | null
+  /** capa GOES de fondo (D49) — WMS global, no depende del dominio */
+  satEnabled?: boolean
+  satVariant?: SatVariant
+  satOpacity?: number
+  /** campo u/v YA UNIDO de los sitios del dominio (D49); null = capa limpia */
+  windGrid?: WindGridFile | null
+  /** descargas de la ventana del slot, unidas entre sitios; null = capa limpia */
+  lightningStrikes?: NormalizedStrike[] | null
 }>(), {
   baseMap: 'osm',
   showCoverage: true,
   cells: () => [],
   selectedCell: null,
+  satEnabled: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
+  windGrid: null,
+  lightningStrikes: null,
 })
 
 const emit = defineEmits<{
@@ -74,6 +93,9 @@ let labelsLayer: TileLayer<TileSource> | undefined
 let coverageMaskLayer: CoverageMaskLayer | undefined
 let coverageCenterLayer: VectorLayer<VectorSource> | undefined
 let cellsLayer: VectorLayer<VectorSource> | undefined
+let satelliteLayer: ReturnType<typeof createSatelliteLayer> | undefined
+let windLayer: WindParticleLayer | undefined
+let lightningLayer: LightningLayer | undefined
 let rasterLayer: WebGLTileLayer | undefined
 let rasterRequestId = 0
 const coverageCenterSource = new VectorSource()
@@ -100,6 +122,30 @@ function updateCells() {
   cellsSource.clear()
   const siteOrder = props.sites.map(s => s.site_id)
   cellsSource.addFeatures(buildMosaicCellFeatures(props.cells, siteOrder, props.selectedCell))
+}
+
+// ── Capas de overlay compartidas con el viewer de un solo radar (D49) ────
+// Mismos zIndex que RadarMap.vue: satélite bajo el raster (3 < 5), viento
+// 15, rayos 19 (sobre labels 18, bajo celdas 20). Sin animación en esta
+// vista, así que ninguna se pausa: `setPaused(false)` siempre.
+function updateSatellite() {
+  if (!satelliteLayer) return
+  satelliteLayer.setVisible(props.satEnabled)
+  if (props.satEnabled) {
+    setSatelliteTime(satelliteLayer, props.raster ? `${props.raster.slot_time}Z` : null)
+  }
+}
+
+function updateWind() {
+  if (!windLayer) return
+  windLayer.setPaused(false)
+  windLayer.setGrid(props.windGrid)
+}
+
+function updateLightning() {
+  if (!lightningLayer) return
+  lightningLayer.setPaused(false)
+  lightningLayer.setStrikes(props.lightningStrikes)
 }
 
 function updateBaseMap() {
@@ -163,13 +209,18 @@ function updateRasterLayer() {
 onMounted(() => {
   const { base, labels } = createBaseMapSources(props.baseMap)
   baseLayer = new TileLayer({ source: base ?? undefined, zIndex: 0, visible: base !== null })
+  satelliteLayer = createSatelliteLayer(props.satVariant, props.satOpacity)
+  satelliteLayer.setZIndex(3)
+  satelliteLayer.setVisible(props.satEnabled)
   labelsLayer = new TileLayer({ source: labels ?? undefined, zIndex: 18, visible: labels !== null })
   map = new Map({
     target: container.value,
     controls: defaultControls({ zoom: false }),
     layers: [
       baseLayer,
+      satelliteLayer,
       (coverageMaskLayer = new CoverageMaskLayer({ zIndex: 10, visible: props.showCoverage })),
+      (windLayer = new WindParticleLayer({ zIndex: 15, seed: 1 })),
       (coverageCenterLayer = new VectorLayer({
         source: coverageCenterSource,
         zIndex: 11,
@@ -177,9 +228,14 @@ onMounted(() => {
         style: f => coverageCenterStyle(f as never),
       })),
       labelsLayer,
+      (lightningLayer = new LightningLayer({ zIndex: 19 })),
       (cellsLayer = new VectorLayer({
         source: cellsSource,
         zIndex: 20,
+        // mismo criterio que la capa de fenómenos del viewer de un solo
+        // radar (RadarMap.vue): con decenas de celdas de varios sitios, el
+        // declutter sacrifica labels solapados antes que markers
+        declutter: true,
         style: f => mosaicCellStyle(f as never),
       })),
     ],
@@ -215,6 +271,9 @@ onMounted(() => {
 
   updateCoverage()
   updateCells()
+  updateSatellite()
+  updateWind()
+  updateLightning()
   updateRasterLayer()
 
   resizeObserver = new ResizeObserver(() => map?.updateSize())
@@ -239,9 +298,22 @@ watch(() => props.showCoverage, (show) => {
 })
 watch(() => props.contributing, updateCoverage)
 watch(() => props.radiusM, updateCoverage)
+watch(() => [props.satEnabled, props.raster?.slot_time], updateSatellite)
+watch(() => props.satOpacity, o => satelliteLayer?.setOpacity(o))
+watch(() => props.satVariant, (v) => {
+  if (satelliteLayer) setSatelliteVariant(satelliteLayer, v)
+})
+watch(() => props.windGrid, updateWind)
+watch(() => props.lightningStrikes, updateLightning)
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  windLayer?.dispose()
+  windLayer = undefined
+  lightningLayer?.dispose()
+  lightningLayer = undefined
+  satelliteLayer?.dispose()
+  satelliteLayer = undefined
   map?.setTarget(undefined)
 })
 

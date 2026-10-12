@@ -7,14 +7,20 @@
 // DOM: el contenido no se duplica entre escritorio/mobile, solo cambia de
 // posición vía clases responsive de Tailwind (md:) — sin composable de
 // media query (SSR + matchMedia meten flash de hidratación; CSS puro no).
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { BaseMapId } from '#shared/basemaps'
 import { BASE_MAP_IDS, BASE_MAP_LABELS } from '#shared/basemaps'
 import type { WindLevel } from '#shared/contract'
 import { WIND_LEVEL_LABELS, WIND_LEVELS } from '#shared/contract'
 import type { OverlayLayerId, PanelId } from '../machines/overlay'
 
-defineProps<{
+const props = withDefaults(defineProps<{
+  /** 'mosaic' (D48) oculta lo que no existe en la vista de mosaico
+      (meso/trayectorias, Tendencia/VWP, anotaciones, export, feedback y el
+      suavizado del raster) — el resto del menú es EL MISMO componente, para
+      que las dos vistas se vean y se operen igual. Satélite, viento y rayos
+      SÍ existen en las dos desde D49. */
+  variant?: 'radar' | 'mosaic'
   base: BaseMapId
   /** true con el dock de Datos abierto (D37): oculta también los pills
       flotantes (Menú/Satélite/...) — comparten el mismo rincón superior
@@ -26,23 +32,42 @@ defineProps<{
       antiguo v-if="productDef" del aside */
   hasPalette: boolean
   opacity: number
-  smooth: boolean
-  smoothRadius: 1 | 2 | 4 | 8
+  smooth?: boolean
+  smoothRadius?: 1 | 2 | 4 | 8
   showPalette: boolean
-  animationEngaged: boolean
-  sat: boolean
-  satVariant: 'ir' | 'vis'
-  satOpacity: number
-  satTimeLabel: string | null
+  animationEngaged?: boolean
+  sat?: boolean
+  satVariant?: 'ir' | 'vis'
+  satOpacity?: number
+  satTimeLabel?: string | null
+  /** en 'mosaic' solo se honra 'cells' (ver MOSAIC_LAYERS) */
   layers: OverlayLayerId[]
-  windLevel: WindLevel
-  windInfo: string | null
-  lightningInfo: string | null
-  overlayJoinInfo: string | null
+  windLevel?: WindLevel
+  windInfo?: string | null
+  lightningInfo?: string | null
+  overlayJoinInfo?: string | null
   availableDays: string[]
   day: string
   unreadFeedbackCount?: number
-}>()
+}>(), {
+  variant: 'radar',
+  smooth: false,
+  smoothRadius: 1,
+  animationEngaged: false,
+  sat: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
+  satTimeLabel: null,
+  windLevel: '10m',
+  windInfo: null,
+  lightningInfo: null,
+  overlayJoinInfo: null,
+  unreadFeedbackCount: 0,
+})
+
+/** la vista de mosaico no tiene satélite/viento/rayos/tendencia/VWP/
+ * anotaciones/export/feedback ni suavizado del raster (MosaicMap.vue) */
+const isRadar = computed(() => props.variant === 'radar')
 
 const emit = defineEmits<{
   'select-base': [event: Event]
@@ -118,6 +143,7 @@ function openAnnotations() {
 
     <div class="hidden md:flex md:flex-col md:items-end md:gap-2">
       <button
+        v-if="isRadar"
         type="button"
         data-testid="feedback-pill"
         class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-3 text-sm font-bold shadow-lg hover:bg-slate-800"
@@ -253,7 +279,7 @@ function openAnnotations() {
           >
         </label>
 
-        <label class="flex items-center gap-2" :class="{ 'opacity-50': animationEngaged }">
+        <label v-if="isRadar" class="flex items-center gap-2" :class="{ 'opacity-50': animationEngaged }">
           <input
             type="checkbox"
             data-testid="smooth-toggle"
@@ -275,7 +301,7 @@ function openAnnotations() {
         </label>
 
         <label
-          v-if="smooth"
+          v-if="isRadar && smooth"
           class="block"
           :class="{ 'opacity-50': animationEngaged }"
         >
@@ -294,7 +320,7 @@ function openAnnotations() {
           </select>
         </label>
 
-        <p v-if="animationEngaged" class="text-xs text-slate-400">
+        <p v-if="isRadar && animationEngaged" class="text-xs text-slate-400">
           No disponible durante la animación.
         </p>
       </template>
@@ -338,7 +364,7 @@ function openAnnotations() {
               @input="emit('sat-opacity-input', $event)"
             >
           </label>
-          <p class="mt-1 text-xs text-slate-400">
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
             No se muestra durante la animación.
           </p>
         </template>
@@ -354,7 +380,7 @@ function openAnnotations() {
             @change="emit('toggle-layer', 'cells')"
           >
         </label>
-        <template v-if="layers.includes('cells')">
+        <template v-if="isRadar && layers.includes('cells')">
           <label class="mt-1 flex items-center gap-2 pl-4">
             <input
               type="checkbox"
@@ -374,7 +400,7 @@ function openAnnotations() {
             <span>Trayectoria futura (todas)</span>
           </label>
         </template>
-        <label class="mt-1 flex items-center gap-2">
+        <label v-if="isRadar" class="mt-1 flex items-center gap-2">
           <input
             type="checkbox"
             data-testid="layer-toggle-meso"
@@ -423,7 +449,7 @@ function openAnnotations() {
           >
             {{ windInfo }}
           </p>
-          <p class="mt-1 text-xs text-slate-400">
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
             No se muestra durante la animación.
           </p>
         </template>
@@ -447,13 +473,13 @@ function openAnnotations() {
           >
             {{ lightningInfo }}
           </p>
-          <p class="mt-1 text-xs text-slate-400">
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
             No se muestra durante la animación.
           </p>
         </template>
       </fieldset>
 
-      <fieldset class="rounded bg-slate-800 p-3">
+      <fieldset v-if="isRadar" class="rounded bg-slate-800 p-3">
         <legend class="px-1 text-slate-400">Datos</legend>
         <div class="flex gap-2">
           <button
@@ -484,7 +510,7 @@ function openAnnotations() {
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <legend class="px-1 text-slate-400">Preferencias y Opinión</legend>
+        <legend class="px-1 text-slate-400">{{ isRadar ? 'Preferencias y Opinión' : 'Preferencias' }}</legend>
         <div class="flex flex-col gap-2">
           <button
             type="button"
@@ -492,9 +518,10 @@ function openAnnotations() {
             class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openPrefs"
           >
-            Unidades, hora, alcance del radar
+            {{ isRadar ? 'Unidades, hora, alcance del radar' : 'Unidades, hora, cobertura' }}
           </button>
           <button
+            v-if="isRadar"
             type="button"
             data-testid="annotations-open"
             class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
@@ -503,6 +530,7 @@ function openAnnotations() {
             Anotar el mapa
           </button>
           <button
+            v-if="isRadar"
             type="button"
             data-testid="export-open"
             class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
@@ -511,6 +539,7 @@ function openAnnotations() {
             Exportar imagen del mapa
           </button>
           <button
+            v-if="isRadar"
             type="button"
             data-testid="menu-feedback-open"
             class="w-full flex items-center justify-between rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"

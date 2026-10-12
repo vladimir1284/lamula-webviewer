@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Chip flotante top-left de la vista de mosaico (D43/P4) — hermano reducido
 // de RadarProductChip.vue: selector de dominio+producto, estado del slot
-// mostrado, y la lista de quién aportó / quién falta (lo que el overlay de
-// cobertura pinta en el mapa, acá en texto para quien no pueda leer el mapa
-// o tenga la capa apagada).
+// mostrado, y una sola línea con los radares del dominio — los que aportaron
+// al slot en el color de acento, los ausentes en gris (misma información que
+// el overlay de cobertura del mapa, para quien lo tenga apagado).
 import { computed, ref } from 'vue'
 import type { MosaicDomain, MosaicRasterMeta, Phenomenon, Product } from '#shared/contract'
 import { stormCellAttrs } from '#shared/contract'
@@ -31,6 +31,10 @@ const props = defineProps<{
   /** celdas multi-radar del slot mostrado (P5/D45) */
   cells: Phenomenon[]
   selectedCell: string | null
+  /** ruta al viewer de un solo radar de un sitio del dominio (D48): el
+   * enlace vive acá, no en la cinta de marca — simétrico al `mosaic-enter-link`
+   * de RadarProductChip.vue */
+  singleRadarPath?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -45,7 +49,10 @@ const hasError = computed(() => Boolean(props.domainsError || props.rasterFetchE
 
 const currentDomain = computed(() => props.domains.find(d => d.domain_id === props.domain) ?? null)
 const contributingIds = computed(() => new Set((props.raster?.contributing ?? []).map(c => c.site)))
-const absentSites = computed(() => (currentDomain.value?.site_ids ?? []).filter(s => !contributingIds.value.has(s)))
+/** todos los sitios del dominio en orden, marcados por si aportaron al slot */
+const siteRows = computed(() =>
+  (currentDomain.value?.site_ids ?? []).map(site => ({ site, contributing: contributingIds.value.has(site) })),
+)
 
 interface CellRow {
   id: string
@@ -100,6 +107,15 @@ const fmtDbz = (v: number | null) => (v === null ? '—' : v.toFixed(0))
           </span>
           <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
         </button>
+
+        <NuxtLink
+          v-if="singleRadarPath"
+          :to="singleRadarPath"
+          data-testid="mosaic-exit-link"
+          class="shrink-0 rounded bg-slate-800 px-1.5 py-1 text-[11px] text-teal-400 underline hover:bg-slate-700"
+        >
+          radar único
+        </NuxtLink>
 
         <button
           type="button"
@@ -199,17 +215,19 @@ const fmtDbz = (v: number | null) => (v === null ? '—' : v.toFixed(0))
           <dt class="text-slate-400">Lat/lon</dt>
           <dd data-testid="mosaic-cursor-latlon" class="font-mono">{{ cursorLatLonLabel ?? '—' }}</dd>
         </div>
-        <!-- cobertura en texto: mismo dato que los anillos del mapa, para
-             cuando la capa está apagada o es difícil de leer de un vistazo -->
-        <div class="pt-1">
-          <dt class="text-slate-400">Aportan</dt>
-          <dd data-testid="mosaic-contributing" class="font-mono text-teal-400">
-            {{ raster.contributing.length > 0 ? raster.contributing.map(c => c.site).join(', ') : '—' }}
+        <!-- cobertura en una línea: mismo dato que la máscara del mapa —
+             quien aportó al slot en el color de acento, el ausente en gris -->
+        <div class="flex justify-between gap-4">
+          <dt class="text-slate-400">Radares</dt>
+          <dd data-testid="mosaic-contributing" class="flex flex-wrap justify-end gap-x-1.5 font-mono">
+            <span
+              v-for="row in siteRows"
+              :key="row.site"
+              :data-contributing="row.contributing ? '1' : '0'"
+              :class="row.contributing ? 'font-semibold text-teal-400' : 'text-slate-500'"
+            >{{ row.site }}</span>
+            <span v-if="siteRows.length === 0">—</span>
           </dd>
-        </div>
-        <div v-if="absentSites.length > 0">
-          <dt class="text-slate-400">Ausentes</dt>
-          <dd data-testid="mosaic-absent" class="font-mono text-slate-500">{{ absentSites.join(', ') }}</dd>
         </div>
       </dl>
 

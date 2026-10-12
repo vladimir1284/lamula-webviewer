@@ -1,9 +1,13 @@
 // Features + estilo de celdas multi-radar sobre el mapa de mosaico (P5,
 // D45). Hermano reducido de phenomena-layer.ts: solo `storm_cell` (sin
 // meso/TVS/tracks — esos overlays siguen siendo por-radar, ver
-// machines/mosaic-viewer.ts), pero coloreado por sitio de origen en vez de
-// por selección/severidad, porque acá la pregunta del usuario es "¿qué
-// radar vio esta celda?", no "¿qué tan severa es?".
+// machines/mosaic-viewer.ts).
+//
+// La SIMBOLOGÍA del marker es la misma que la del viewer de un solo radar
+// (`cellIcon` de phenomena-layer.ts: circunferencia navy + X, radio por
+// dbz_max): una celda se lee igual en las dos vistas. Lo único propio del
+// mosaico es la ETIQUETA — `SITE:ID` coloreada por sitio de origen, porque
+// acá el usuario además necesita saber qué radar vio la celda.
 import type { Phenomenon } from '#shared/contract'
 import { stormCellAttrs } from '#shared/contract'
 import Feature from 'ol/Feature'
@@ -11,13 +15,11 @@ import { Point } from 'ol/geom'
 import { fromLonLat } from 'ol/proj'
 import Fill from 'ol/style/Fill'
 import Stroke from 'ol/style/Stroke'
-import CircleStyle from 'ol/style/Circle'
 import Style from 'ol/style/Style'
 import Text from 'ol/style/Text'
-import { dbzToRadius } from './phenomena-layer'
+import { cellIcon, dbzToRadius } from './phenomena-layer'
 import { mosaicCellId, siteColor } from '../overlay/mosaic-cells'
 
-const SELECTED_FILL = '#ffffff'
 const HALO_WHITE = '#ffffff'
 
 /** una feature Point por celda, SIN deduplicar entre sitios (decisión explícita) */
@@ -58,15 +60,13 @@ export function mosaicCellStyle(feature: { get(key: string): unknown }): Style {
   let style = styleCache.get(key)
   if (!style) {
     style = new Style({
+      // mismo zIndex que el marker de celda del viewer de un solo radar:
+      // gana el declutter frente a cualquier otra imagen cercana
       zIndex: 10,
-      image: new CircleStyle({
-        radius: radiusKey,
-        fill: new Fill({ color: selected ? SELECTED_FILL : color }),
-        stroke: new Stroke({ color, width: selected ? 3 : 2 }),
-      }),
+      image: cellIcon(radiusKey, selected),
       text: new Text({
         text: cellId,
-        font: 'bold 10px ui-monospace, monospace',
+        font: 'bold 11px ui-monospace, monospace',
         fill: new Fill({ color }),
         stroke: new Stroke({ color: HALO_WHITE, width: 3 }),
         offsetY: -14,

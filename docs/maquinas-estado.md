@@ -130,9 +130,10 @@ idéntico en forma al de `viewerMachine` arriba, sustituir `vol_time` por
 `slot_time` y `site` por `domain` — no se repite acá) y `cells` (P5, propia,
 ver abajo).
 
-**Alcance recortado a propósito** (no es una omisión): sin VWP/viento/rayos/
-anotaciones/export/feedback — esos overlays son por-radar por naturaleza y el
-dominio no tiene un `site_id` único al que atarlos. Celdas de tormenta SÍ
+**Alcance recortado a propósito** (no es una omisión): sin VWP, sin meso/
+trayectorias, sin anotaciones/export/feedback. Satélite, viento y rayos SÍ
+están desde D49: el satélite es un WMS global (nada que unir) y viento/rayos
+se resuelven uniendo los N sitios del dominio (ver regiones abajo). Celdas de tormenta SÍ
 llegan (P5, región `cells`), porque ahí la pregunta ("¿qué radares ven
 tormentas ahora?") es del dominio, no de un radar. **Sin animación
 todavía**: el pool de frames (`utils/map/frame-pool.ts`, genérico desde
@@ -148,23 +149,35 @@ dejarlo inerte.
 **Contexto:** `domain`, `product`, `time` (ISO naive; `null` = vista live),
 `nowT`, `raster: MosaicRasterMeta | null`, `rasterError`, `day`, `times:
 MosaicRasterMeta[]`, `timelineError`, `liveRefresh`, `atStart`/`atEnd`,
-`opacity`, `base`, `coverage` (overlay de cobertura — default `true`,
-shareable vía `?coverage=0`, **sin** `lamula:prefs`: esta vista no persiste
-nada en localStorage todavía), `cogError`, `cells: Phenomenon[]`,
-`cellsError`, `selectedCell` (`SITE:ID` o `null`), `cellsKey` (P5, ver abajo).
+`opacity`, `base`, `coverage` (máscara de cobertura — default `true`,
+shareable vía `?coverage=0`; **no** es una pref persistida acá, ver D48),
+`cogError`, `cells: Phenomenon[]`, `cellsError`, `selectedCell` (`SITE:ID` o
+`null`), `cellsKey` (P5, ver abajo), `layers: MosaicLayerId[]` (D48/D49 —
+`'cells' | 'wind' | 'lightning'`, `?layers=`, default vacío), `sat`/
+`satVariant`/`satOpacity` (D49, `?sat=1&satVariant&satOpacity`), `windLevel`
+(`?windLevel=`), `windGrid`/`windError`/`windKey` y `lightningStrikes`/
+`lightningError`/`lightningKey` y las prefs de display que
+la vista comparte con el viewer de un solo radar vía `lamula:prefs`:
+`units`, `clock`, `animationFrames` (tamaño de la ventana que dibuja la
+strip), `showPalette`.
 
 | Evento | Región | Efecto |
 |---|---|---|
 | `ROUTE_CHANGED` | `raster` | igual que `viewerMachine`, sustituyendo `vol_time`→`slot_time` |
 | `ROUTE_CHANGED` | `timeline` | igual que `viewerMachine` |
-| `ROUTE_CHANGED` | `cells` | refetch si `route.time` (o `nowT`) difiere de `cellsKey` — ver abajo |
+| `ROUTE_CHANGED` | `cells` | refetch si la capa `cells` viene encendida **en el payload** y `route.time` (o `nowT`) difiere de `cellsKey`. El guard lee `event.route.layers`, no el contexto: en la difusión a regiones paralelas los guards ven el snapshot previo (`assignRoute` corre en la región `raster`, que va primero) |
 | `STEP(dir)` | `raster` | igual que `viewerMachine` |
 | `SELECT_TIME(time)` / `SELECT_DAY` / `SET_LIVE_REFRESH` | — / `timeline` | igual que `viewerMachine` |
 | `MOUNTED` | — | guard (time `null` + raster resuelto) → `navigate` replace al `slot_time` |
-| `CELLS_INIT` | `cells` | dispara el primer `fetchCells` — enviado por la página en `onMounted`, nunca en SSR |
+| `CELLS_INIT` | `cells` | dispara el primer `fetchCells` — enviado por la página en `onMounted`, nunca en SSR; **guard: solo con la capa `cells` encendida** (D48) |
+| `TOGGLE_LAYER(layer)` | `layers` + la región de la capa | la región `layers` hace el assign de `layers` y el `syncLayersQuery` (`?layers=`, replace inmediato); `cells`/`wind`/`lightning` solo deciden su `→ loading`. El evento se difunde a TODAS las regiones que lo declaran: por eso el assign vive en una región propia (si no, correría una vez por región) y los guards leen el PAYLOAD + contexto previo. Apagar NO tira el dato del contexto: reencender en el mismo slot no refetchea |
+| `TOGGLE_SAT` / `SELECT_SAT_VARIANT` / `SET_SAT_OPACITY` | — | satélite GOES: puro display, sin fetch — assign + `syncQuery` (debounced, junto a opacity/base/coverage) |
+| `SELECT_WIND_LEVEL(level)` | `wind` | assign del nivel + `syncLayersQuery`; con la capa encendida además `→ loading`. Vive en la región `wind` (no en `layers`) para que el assign corra antes del `input` del invoke |
+| `PREFS_LOADED(prefs)` | — | asigna las prefs leídas de `lamula:prefs` post-mount; **no** persiste (sería write-on-read) |
+| `SET_PREF(patch)` | — | asigna + `persistPrefs` del patch exacto (mismo contrato que `viewerMachine`) |
 | `SELECT_DOMAIN` / `SELECT_PRODUCT` | — | efecto `navigate` push |
 | `SET_OPACITY` / `SELECT_BASE` | — | asignan + `syncQuery` (`?opacity&base&coverage`, igual patrón de replace debounced 300 ms que `viewerMachine`, sin `persistPrefs`) |
-| `TOGGLE_COVERAGE` | — | invierte `context.coverage` + `syncQuery` — controla la capa de anillos de `MosaicMap.vue` (`coverageLayer`/`coverageCenterLayer`), no un fetch: la cobertura siempre se calcula, esto solo oculta el dibujo |
+| `TOGGLE_COVERAGE` | — | invierte `context.coverage` + `syncQuery` — controla la máscara de `MosaicMap.vue` (`CoverageMaskLayer`/`coverageCenterLayer`), no un fetch: la cobertura siempre se calcula, esto solo oculta el dibujo. En la UI se toca desde `PrefsDialog` (D48), no desde un checkbox propio |
 | `SELECT_CELL(cellId)` | — | asigna `selectedCell` + `syncCellQuery` (`?cell=SITE:ID`, replace **inmediato**, sin debounce — igual criterio que `SELECT_CELL` en `overlayMachine`, D23: un click no debe sentirse con latencia de slider) |
 | `COG_ERROR` | — | asigna contexto |
 
@@ -176,15 +189,29 @@ el `vol_time` de fenómenos más cercano al `slot_time` mostrado
 misma tormenta aparecen dos veces, con su propio `cell_id` (el ID del RPG es
 local al sitio, no global). Un sitio que falla o no tiene volumen en
 tolerancia simplemente no aporta celdas — mismo espíritu que "un radar caído
-no apaga el mosaico" (D43). Identidad compuesta `SITE:ID`
+no apaga el mosaico" (D43). **Capa apagable y apagada por defecto** (D48):
+con `?layers=cells` ausente no se dispara el fan-out de `/api/phenomena` por
+sitio — ni en `CELLS_INIT` ni al cambiar de slot. Identidad compuesta `SITE:ID`
 (`utils/overlay/mosaic-cells.ts::mosaicCellId`) para no colisionar entre
-sitios; color por sitio (`siteColor`, ciclado por posición en
-`MosaicDomain.site_ids`, no por hash) en vez de por severidad/selección como
-`phenomena-layer.ts`. Sin SSR: el primer fetch lo dispara `CELLS_INIT` desde
+sitios; el marker es el MISMO de `phenomena-layer.ts` (`cellIcon`,
+circunferencia navy + X, radio por `dbz_max`) y lo único propio es el color
+del label `SITE:ID` (`siteColor`, ciclado por posición en
+`MosaicDomain.site_ids`, no por hash) — D48. Sin SSR: el primer fetch lo dispara `CELLS_INIT` desde
 `onMounted` (nunca en servidor), evitando un fetch servidor+cliente
 duplicado — el dominio no cambia dentro de la vida de un actor (la página
 remonta entera por `key: route => route.params.domain`), así que el refetch
 por `ROUTE_CHANGED` solo mira si cambió el `slot_time`.
+
+**Viento y rayos del dominio (D49):** regiones `wind` y `lightning`, mismo
+patrón que `cells` — índice por SITIO (`/api/wind/times`, `/api/lightning/times`
+por cada `site_id` del dominio), join en cliente y unión del resultado. El
+viento une las N grillas u/v con `mergeWindGrids` (`utils/wind/grid.ts`: bbox
+unión, paso el más fino, gana la primera fuente que cubra la celda, huecos en
+NaN); los rayos concatenan los cubos que solapan la ventana `(slot anterior,
+slot]` y **deduplican** con `dedupeStrikes` (dos radares vecinos reciben la
+misma descarga del feed GLM). El slot anterior sale de `context.times`, no de
+restar 300 s: un hueco del feed no debe inventar un intervalo observado.
+Claves de cache: `windKey = ${slot}|${level}`, `lightningKey = ${prev}|${slot}`.
 
 **Gotcha de XState v5 encontrado acá** (canario: el test "ROUTE_CHANGED a
 otro slot_time SÍ refetchea celdas" de `mosaic-viewer-machine.spec.ts` falla
@@ -202,14 +229,14 @@ uso correcto.
 **Overlay de cobertura (la pieza central de P4):** `raster.contributing`
 (`MosaicContribution[]`, ya parseado por el DAL) da quién aportó al slot
 mostrado; `MosaicDomain.site_ids` menos esos sites da los **ausentes**.
-`utils/map/coverage-rings-layer.ts` (puro, sin OL `Map`) construye un
-anillo + un marcador central por sitio miembro — sólido/teal si está en
-`contributing`, punteado/atenuado si no — usando `circular()` + reproyección
-a 3857 (mismo truco que la máscara de cobertura de un solo radar en
-`RadarMap.vue`, un círculo esférico centrado en el radar, no uno plano en
-3857 que a 460 km de radio ya se ve elíptico). `MosaicDomainChip.vue`
-repite el mismo dato en texto (listas "Aportan"/"Ausentes") para cuando la
-capa está apagada o es difícil de leer de un vistazo. Radio único por
+`utils/map/coverage-mask-layer.ts` (D46) oscurece el mapa entero y "puncha"
+transparente el círculo de cada radar que SÍ aportó (`circular()` +
+reproyección a 3857 — un círculo esférico centrado en el radar, no uno plano
+en 3857 que a 460 km de radio ya se ve elíptico); `coverage-rings-layer.ts`
+queda solo para el marcador+label de los contribuyentes.
+`MosaicDomainChip.vue` repite el mismo dato en UNA línea de texto (D48):
+todos los sitios del dominio, los que aportan en color de acento y los
+ausentes en gris. Radio único por
 dominio (`MosaicDomainRow.radius_m`): el contrato no trae un alcance
 por-radar, así que los N anillos salen del mismo tamaño — aproximación
 visual, no el alcance físico exacto de cada antena.

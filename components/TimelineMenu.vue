@@ -7,10 +7,13 @@
 import { ref } from 'vue'
 import type { UserPrefsSlice } from '../machines/viewer'
 
-defineProps<{
+withDefaults(defineProps<{
   animationFrames: number
-  speed: number
-}>()
+  speed?: number
+  /** false en la vista de mosaico (D48): no hay animación todavía, pero la
+   * cantidad de observaciones sí define la ventana que dibuja la strip */
+  showSpeed?: boolean
+}>(), { speed: 1, showSpeed: true })
 
 const emit = defineEmits<{
   setPref: [patch: Partial<UserPrefsSlice>]
@@ -35,7 +38,7 @@ defineExpose({
   >
     <form method="dialog">
       <div class="flex items-center justify-between border-b border-slate-700 px-4 py-2">
-        <h2 id="timeline-menu-title" class="text-sm font-bold">Animación</h2>
+        <h2 id="timeline-menu-title" class="text-sm font-bold">{{ showSpeed ? 'Animación' : 'Línea de tiempo' }}</h2>
         <button
           data-testid="timeline-menu-close"
           aria-label="Cerrar"
@@ -61,7 +64,7 @@ defineExpose({
           </select>
         </label>
 
-        <fieldset class="rounded bg-slate-900/60 p-3">
+        <fieldset v-if="showSpeed" class="rounded bg-slate-900/60 p-3">
           <legend class="px-1 text-slate-400">Velocidad</legend>
           <label v-for="s in SPEEDS" :key="s" class="flex items-center gap-2">
             <input

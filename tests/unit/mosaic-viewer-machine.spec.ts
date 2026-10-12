@@ -1,10 +1,11 @@
 // mosaicViewerMachine pura (D43/P4) — hermana reducida de viewer-machine.spec.ts:
 // mismas regiones 'raster'/'timeline', indexadas por domain/product/slot_time.
-import type { MosaicRasterMeta, Phenomenon } from '#shared/contract'
+import type { MosaicRasterMeta, Phenomenon, WindGridFile } from '#shared/contract'
 import { describe, expect, it, vi } from 'vitest'
 import { createActor, fromPromise } from 'xstate'
 import type { MosaicRouteState, MosaicViewerInput } from '../../machines/mosaic-viewer'
 import { mosaicViewerMachine } from '../../machines/mosaic-viewer'
+import type { NormalizedStrike } from '../../utils/overlay/lightning-join'
 
 function cell(site: string, cellId: string): Phenomenon {
   return {
@@ -54,6 +55,11 @@ const routeAt = (patch: Partial<MosaicRouteState> = {}): MosaicRouteState => ({
   base: 'osm',
   coverage: true,
   cell: null,
+  layers: [],
+  sat: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
+  windLevel: '10m',
   ...patch,
 })
 
@@ -69,14 +75,22 @@ function boot(opts: {
     input: { domain: string, product: number, t: string, mode: 'next' | 'prev' }
   ) => Promise<MosaicRasterMeta | null>
   fetchCells?: (input: { domain: string, t: string }) => Promise<Phenomenon[]>
+  fetchWind?: (input: { domain: string, t: string, level: string }) => Promise<WindGridFile | null>
+  fetchLightning?: (
+    input: { domain: string, t: string, prevT: string | null }
+  ) => Promise<NormalizedStrike[] | null>
 } = {}) {
   const navigate = vi.fn()
   const syncQuery = vi.fn()
   const syncCellQuery = vi.fn()
+  const syncLayersQuery = vi.fn()
+  const persistPrefs = vi.fn()
   const fetch = vi.fn(opts.fetch ?? (async () => null))
   const fetchDay = vi.fn(opts.fetchDay ?? (async () => []))
   const fetchStep = vi.fn(opts.fetchStep ?? (async () => null))
   const fetchCells = vi.fn(opts.fetchCells ?? (async () => []))
+  const fetchWind = vi.fn(opts.fetchWind ?? (async () => null))
+  const fetchLightning = vi.fn(opts.fetchLightning ?? (async () => []))
   const input: MosaicViewerInput = {
     route: routeAt(opts.route),
     nowT: NOW_T,
@@ -92,17 +106,34 @@ function boot(opts: {
         fetchDay: fromPromise(({ input: i }) => fetchDay(i)),
         fetchStep: fromPromise(({ input: i }) => fetchStep(i)),
         fetchCells: fromPromise(({ input: i }) => fetchCells(i)),
+        fetchWind: fromPromise(({ input: i }) => fetchWind(i)),
+        fetchLightning: fromPromise(({ input: i }) => fetchLightning(i)),
       },
       actions: {
         navigate: (_, params) => navigate(params),
         syncQuery: (_, params) => syncQuery(params),
         syncCellQuery: (_, params) => syncCellQuery(params),
+        syncLayersQuery: (_, params) => syncLayersQuery(params),
+        persistPrefs: (_, params) => persistPrefs(params),
       },
     }),
     { input },
   )
   actor.start()
-  return { actor, navigate, fetch, fetchDay, fetchStep, fetchCells, syncQuery, syncCellQuery }
+  return {
+    actor,
+    navigate,
+    fetch,
+    fetchDay,
+    fetchStep,
+    fetchCells,
+    fetchWind,
+    fetchLightning,
+    syncQuery,
+    syncCellQuery,
+    syncLayersQuery,
+    persistPrefs,
+  }
 }
 
 describe('mosaicViewerMachine — región raster: estado inicial (SSR)', () => {
@@ -209,60 +240,76 @@ describe('mosaicViewerMachine — display prefs', () => {
     const { actor, syncQuery } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'TOGGLE_COVERAGE' })
     expect(actor.getSnapshot().context.coverage).toBe(false)
-    expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.8, base: 'osm', coverage: false })
+    expect(syncQuery).toHaveBeenCalledWith({
+      opacity: 0.8,
+      base: 'osm',
+      coverage: false,
+      sat: false,
+      satVariant: 'ir',
+      satOpacity: 0.6,
+    })
   })
 
   it('SET_OPACITY asigna y sincroniza', () => {
     const { actor, syncQuery } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'SET_OPACITY', value: 0.3 })
     expect(actor.getSnapshot().context.opacity).toBe(0.3)
-    expect(syncQuery).toHaveBeenCalledWith({ opacity: 0.3, base: 'osm', coverage: true })
+    expect(syncQuery).toHaveBeenCalledWith({
+      opacity: 0.3,
+      base: 'osm',
+      coverage: true,
+      sat: false,
+      satVariant: 'ir',
+      satOpacity: 0.6,
+    })
   })
 })
 
 describe('mosaicViewerMachine — región cells (P5/D45)', () => {
-  it('arranca en idle, sin fetch antes de CELLS_INIT (nunca en SSR)', () => {
-    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
+  it('arranca en idle, sin fetch antes de OVERLAY_INIT (nunca en SSR)', () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0), route: { layers: ['cells'] } })
     expect(actor.getSnapshot().matches({ cells: 'idle' })).toBe(true)
     expect(fetchCells).not.toHaveBeenCalled()
   })
 
-  it('CELLS_INIT dispara fetchCells con domain+time y resuelve a ready', async () => {
+  it('OVERLAY_INIT dispara fetchCells con domain+time y resuelve a ready', async () => {
     const { actor, fetchCells } = boot({
       initialRaster: meta(T0),
+      route: { layers: ['cells'] },
       fetchCells: async () => [cell('AMX', 'A0'), cell('BYX', 'A0')],
     })
-    actor.send({ type: 'CELLS_INIT' })
+    actor.send({ type: 'OVERLAY_INIT' })
     expect(actor.getSnapshot().matches({ cells: 'loading' })).toBe(true)
     expect(fetchCells).toHaveBeenCalledWith({ domain: 'GULF', t: T0 })
     await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
     expect(actor.getSnapshot().context.cells).toHaveLength(2)
   })
 
-  it('CELLS_INIT repetido no vuelve a disparar fetch (cellsKey ya resuelto)', async () => {
-    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
-    actor.send({ type: 'CELLS_INIT' })
+  it('OVERLAY_INIT repetido no vuelve a disparar fetch (cellsKey ya resuelto)', async () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0), route: { layers: ['cells'] } })
+    actor.send({ type: 'OVERLAY_INIT' })
     await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
-    actor.send({ type: 'CELLS_INIT' })
+    actor.send({ type: 'OVERLAY_INIT' })
     expect(fetchCells).toHaveBeenCalledTimes(1)
   })
 
   it('ROUTE_CHANGED con mismo slot_time no refetchea celdas', async () => {
-    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
-    actor.send({ type: 'CELLS_INIT' })
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0), route: { layers: ['cells'] } })
+    actor.send({ type: 'OVERLAY_INIT' })
     await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
-    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ opacity: 0.5 }) })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ opacity: 0.5, layers: ['cells'] }) })
     expect(fetchCells).toHaveBeenCalledTimes(1)
   })
 
   it('ROUTE_CHANGED a otro slot_time SÍ refetchea celdas', async () => {
     const { actor, fetchCells } = boot({
       initialRaster: meta(T0),
+      route: { layers: ['cells'] },
       initialTimes: [meta(T1), meta(T0), meta(T2)],
     })
-    actor.send({ type: 'CELLS_INIT' })
+    actor.send({ type: 'OVERLAY_INIT' })
     await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
-    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T2 }) })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T2, layers: ['cells'] }) })
     expect(actor.getSnapshot().matches({ cells: 'loading' })).toBe(true)
     await vi.waitFor(() => expect(fetchCells).toHaveBeenCalledTimes(2))
     expect(fetchCells).toHaveBeenLastCalledWith({ domain: 'GULF', t: T2 })
@@ -287,5 +334,191 @@ describe('mosaicViewerMachine — región cells (P5/D45)', () => {
     const { actor } = boot({ initialRaster: meta(T0) })
     actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ cell: 'BYX:C3' }) })
     expect(actor.getSnapshot().context.selectedCell).toBe('BYX:C3')
+  })
+})
+
+describe('mosaicViewerMachine — capa de celdas on/off (paridad con el viewer de un solo radar)', () => {
+  it('capa apagada (default): OVERLAY_INIT no dispara fetch', () => {
+    const { actor, fetchCells } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'OVERLAY_INIT' })
+    expect(actor.getSnapshot().matches({ cells: 'idle' })).toBe(true)
+    expect(fetchCells).not.toHaveBeenCalled()
+  })
+
+  it('TOGGLE_LAYER enciende, sincroniza la query y carga las celdas', async () => {
+    const { actor, fetchCells, syncLayersQuery } = boot({
+      initialRaster: meta(T0),
+      fetchCells: async () => [cell('AMX', 'A0')],
+    })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    expect(actor.getSnapshot().context.layers).toEqual(['cells'])
+    expect(syncLayersQuery).toHaveBeenCalledWith({ layers: ['cells'], windLevel: '10m' })
+    expect(actor.getSnapshot().matches({ cells: 'loading' })).toBe(true)
+    await vi.waitFor(() => expect(fetchCells).toHaveBeenCalledTimes(1))
+  })
+
+  it('apagar y reencender en el mismo slot no refetchea', async () => {
+    const { actor, fetchCells, syncLayersQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    expect(actor.getSnapshot().context.layers).toEqual([])
+    expect(syncLayersQuery).toHaveBeenLastCalledWith({ layers: [], windLevel: '10m' })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    expect(fetchCells).toHaveBeenCalledTimes(1)
+  })
+
+  it('con la capa apagada, cambiar de slot no refetchea celdas', async () => {
+    const { actor, fetchCells } = boot({
+      initialRaster: meta(T0),
+      route: { layers: ['cells'] },
+      initialTimes: [meta(T1), meta(T0), meta(T2)],
+    })
+    actor.send({ type: 'OVERLAY_INIT' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ cells: 'ready' })).toBe(true))
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'cells' })
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T2, layers: [] }) })
+    expect(fetchCells).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('mosaicViewerMachine — prefs de display', () => {
+  it('PREFS_LOADED asigna sin persistir', () => {
+    const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
+    actor.send({
+      type: 'PREFS_LOADED',
+      prefs: { units: 'si', clock: 'local', animationFrames: 20, showPalette: false },
+    })
+    expect(actor.getSnapshot().context.units).toBe('si')
+    expect(actor.getSnapshot().context.clock).toBe('local')
+    expect(actor.getSnapshot().context.animationFrames).toBe(20)
+    expect(persistPrefs).not.toHaveBeenCalled()
+  })
+
+  it('SET_PREF asigna y persiste el patch exacto', () => {
+    const { actor, persistPrefs } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'SET_PREF', patch: { clock: 'local' } })
+    expect(actor.getSnapshot().context.clock).toBe('local')
+    expect(persistPrefs).toHaveBeenCalledWith({ clock: 'local' })
+  })
+})
+
+describe('mosaicViewerMachine — capas de viento y rayos (D49)', () => {
+  const grid: WindGridFile = {
+    header: { nx: 2, ny: 2, lo1: -82, la1: 26, dx: 0.25, dy: 0.25, refTime: '2026-07-11T00:00:00Z', forecastHour: 3 },
+    u: [1, 1, 1, 1],
+    v: [0, 0, 0, 0],
+  }
+
+  it('viento: apagado no fetchea ni en OVERLAY_INIT', () => {
+    const { actor, fetchWind } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'OVERLAY_INIT' })
+    expect(fetchWind).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().matches({ wind: 'idle' })).toBe(true)
+  })
+
+  it('viento: TOGGLE_LAYER carga el grid unido y lo deja en contexto', async () => {
+    const { actor, fetchWind } = boot({ initialRaster: meta(T0), fetchWind: async () => grid })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'wind' })
+    expect(fetchWind).toHaveBeenCalledWith({ domain: 'GULF', t: T0, level: '10m' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ wind: 'ready' })).toBe(true))
+    expect(actor.getSnapshot().context.windGrid).toEqual(grid)
+  })
+
+  it('viento: sin grid en tolerancia cae a noData, no a error', async () => {
+    const { actor } = boot({ initialRaster: meta(T0), fetchWind: async () => null })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'wind' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ wind: 'noData' })).toBe(true))
+    expect(actor.getSnapshot().context.windGrid).toBeNull()
+  })
+
+  it('viento: cambiar de nivel con la capa encendida invalida y recarga con el nivel nuevo', async () => {
+    const { actor, fetchWind, syncLayersQuery } = boot({ initialRaster: meta(T0), fetchWind: async () => grid })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'wind' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ wind: 'ready' })).toBe(true))
+    actor.send({ type: 'SELECT_WIND_LEVEL', level: '850hPa' })
+    expect(actor.getSnapshot().context.windLevel).toBe('850hPa')
+    expect(syncLayersQuery).toHaveBeenLastCalledWith({ layers: ['wind'], windLevel: '850hPa' })
+    await vi.waitFor(() => expect(fetchWind).toHaveBeenCalledTimes(2))
+    expect(fetchWind).toHaveBeenLastCalledWith({ domain: 'GULF', t: T0, level: '850hPa' })
+  })
+
+  it('viento: el mismo nivel no refetchea', async () => {
+    const { actor, fetchWind } = boot({ initialRaster: meta(T0), fetchWind: async () => grid })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'wind' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ wind: 'ready' })).toBe(true))
+    actor.send({ type: 'SELECT_WIND_LEVEL', level: '10m' })
+    expect(fetchWind).toHaveBeenCalledTimes(1)
+  })
+
+  it('viento: cambiar de slot con la capa encendida recarga', async () => {
+    const { actor, fetchWind } = boot({
+      initialRaster: meta(T0),
+      route: { layers: ['wind'] },
+      initialTimes: [meta(T1), meta(T0), meta(T2)],
+      fetchWind: async () => grid,
+    })
+    actor.send({ type: 'OVERLAY_INIT' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ wind: 'ready' })).toBe(true))
+    actor.send({ type: 'ROUTE_CHANGED', route: routeAt({ time: T2, layers: ['wind'] }) })
+    await vi.waitFor(() => expect(fetchWind).toHaveBeenCalledTimes(2))
+    expect(fetchWind).toHaveBeenLastCalledWith({ domain: 'GULF', t: T2, level: '10m' })
+  })
+
+  it('rayos: la ventana usa el slot ANTERIOR del día cargado, no una resta fija', async () => {
+    const { actor, fetchLightning } = boot({
+      initialRaster: meta(T0),
+      initialTimes: [meta(T1), meta(T0), meta(T2)],
+      fetchLightning: async () => [{ lon: -80, lat: 25, progress: 0.5 }],
+    })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'lightning' })
+    expect(fetchLightning).toHaveBeenCalledWith({ domain: 'GULF', t: T0, prevT: T1 })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ lightning: 'ready' })).toBe(true))
+    expect(actor.getSnapshot().context.lightningStrikes).toHaveLength(1)
+  })
+
+  it('rayos: en el primer slot del día prevT es null (fallback de ventana)', () => {
+    const { actor, fetchLightning } = boot({
+      initialRaster: meta(T1),
+      route: { time: T1 },
+      initialTimes: [meta(T1), meta(T0)],
+    })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'lightning' })
+    expect(fetchLightning).toHaveBeenCalledWith({ domain: 'GULF', t: T1, prevT: null })
+    expect(actor.getSnapshot().matches({ lightning: 'loading' })).toBe(true)
+  })
+
+  it('rayos: intervalo sin descargas es noData, con la lista vacía en contexto', async () => {
+    const { actor } = boot({ initialRaster: meta(T0), fetchLightning: async () => [] })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'lightning' })
+    await vi.waitFor(() => expect(actor.getSnapshot().matches({ lightning: 'noData' })).toBe(true))
+    expect(actor.getSnapshot().context.lightningStrikes).toEqual([])
+  })
+
+  it('satélite: TOGGLE_SAT/variant/opacidad asignan y sincronizan la query', () => {
+    const { actor, syncQuery } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_SAT' })
+    expect(actor.getSnapshot().context.sat).toBe(true)
+    actor.send({ type: 'SELECT_SAT_VARIANT', variant: 'vis' })
+    actor.send({ type: 'SET_SAT_OPACITY', value: 0.4 })
+    expect(actor.getSnapshot().context.satVariant).toBe('vis')
+    expect(actor.getSnapshot().context.satOpacity).toBe(0.4)
+    expect(syncQuery).toHaveBeenLastCalledWith({
+      opacity: 0.8,
+      base: 'osm',
+      coverage: true,
+      sat: true,
+      satVariant: 'vis',
+      satOpacity: 0.4,
+    })
+  })
+
+  it('un TOGGLE_LAYER solo dispara el fetch de SU capa', async () => {
+    const { actor, fetchWind, fetchCells, fetchLightning } = boot({ initialRaster: meta(T0) })
+    actor.send({ type: 'TOGGLE_LAYER', layer: 'wind' })
+    await vi.waitFor(() => expect(fetchWind).toHaveBeenCalledTimes(1))
+    expect(fetchCells).not.toHaveBeenCalled()
+    expect(fetchLightning).not.toHaveBeenCalled()
+    expect(actor.getSnapshot().context.layers).toEqual(['wind'])
   })
 })
