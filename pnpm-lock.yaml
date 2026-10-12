@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@logtail/node':
+        specifier: ^0.5.12
+        version: 0.5.12
       '@pinia/nuxt':
         specifier: ^0.11.2
         version: 0.11.3(magicast@0.5.3)(pinia@3.0.4(typescript@5.9.3)(vue@3.5.39(typescript@5.9.3)))
@@ -581,10 +584,26 @@ packages:
   '@kwsites/promise-deferred@1.1.1':
     resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
 
+  '@logtail/core@0.5.12':
+    resolution: {integrity: sha512-2n/SuIZ0RHRSwqvgX6DyJG7dtDnl3W6qUB2KSYjf6NlQW0z2xoKYBqWnLzsyGUcZVghm9NxrEk6P3dICwS8B2A==}
+
+  '@logtail/node@0.5.12':
+    resolution: {integrity: sha512-r9c0B5Nc33zyrGkglCRasv8XkDiJXdjVzRXIoPd+KYt657rdLiyozYjVWA08MV9sevDWfCwQbRRW079PlMsgYA==}
+
+  '@logtail/tools@0.5.12':
+    resolution: {integrity: sha512-G3UHydeJxbhLUtRoycqp/j663J9PQMGQuUEOliH7ve5WzPQCIgby1PVuweHGP6v73TM4LcVlLkFUmAYNYoZXoQ==}
+
+  '@logtail/types@0.5.12':
+    resolution: {integrity: sha512-0OdzpOn2ded0K6UfXlDi4nnhh9/VE2kEQr7o8nmDJCzf/dMAvYMgPDBRgKTvY+b/3WL52JyRU6q0mfqCDytZZg==}
+
   '@mapbox/node-pre-gyp@2.0.3':
     resolution: {integrity: sha512-uwPAhccfFJlsfCxMYTwOdVfOz3xqyj8xYL3zJj8f0pb30tLohnnFPhLuqp4/qoEz8sNxe4SESZedcBojRefIzg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@msgpack/msgpack@2.8.0':
+    resolution: {integrity: sha512-h9u4u/jiIRKbq25PM+zymTyW6bhTzELvOoUd+AvYriWOAKpLGnIamaET3pnHYoI5iYphAHBI4ayx0MehR+VVPQ==}
+    engines: {node: '>= 10'}
 
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
@@ -4376,6 +4395,10 @@ packages:
     resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}
     engines: {node: '>= 18'}
 
+  serialize-error@8.1.0:
+    resolution: {integrity: sha512-3NnuWfM6vBYoy5gZFvHiYsVbafvI9vZv/+jlIigFn4oP4zjNPK3LhcY0xSCgeb1a5L8jO71Mit9LlNoi2UfDDQ==}
+    engines: {node: '>=10'}
+
   serialize-javascript@7.0.7:
     resolution: {integrity: sha512-YAy8Od6KV+uuwUuU50np8fGB/Aues6Y0nAhA9y/hId74PlKUcme4pXcBD46NWKr1Q4osN/iseZ17YqO1XfmI8g==}
     engines: {node: '>=20.0.0'}
@@ -4479,6 +4502,9 @@ packages:
   stable-hash-x@0.2.0:
     resolution: {integrity: sha512-o3yWv49B/o4QZk5ZcsALc6t0+eCelPc44zZsLtCQnZPDwFpDYSWcDnrv2TtMmMbQ7uKo3J0HTURCqckw23czNQ==}
     engines: {node: '>=12.0.0'}
+
+  stack-trace@0.0.10:
+    resolution: {integrity: sha512-KGzahc7puUKkzyMt+IqAep+TVNbKP+k2Lmwhub39m1AsTSkaDutx56aDCo+HLDzf/D26BIHTJWNiTG1KAJiQCg==}
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
@@ -4709,6 +4735,10 @@ packages:
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
+
+  type-fest@0.20.2:
+    resolution: {integrity: sha512-Ne+eE4r0/iWnpAxD852z3A+N0Bt5RN//NjJwRd2VFHEmrywxf5vsZlh4R6lixl6B+wz/8d+maTSAkN1FIkI3LQ==}
+    engines: {node: '>=10'}
 
   type-fest@5.8.0:
     resolution: {integrity: sha512-YGYEVz3Fm5iy/AybuA0oyNFq7H4CgQNfRp/qfe8nurE1kuCeNm3/vfm9X4Mtl+qLyaKJUh5xrFZwogr41SMjYA==}
@@ -5760,6 +5790,25 @@ snapshots:
 
   '@kwsites/promise-deferred@1.1.1': {}
 
+  '@logtail/core@0.5.12':
+    dependencies:
+      '@logtail/tools': 0.5.12
+      '@logtail/types': 0.5.12
+      serialize-error: 8.1.0
+
+  '@logtail/node@0.5.12':
+    dependencies:
+      '@logtail/core': 0.5.12
+      '@logtail/types': 0.5.12
+      '@msgpack/msgpack': 2.8.0
+      stack-trace: 0.0.10
+
+  '@logtail/tools@0.5.12':
+    dependencies:
+      '@logtail/types': 0.5.12
+
+  '@logtail/types@0.5.12': {}
+
   '@mapbox/node-pre-gyp@2.0.3':
     dependencies:
       consola: 3.4.2
@@ -5772,6 +5821,8 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+
+  '@msgpack/msgpack@2.8.0': {}
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
@@ -9970,6 +10021,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  serialize-error@8.1.0:
+    dependencies:
+      type-fest: 0.20.2
+
   serialize-javascript@7.0.7: {}
 
   seroval@1.5.5: {}
@@ -10060,6 +10115,8 @@ snapshots:
   srvx@0.11.21: {}
 
   stable-hash-x@0.2.0: {}
+
+  stack-trace@0.0.10: {}
 
   stackback@0.0.2: {}
 
@@ -10330,6 +10387,8 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
+
+  type-fest@0.20.2: {}
 
   type-fest@5.8.0:
     dependencies:

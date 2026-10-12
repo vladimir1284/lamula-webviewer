@@ -38,6 +38,9 @@ El contrato se vigila en dos capas: `tests/contract/` (columnas/índices/constra
 1. DNS del dominio del viewer apuntado (orange-cloud) al Traefik del Swarm; modo SSL "Full (strict)" en Cloudflare.
 2. Secrets del Swarm: credenciales Postgres (`nexrad_pg_password`, compartido con el pipeline).
 3. CORS del bucket R2 para el origen público del viewer (ver `docs/contrato.md`).
+4. **Telemetría y Trazas (Better Stack)**:
+   - `NUXT_BETTERSTACK_TOKEN` (o `BETTERSTACK_TOKEN` / `BETTERSTACK_SOURCE_TOKEN`): Token de fuente de Better Stack Logs/Telemetry. Si no está configurado, el sistema funciona normalmente en modo no-op sin emitir peticiones de log.
+   - `NUXT_BETTERSTACK_ENDPOINT` (o `BETTERSTACK_ENDPOINT`): Endpoint opcional de ingesta de Better Stack (por defecto `https://in.logs.betterstack.com`).
 
 Preview local de la documentación:
 

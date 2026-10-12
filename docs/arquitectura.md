@@ -41,7 +41,7 @@ Una sola aplicación **Nuxt 3** corriendo como servidor Node (preset `node-serve
 | **Paletas & leyenda** | Paletas versionadas **en este repo** (módulo TS por `product_code`: colores, stops, unidad, ticks); fuente única para el color ramp WebGL y el componente leyenda. |
 | **Mosaico** | Vista compuesta multi-radar: N capas WebGLTile AEQD reproyectadas en GPU sobre la vista común. |
 | **i18n** | `@nuxtjs/i18n`, catálogos `es` + `en`, locale en URL/preferencias. |
-| **Observabilidad** | Logging estructurado cliente/servidor, endpoint de health (frescura por radar desde `radars.last_seen_at`), estados vacío/error explícitos — nada lanza excepción a la cara del usuario. |
+| **Observabilidad** | Logging estructurado cliente/servidor, trazas de la API (`/api/**`) enviadas a Better Stack (`NUXT_BETTERSTACK_TOKEN`), endpoint de health (frescura por radar desde `radars.last_seen_at`), estados vacío/error explícitos — nada lanza excepción a la cara del usuario. |
 
 ## Stack
 
