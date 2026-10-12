@@ -78,6 +78,7 @@ function onSubmit() {
   if (!canSubmit.value) return
 
   const payload: FeedbackSubmission = {
+    app: 'webviewer',
     role: role.value,
     roleOther: role.value === 'otro' ? roleOther.value.trim() : null,
     kind: kind.value,

@@ -90,6 +90,9 @@ export default defineNuxtConfig({
     feedbackWebhookUrl: '',
     turnstileSecret: '',
     turnstileDisabled: '',
+    // NUXT_CORS_ORIGINS — orígenes permitidos en /api/feedback**, separados por comas
+    // (decisión 49). Vacío = sin CORS, como antes.
+    corsOrigins: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',

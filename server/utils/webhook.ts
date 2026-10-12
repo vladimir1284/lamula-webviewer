@@ -17,6 +17,8 @@ export async function sendFeedbackWebhook(
       body: {
         event: 'new_feedback',
         id: feedbackId,
+        // Decisión 50: sin esto la notificación no dice de qué producto viene.
+        app: submission.app ?? 'webviewer',
         kind: submission.kind,
         rating: submission.rating,
         role: submission.role,

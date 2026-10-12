@@ -28,6 +28,10 @@ function sqliteCompatible(sql: string): string {
     .replaceAll('TIMESTAMPTZ', 'TEXT')
     .replaceAll('JSONB', 'TEXT')
     .replaceAll('now()', 'CURRENT_TIMESTAMP')
+    // SQLite no soporta `ADD COLUMN IF NOT EXISTS` (error de sintaxis en "EXISTS").
+    // Acá cada test arranca con una base nueva, así que la idempotencia que la
+    // migración necesita en Postgres no hace falta: basta con el ADD COLUMN pelado.
+    .replaceAll(/ALTER TABLE (\S+)\s+ADD COLUMN IF NOT EXISTS/gi, 'ALTER TABLE $1 ADD COLUMN')
     .replaceAll(/::[a-zA-Z0-9_]+(\[\])?/g, '')
 }
 

@@ -1,6 +1,7 @@
 import type {
   AdminReply,
   FeedbackAdminItem,
+  FeedbackApp,
   FeedbackContext,
   FeedbackKind,
   FeedbackProfile,
@@ -25,6 +26,7 @@ interface UserRecord {
 interface FeedbackRecord {
   id: string
   tokenHash: string
+  app: FeedbackApp
   kind: FeedbackKind
   rating: number | null
   message: string
@@ -65,6 +67,7 @@ export class FeedbackMemoryDal implements FeedbackDal {
     this.feedbackItems.set(id, {
       id,
       tokenHash,
+      app: submission.app ?? 'webviewer',
       kind: submission.kind,
       rating: submission.rating ?? null,
       message: submission.message,
@@ -124,6 +127,9 @@ export class FeedbackMemoryDal implements FeedbackDal {
         return u?.role === filters.role
       })
     }
+    if (filters?.app) {
+      items = items.filter(f => f.app === filters.app)
+    }
 
     items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
@@ -141,6 +147,7 @@ export class FeedbackMemoryDal implements FeedbackDal {
       return {
         id: item.id,
         tokenHash: item.tokenHash,
+        app: item.app,
         kind: item.kind,
         rating: item.rating,
         message: item.message,

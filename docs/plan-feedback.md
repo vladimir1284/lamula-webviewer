@@ -25,6 +25,13 @@
       `GIT_SHA`, así que `buildId` queda siempre en `'dev'` en el contexto automático adjunto al
       feedback. Pendiente si se quiere que el campo sirva para algo.
 
+    **Actualización 2026-10-11 (decisión 50):** la bandeja dejó de ser de un solo producto.
+    `lamula-process` escribe en la misma `viewer.feedback` y la columna `app`
+    (`'webviewer' | 'process'`, migración `0002_app.sql`) dice de cuál viene cada mensaje; el
+    admin filtra por ella. Eso trajo el primer CORS del repo
+    (`server/middleware/cors.ts` + `server/utils/cors.ts`), acotado a `/api/feedback**`.
+    El plan del lado cliente vive en el otro repo: `docs/plan-feedback.md` de `lamula-process`.
+
     No re-litigar las decisiones de diseño sin motivo — siguen vigentes, igual que en
     [Decisiones de diseño](decisiones.md).
 

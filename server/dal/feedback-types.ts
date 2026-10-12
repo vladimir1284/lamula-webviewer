@@ -1,5 +1,6 @@
 import type {
   FeedbackAdminItem,
+  FeedbackApp,
   FeedbackProfile,
   FeedbackStatus,
   FeedbackSubmission,
@@ -9,6 +10,7 @@ import type {
 export interface FeedbackAdminFilters {
   status?: FeedbackStatus
   role?: string
+  app?: FeedbackApp
 }
 
 export interface FeedbackDal {

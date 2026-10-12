@@ -2,7 +2,7 @@
 // migration-runner en el repo, así que esto es todo lo que lo ejecuta.
 import { getPgClient } from '../dal/pg'
 
-// Debe mantenerse sincronizado con db/viewer_migrations/0001_feedback.sql
+// Debe mantenerse sincronizado con db/viewer_migrations/*.sql (0001, 0002, …)
 const MIGRATION_SQL = `
 CREATE SCHEMA IF NOT EXISTS viewer;
 
@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS viewer.feedback_replies (
   read_at     TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_reply_feedback ON viewer.feedback_replies (feedback_id, created_at);
+
+-- 0002_app.sql — decisión 50, bandeja compartida entre productos.
+ALTER TABLE viewer.feedback
+  ADD COLUMN IF NOT EXISTS app TEXT NOT NULL DEFAULT 'webviewer'
+  CHECK (app IN ('webviewer','process'));
+CREATE INDEX IF NOT EXISTS idx_feedback_app ON viewer.feedback (app, status, created_at DESC);
 `
 
 async function runMigration() {

@@ -1,10 +1,12 @@
 import { z } from 'zod'
+import { zFeedbackApp } from '#shared/contract'
 import { useFeedbackDal } from '../../../dal/feedback'
 import { parseQueryParams } from '../../../dal/params'
 
 const zAdminFeedbackQuery = z.object({
   status: z.enum(['nuevo', 'leido', 'respondido', 'cerrado']).optional(),
   role: z.string().optional(),
+  app: zFeedbackApp.optional(),
 })
 
 export default defineEventHandler(async (event) => {

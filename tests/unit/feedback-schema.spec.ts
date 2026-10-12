@@ -38,6 +38,33 @@ describe('Feedback Zod Schemas', () => {
     expect(valid.rating).toBe(4)
   })
 
+  it('cae a app=webviewer cuando el cliente no manda el discriminador', () => {
+    const valid = zFeedbackSubmission.parse({
+      kind: 'mejora',
+      message: 'Sin campo app, como los clientes anteriores a la decisión 50',
+      role: 'investigador',
+    })
+    expect(valid.app).toBe('webviewer')
+  })
+
+  it('acepta app=process y rechaza cualquier otro producto', () => {
+    const fromProcess = zFeedbackSubmission.parse({
+      app: 'process',
+      kind: 'bug',
+      message: 'El PPI no dibuja el último rayo',
+      role: 'meteorologo',
+    })
+    expect(fromProcess.app).toBe('process')
+
+    const res = zFeedbackSubmission.safeParse({
+      app: 'otra-app',
+      kind: 'bug',
+      message: 'x',
+      role: 'meteorologo',
+    })
+    expect(res.success).toBe(false)
+  })
+
   it('valida items del hilo con respuestas de administración', () => {
     const reply = zAdminReply.parse({
       id: '1',

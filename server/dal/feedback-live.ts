@@ -1,5 +1,6 @@
 import type {
   FeedbackAdminItem,
+  FeedbackApp,
   FeedbackContext,
   FeedbackKind,
   FeedbackProfile,
@@ -56,8 +57,8 @@ export class FeedbackLiveDal implements FeedbackDal {
     await this.upsertUser(tokenHash, submission.role, submission.profile)
 
     const sql = `
-      INSERT INTO viewer.feedback (token_hash, kind, rating, message, context)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO viewer.feedback (token_hash, kind, rating, message, context, app)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id::text;
     `
     const rows = await this.db.query<{ id: string }>(sql, [
@@ -66,6 +67,7 @@ export class FeedbackLiveDal implements FeedbackDal {
       submission.rating ?? null,
       submission.message,
       JSON.stringify(submission.context ?? {}),
+      submission.app ?? 'webviewer',
     ])
 
     return { id: String(rows[0]!.id) }
@@ -146,12 +148,16 @@ export class FeedbackLiveDal implements FeedbackDal {
       params.push(filters.role)
       conditions.push(`u.role = $${params.length}`)
     }
+    if (filters?.app) {
+      params.push(filters.app)
+      conditions.push(`f.app = $${params.length}`)
+    }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const sqlFeedback = `
       SELECT
-        f.id::text, f.token_hash as "tokenHash", f.kind, f.rating, f.message, f.status, f.created_at::text as "createdAt", f.context,
+        f.id::text, f.token_hash as "tokenHash", f.app, f.kind, f.rating, f.message, f.status, f.created_at::text as "createdAt", f.context,
         u.role, u.role_other as "roleOther", u.display_name as "displayName", u.email, u.organization, u.country, u.locale
       FROM viewer.feedback f
       JOIN viewer.feedback_users u ON f.token_hash = u.token_hash
@@ -161,6 +167,7 @@ export class FeedbackLiveDal implements FeedbackDal {
     const items = await this.db.query<{
       id: string
       tokenHash: string
+      app: FeedbackApp
       kind: FeedbackKind
       rating: number | null
       message: string
@@ -206,6 +213,7 @@ export class FeedbackLiveDal implements FeedbackDal {
     return items.map(item => ({
       id: String(item.id),
       tokenHash: item.tokenHash,
+      app: item.app,
       kind: item.kind,
       rating: item.rating,
       message: item.message,

@@ -170,7 +170,7 @@ export const feedbackMachine = setup({
               actions: [
                 assign({
                   identity: ({ context, event }) => {
-                    const submission = (event as unknown as { submission?: FeedbackSubmission }).submission ?? { role: 'meteorologo', kind: 'mejora', message: '' }
+                    const submission = (event as unknown as { submission?: FeedbackSubmission }).submission ?? { app: 'webviewer' as const, role: 'meteorologo' as const, kind: 'mejora' as const, message: '' }
                     const profile = {
                       ...(context.identity.profile ?? { role: submission.role ?? 'meteorologo' }),
                       ...submission.profile,

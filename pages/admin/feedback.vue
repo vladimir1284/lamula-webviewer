@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import type { FeedbackAdminItem, FeedbackStatus } from '#shared/contract'
-import { FEEDBACK_ROLES, FEEDBACK_STATUSES } from '#shared/contract'
+import { FEEDBACK_APPS, FEEDBACK_ROLES, FEEDBACK_STATUSES } from '#shared/contract'
 
 useHead({
   title: 'Gestión de Feedback — Admin LAMULA',
@@ -14,6 +14,7 @@ const error = ref<string | null>(null)
 
 const selectedStatus = ref<string>('')
 const selectedRole = ref<string>('')
+const selectedApp = ref<string>('')
 
 const replyingId = ref<string | null>(null)
 const replyText = ref('')
@@ -26,6 +27,7 @@ async function loadFeedback() {
     const query: Record<string, string> = {}
     if (selectedStatus.value) query.status = selectedStatus.value
     if (selectedRole.value) query.role = selectedRole.value
+    if (selectedApp.value) query.app = selectedApp.value
 
     items.value = await $fetch<FeedbackAdminItem[]>('/api/admin/feedback', { query })
   }
@@ -122,6 +124,14 @@ async function onSendReply(id: string) {
             <option v-for="r in FEEDBACK_ROLES" :key="r" :value="r">{{ r }}</option>
           </select>
         </label>
+
+        <label class="block">
+          <span class="block text-slate-400 mb-1">Producto</span>
+          <select v-model="selectedApp" class="rounded bg-slate-800 border border-slate-700 p-1.5 text-slate-100" @change="loadFeedback">
+            <option value="">Todos los productos</option>
+            <option v-for="a in FEEDBACK_APPS" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </label>
       </div>
 
       <p v-if="loading" class="text-xs text-slate-400 py-6 text-center">
@@ -147,6 +157,10 @@ async function onSendReply(id: string) {
                 <span class="font-bold text-teal-300 text-sm capitalize">{{ item.user.role }}</span>
                 <span v-if="item.user.roleOther" class="text-slate-400">({{ item.user.roleOther }})</span>
                 <span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-300 uppercase">{{ item.kind }}</span>
+                <span
+                  class="rounded px-2 py-0.5 font-mono text-[10px] uppercase"
+                  :class="item.app === 'process' ? 'bg-indigo-900/60 text-indigo-200' : 'bg-slate-800 text-slate-400'"
+                >{{ item.app }}</span>
                 <span v-if="item.rating" class="text-amber-400">★ {{ item.rating }}/5</span>
               </div>
               <div class="text-slate-400 text-[11px]">
