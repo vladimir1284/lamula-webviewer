@@ -178,6 +178,13 @@ que mantiene el e2e determinista y el dev offline. **Falla cerrado**: en producc
 Rate-limit en memoria por IP y por token (p. ej. 5/hora): un solo contenedor, se pierde al
 reiniciar — suficiente, y no añade Redis.
 
+> **Actualización (D51).** Lo de arriba sigue valiendo para el webviewer. `lamula-process` queda
+> **exento** del captcha (`CAPTCHA_EXEMPT_APPS` en `server/utils/feedback-policy.ts`) porque es una
+> app offline-first y el widget sería su única dependencia de red externa. Ese camino lleva un cubo
+> de rate-limit extra por IP (`noCaptcha:${ip}`, 30/h), y `resolveClientIp` pasó a usar
+> `cf-connecting-ip` / el último elemento de `x-forwarded-for` — el primer elemento de XFF lo
+> controla quien llama y servía para estrenar cubo en cada envío.
+
 **Aviso de feedback nuevo.** `NUXT_FEEDBACK_WEBHOOK_URL`: un POST JSON genérico, fire-and-forget,
 cuyo fallo **nunca** rompe el envío del usuario. Sirve tal cual para la API de Telegram, un webhook
 de Slack/Discord o ntfy, sin código por proveedor ni decidir credenciales ahora. *Asunción a
