@@ -91,7 +91,8 @@ export default defineNuxtConfig({
     turnstileSecret: '',
     turnstileDisabled: '',
     // NUXT_CORS_ORIGINS — orígenes permitidos en /api/feedback**, separados por comas
-    // (decisión 49). Vacío = sin CORS, como antes.
+    // (decisión 50). Vacío = sin CORS, como antes.
+    // Producción: https://process.ladetec.com (solo ese; los previews de Pages quedan fuera).
     corsOrigins: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)

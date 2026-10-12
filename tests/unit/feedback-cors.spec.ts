@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { corsHeaders, isCorsPath, parseAllowedOrigins } from '~/server/utils/cors'
 
-const PROCESS = 'https://lamula-process.pages.dev'
+const PROCESS = 'https://process.ladetec.com'
 const ALLOWED = [PROCESS]
 
 describe('Política de CORS del feedback (decisión 50)', () => {
