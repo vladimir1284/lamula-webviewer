@@ -22,7 +22,7 @@ const CARTO_STYLES: Record<string, { base: string, labels: string }> = {
 function cartoSource(style: string, apiKey?: string): XYZ {
   // OL no expande el token {r} de CARTO — resolver @2x aquí una vez
   const retina = typeof devicePixelRatio !== 'undefined' && devicePixelRatio > 1
-  const queryParam = apiKey ? `?api_key=${apiKey}` : ''
+  const queryParam = apiKey ? `?key=${apiKey}` : ''
   return new XYZ({
     url: `https://{a-d}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}${retina ? '@2x' : ''}.png${queryParam}`,
     tilePixelRatio: retina ? 2 : 1,

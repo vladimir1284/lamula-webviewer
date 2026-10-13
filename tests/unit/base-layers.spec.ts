@@ -24,14 +24,14 @@ describe('createBaseMapSources', () => {
     const baseUrl = (sources.base as XYZ).getUrls()?.[0]
     const labelsUrl = (sources.labels as XYZ).getUrls()?.[0]
 
-    expect(baseUrl).toContain('?api_key=test_carto_key_123')
-    expect(labelsUrl).toContain('?api_key=test_carto_key_123')
+    expect(baseUrl).toContain('?key=test_carto_key_123')
+    expect(labelsUrl).toContain('?key=test_carto_key_123')
   })
 
-  it('construye URLs sin api_key cuando apiKey no está presente', () => {
+  it('construye URLs sin key cuando apiKey no está presente', () => {
     const sources = createBaseMapSources('carto-positron')
     expect(sources.base).toBeInstanceOf(XYZ)
     const baseUrl = (sources.base as XYZ).getUrls()?.[0]
-    expect(baseUrl).not.toContain('?api_key=')
+    expect(baseUrl).not.toContain('?key=')
   })
 })
