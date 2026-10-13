@@ -69,10 +69,11 @@ Una fila por `(site_id, valid_time, level)`: `cycle_time`, `forecast_hour`, `mod
 
 ## Requisitos de setup fuera del código (una vez)
 
-1. CORS en el bucket R2 para el origen público del viewer (y `localhost` para desarrollo).
+1. CORS en el bucket R2 para el origen público del viewer (`https://webviewer.ladetec.com`) y `localhost:3000` para desarrollo. **Verificar tras la salida de Cloudflare Pages**: la allowlist se escribió con los orígenes `*.pages.dev`; si el dominio del Swarm no entra en ella, todo `cog_url` falla por CORS en producción y el mapa queda sin raster.
 2. Acceso público de lectura al bucket (dominio custom recomendado sobre `r2.dev`).
 3. Credenciales Postgres (`NUXT_PG_HOST`/`NUXT_PG_PORT`/`NUXT_PG_DATABASE`/`NUXT_PG_USER`/`NUXT_PG_PASSWORD`) del contenedor del viewer apuntando a la misma base que usa el pipeline — mismo Swarm, red interna, sin binding.
-4. DNS del dominio del viewer apuntado (orange-cloud) al reverse proxy del Swarm.
+4. DNS del dominio del viewer (`webviewer.ladetec.com`) apuntado (orange-cloud) al reverse proxy del Swarm.
+5. `NUXT_PUBLIC_I18N_BASE_URL=https://webviewer.ladetec.com` en el entorno del **contenedor** del viewer. Es variable de arranque, no de build (decisión 52): sin ella el SSR avisa en cada petición y las páginas salen sin `canonical` ni `hreflang`, que es lo que hace útil el prefijo `/en/`.
 
 ## Puntos de coordinación abiertos con el pipeline
 

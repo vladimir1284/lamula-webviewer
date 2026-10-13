@@ -245,7 +245,7 @@ function openAnnotations() {
         type="button"
         data-testid="layers-menu-close"
         :aria-label="t('layers.panel.close')"
-        class="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+        class="flex h-11 w-11 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-100 md:h-8 md:w-8"
         @click="open = false"
       >
         ✕
@@ -284,7 +284,7 @@ function openAnnotations() {
           >
         </label>
 
-        <label v-if="isRadar" class="flex items-center gap-2" :class="{ 'opacity-50': animationEngaged }">
+        <label v-if="isRadar" class="flex min-h-11 items-center gap-2 md:min-h-0" :class="{ 'opacity-50': animationEngaged }">
           <input
             type="checkbox"
             data-testid="smooth-toggle"
@@ -295,7 +295,7 @@ function openAnnotations() {
           <span>{{ t('layers.smooth.toggle') }}</span>
         </label>
 
-        <label class="flex items-center gap-2">
+        <label class="flex min-h-11 items-center gap-2 md:min-h-0">
           <input
             type="checkbox"
             data-testid="show-palette-toggle"
@@ -331,7 +331,7 @@ function openAnnotations() {
       </template>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': sat }">
+        <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': sat }">
           <span class="flex items-center gap-2"><LayerIcon kind="sat" class="h-5 w-5" />{{ t('layers.satellite.title') }}</span>
           <input
             type="checkbox"
@@ -376,7 +376,7 @@ function openAnnotations() {
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('cells') }">
+        <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': layers.includes('cells') }">
           <span class="flex items-center gap-2"><LayerIcon kind="cells" class="h-5 w-5" />{{ t('layers.phenomena.title') }}</span>
           <input
             type="checkbox"
@@ -386,7 +386,7 @@ function openAnnotations() {
           >
         </label>
         <template v-if="isRadar && layers.includes('cells')">
-          <label class="mt-1 flex items-center gap-2 pl-4">
+          <label class="mt-1 flex min-h-11 items-center gap-2 pl-4 md:min-h-0">
             <input
               type="checkbox"
               data-testid="layer-toggle-track-past"
@@ -395,7 +395,7 @@ function openAnnotations() {
             >
             <span>{{ t('layers.phenomena.trackPast') }}</span>
           </label>
-          <label class="mt-1 flex items-center gap-2 pl-4">
+          <label class="mt-1 flex min-h-11 items-center gap-2 pl-4 md:min-h-0">
             <input
               type="checkbox"
               data-testid="layer-toggle-track-future"
@@ -405,7 +405,7 @@ function openAnnotations() {
             <span>{{ t('layers.phenomena.trackFuture') }}</span>
           </label>
         </template>
-        <label v-if="isRadar" class="mt-1 flex items-center gap-2">
+        <label v-if="isRadar" class="mt-1 flex min-h-11 items-center gap-2 md:min-h-0">
           <input
             type="checkbox"
             data-testid="layer-toggle-meso"
@@ -424,7 +424,7 @@ function openAnnotations() {
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('wind') }">
+        <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': layers.includes('wind') }">
           <span class="flex items-center gap-2"><LayerIcon kind="wind" class="h-5 w-5" />{{ t('layers.wind.title') }}<template v-if="layers.includes('wind')"> ({{ t(`layers.wind.levels.${windLevel}`) }})</template></span>
           <input
             type="checkbox"
@@ -461,7 +461,7 @@ function openAnnotations() {
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('lightning') }">
+        <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': layers.includes('lightning') }">
           <span class="flex items-center gap-2"><LayerIcon kind="lightning" class="h-5 w-5" />{{ t('layers.lightning.title') }}</span>
           <input
             type="checkbox"
@@ -490,7 +490,7 @@ function openAnnotations() {
           <button
             type="button"
             data-testid="panel-open-cells"
-            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 flex-1 items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openPanel('cells')"
           >
             {{ t('layers.data.cells') }}
@@ -498,7 +498,7 @@ function openAnnotations() {
           <button
             type="button"
             data-testid="panel-open-trend"
-            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 flex-1 items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openPanel('trend')"
           >
             {{ t('layers.data.trend') }}
@@ -506,7 +506,7 @@ function openAnnotations() {
           <button
             type="button"
             data-testid="vwp-open"
-            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 flex-1 items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openPanel('vwp')"
           >
             {{ t('layers.data.vwp') }}
@@ -520,7 +520,7 @@ function openAnnotations() {
           <button
             type="button"
             data-testid="prefs-open"
-            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 w-full items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openPrefs"
           >
             {{ isRadar ? t('layers.prefs.openRadar') : t('layers.prefs.openMosaic') }}
@@ -529,7 +529,7 @@ function openAnnotations() {
             v-if="isRadar"
             type="button"
             data-testid="annotations-open"
-            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 w-full items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openAnnotations"
           >
             {{ t('layers.prefs.annotations') }}
@@ -538,7 +538,7 @@ function openAnnotations() {
             v-if="isRadar"
             type="button"
             data-testid="export-open"
-            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 w-full items-center justify-center rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openExport"
           >
             {{ t('layers.prefs.export') }}
@@ -547,7 +547,7 @@ function openAnnotations() {
             v-if="isRadar"
             type="button"
             data-testid="menu-feedback-open"
-            class="w-full flex items-center justify-between rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex min-h-11 w-full items-center justify-between rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"
             @click="openFeedback"
           >
             <span>{{ t('layers.prefs.feedback') }}</span>

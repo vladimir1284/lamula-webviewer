@@ -225,3 +225,94 @@ test.describe('chip de identidad en escritorio', () => {
     await expect(page.getByTestId('raster-meta')).toBeVisible()
   })
 })
+
+/**
+ * Regresiones del pase móvil de `LayersMenu.vue` (F5). Cifras medidas antes
+ * del arreglo a 360 px de ancho, panel abierto:
+ *  - el botón cerrar (✕) medía 29×32 px;
+ *  - las filas de checkbox (satélite/fenómenos/viento/rayos, trayectorias,
+ *    meso, suavizado, mostrar paleta) medían solo 20 px de alto — la etiqueta
+ *    entera es el área clicable, pero su caja era más baja que el mínimo
+ *    táctil;
+ *  - los botones de acción (Celdas/Tendencia/VWP, preferencias, anotaciones,
+ *    export, feedback) medían 34 px de alto.
+ * Ninguno se solapaba ni se salía del viewport — eso ya estaba bien.
+ */
+async function rowBox(locator: Locator) {
+  const r = await locator.evaluate((node) => {
+    const row = node.closest('label, button') ?? node
+    const b = row.getBoundingClientRect()
+    return { x: b.x, y: b.y, width: b.width, height: b.height }
+  })
+  return r
+}
+
+const LAYERS_MENU_ROW_IDS = [
+  'smooth-toggle',
+  'show-palette-toggle',
+  'sat-toggle',
+  'layer-toggle-cells',
+  'layer-toggle-track-past',
+  'layer-toggle-track-future',
+  'layer-toggle-meso',
+  'layer-toggle-wind',
+  'layer-toggle-lightning',
+  'panel-open-cells',
+  'panel-open-trend',
+  'vwp-open',
+  'prefs-open',
+  'annotations-open',
+  'export-open',
+  'menu-feedback-open',
+]
+
+test.describe('menú de capas en móvil', () => {
+  test.use({ viewport: PHONE })
+
+  test('el panel abre a pantalla completa sin desbordar el viewport', async ({ page }) => {
+    await gotoViewer(page, series.times.at(-1)!)
+    await page.getByTestId('layers-menu-toggle').click()
+    const panel = await box(page.getByTestId('layers-menu'))
+    expect(panel.x).toBeGreaterThanOrEqual(0)
+    expect(panel.x + panel.width).toBeLessThanOrEqual(PHONE.width)
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )
+    expect(overflow).toBeLessThanOrEqual(0)
+  })
+
+  test('el botón cerrar y las filas de capas tienen área táctil suficiente', async ({ page }) => {
+    await gotoViewer(page, series.times.at(-1)!)
+    await page.getByTestId('layers-menu-toggle').click()
+    await expect(page.getByTestId('layers-menu')).toBeVisible()
+
+    const close = await box(page.getByTestId('layers-menu-close'))
+    expect(Math.min(close.width, close.height), `cerrar mide ${close.width}×${close.height}`).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+
+    for (const id of LAYERS_MENU_ROW_IDS) {
+      const locator = page.getByTestId(id)
+      if (!await locator.isVisible()) continue
+      const b = await rowBox(locator)
+      expect(b.height, `fila ${id} mide ${b.height}px de alto`).toBeGreaterThanOrEqual(MIN_TOUCH_PX)
+    }
+  })
+})
+
+test.describe('menú de capas en escritorio', () => {
+  test.use({ viewport: { width: 1280, height: 800 } })
+
+  test('los controles vuelven a su tamaño compacto, no se quedan agrandados', async ({ page }) => {
+    await gotoViewer(page, series.times.at(-1)!)
+    await page.getByTestId('layers-menu-toggle').click()
+    await expect(page.getByTestId('layers-menu')).toBeVisible()
+
+    // El arreglo móvil usa `md:` para revertir el alto — en escritorio no
+    // debería quedar ningún control a 44 px si antes medía menos.
+    const close = await box(page.getByTestId('layers-menu-close'))
+    expect(close.height).toBeLessThan(MIN_TOUCH_PX)
+
+    const smooth = await rowBox(page.getByTestId('smooth-toggle'))
+    expect(smooth.height).toBeLessThan(MIN_TOUCH_PX)
+  })
+})
