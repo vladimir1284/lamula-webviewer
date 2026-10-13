@@ -148,11 +148,6 @@ export function sendApiTrace(
     }
   }
 
-  if (!token && typeof process !== 'undefined' && process.env) {
-    token = process.env.BETTERSTACK_TOKEN || process.env.NUXT_BETTERSTACK_TOKEN || process.env.BETTERSTACK_SOURCE_TOKEN || ''
-    endpoint = process.env.BETTERSTACK_ENDPOINT || process.env.NUXT_BETTERSTACK_ENDPOINT || ''
-  }
-
   const logger = getBetterStackLogger(token, endpoint)
   const { message, level, metadata } = formatApiTracePayload(traceData, buildId)
 

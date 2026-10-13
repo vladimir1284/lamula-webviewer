@@ -90,6 +90,11 @@ export default defineNuxtConfig({
     feedbackWebhookUrl: '',
     turnstileSecret: '',
     turnstileDisabled: '',
+    // Better Stack Logs — NUXT_BETTERSTACK_TOKEN vía secret Swarm propio
+    // del viewer (nexrad_viewer_betterstack_token), separado del
+    // nexrad_betterstack_source_token del pipeline (servicios ingest).
+    betterstackToken: '',
+    betterstackEndpoint: '',
     public: {
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',
