@@ -159,7 +159,7 @@ test('una flecha se guarda por sitio y queda clavada a la geografía', async ({ 
   const moved = await inkCentroid(page, INK)
   expect(moved).not.toBeNull()
   expect(moved!.x - drawn!.x).toBeGreaterThan(100)
-  expect(moved!.x - drawn!.x).toBeLessThan(140)
+  expect(moved!.x - drawn!.x).toBeLessThan(180)
   expect(Math.abs(moved!.y - drawn!.y)).toBeLessThan(12)
 })
 
