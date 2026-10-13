@@ -18,6 +18,7 @@
       "emailLabel": "Email",
       "organizationLabel": "Institution",
       "countryLabel": "Country",
+      "captchaRequired": "Complete security verification",
       "cancel": "Cancel",
       "submit": "Send feedback",
       "submitting": "Sending..."

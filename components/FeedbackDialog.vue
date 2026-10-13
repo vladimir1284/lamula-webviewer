@@ -11,6 +11,7 @@ import type {
 import { FEEDBACK_KINDS, FEEDBACK_ROLES } from '#shared/contract'
 
 const { t } = useI18n()
+const config = useRuntimeConfig()
 
 const props = defineProps<{
   open: boolean
@@ -30,12 +31,14 @@ const emit = defineEmits<{
 }>()
 
 const dialogRef = ref<HTMLDialogElement>()
+const turnstileWidgetRef = ref<{ reset: () => void }>()
 
 const role = ref<FeedbackRole>(props.profile?.role ?? 'meteorologo')
 const roleOther = ref(props.profile?.roleOther ?? '')
 const kind = ref<FeedbackKind>('mejora')
 const rating = ref<number | null>(null)
 const message = ref('')
+const turnstileToken = ref<string | null>(null)
 
 const showAboutMe = ref(false)
 const displayName = ref(props.profile?.displayName ?? '')
@@ -43,12 +46,15 @@ const email = ref(props.profile?.email ?? '')
 const organization = ref(props.profile?.organization ?? '')
 const country = ref(props.profile?.country ?? '')
 
+const hasTurnstileSiteKey = computed(() => !!config.public.turnstileSiteKey)
+
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     if (!dialogRef.value?.open) dialogRef.value?.showModal()
   }
   else {
     if (dialogRef.value?.open) dialogRef.value?.close()
+    resetCaptcha()
   }
 })
 
@@ -57,6 +63,13 @@ watch(() => props.activeTab, (tab) => {
     emit('mark-read')
   }
 })
+
+function resetCaptcha() {
+  turnstileToken.value = null
+  if (turnstileWidgetRef.value) {
+    turnstileWidgetRef.value.reset()
+  }
+}
 
 function onRoleChange(e: Event) {
   role.value = (e.target as HTMLSelectElement).value as FeedbackRole
@@ -73,6 +86,7 @@ function setRating(val: number) {
 const canSubmit = computed(() => {
   if (role.value === 'otro' && !roleOther.value.trim()) return false
   if (!message.value.trim()) return false
+  if (hasTurnstileSiteKey.value && !turnstileToken.value) return false
   return !props.submitting
 })
 
@@ -95,6 +109,7 @@ function onSubmit() {
       country: country.value.trim() || null,
     },
     context: props.mapContext,
+    turnstileToken: turnstileToken.value,
   }
 
   emit('submit', payload)
@@ -261,6 +276,12 @@ function onSubmit() {
           </label>
         </div>
       </div>
+
+      <!-- Cloudflare Turnstile -->
+      <TurnstileWidget
+        ref="turnstileWidgetRef"
+        v-model="turnstileToken"
+      />
 
       <p v-if="submissionError" class="rounded bg-red-900/60 p-2 text-xs text-red-200">
         {{ submissionError }}
