@@ -32,6 +32,10 @@ export class LightningLayer extends Layer {
   private strikes: NormalizedStrike[] | null = null
   private paused = false
   private rafId: number | null = null
+  /** fase inyectada por el driver del export (F7.3); null ⇒ reloj real */
+  private exportPhase: number | null = null
+  /** píxeles de búfer por píxel CSS; 1 fuera del export */
+  private renderRatio = 1
   /** origen del bucle (frameState.time); null ⇒ fase 0 en el próximo tick */
   private loopOriginMs: number | null = null
   private readonly onVisibility = () => {
@@ -72,12 +76,38 @@ export class LightningLayer extends Layer {
     this.paused = paused
     if (paused) {
       this.stopLoop()
-      this.clearCanvas()
+      // durante el export la pausa no puede borrar lo ya pintado: el driver
+      // lee el canvas justo después del render
+      if (this.exportPhase === null) this.clearCanvas()
     }
     else {
       this.loopOriginMs = null // reanudar = bucle desde cero, sin salto
       this.scheduleTick()
     }
+  }
+
+  /**
+   * Fase 0–1 inyectada por el driver del export (F7.3); null devuelve el
+   * reloj real. A diferencia del viento, aquí no hay estado acumulado: el
+   * canvas se limpia y se repinta entero, así que repetir el render de la
+   * misma fase da exactamente los mismos píxeles. Como la edad es modular,
+   * repartir las fases en `k/N` cierra el bucle del GIF sin costura.
+   */
+  setExportPhase(phase: number | null): void {
+    this.exportPhase = phase
+    if (phase === null) {
+      this.loopOriginMs = null
+      this.scheduleTick()
+      return
+    }
+    this.stopLoop()
+    this.changed()
+  }
+
+  /** Búfer a `r` px de salida por px CSS (export a 2×); null vuelve a DPR 1. */
+  setExportPixelRatio(r: number | null): void {
+    this.renderRatio = r ?? 1
+    this.changed()
   }
 
   protected override disposeInternal(): void {
@@ -108,20 +138,30 @@ export class LightningLayer extends Layer {
 
   private renderFrame(frameState: FrameState): HTMLElement {
     const [width, height] = frameState.size
-    // DPR 1 deliberado (misma razón que el viento): destellos difuminados
-    // no necesitan retina y la mitad de píxeles es la mitad de trabajo
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width
-      this.canvas.height = height
+    // DPR 1 deliberado fuera del export (misma razón que el viento):
+    // destellos difuminados no necesitan retina y la mitad de píxeles es la
+    // mitad de trabajo. El export a 2× sí sube el búfer.
+    const ratio = this.renderRatio
+    const bufW = Math.round(width * ratio)
+    const bufH = Math.round(height * ratio)
+    if (this.canvas.width !== bufW || this.canvas.height !== bufH) {
+      this.canvas.width = bufW
+      this.canvas.height = bufH
     }
+    // ver la nota equivalente en wind-layer.ts: con tamaño CSS explícito el
+    // compositor del export resuelve la capa por la rama de `style.width`
+    this.canvas.style.width = `${width}px`
+    this.canvas.style.height = `${height}px`
 
     const ctx = this.ctx
     if (!ctx || this.paused || this.strikes === null || this.strikes.length === 0) {
       return this.canvas
     }
+    // el búfer está en px de salida; de aquí abajo se dibuja en px CSS
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
 
     if (this.loopOriginMs === null) this.loopOriginMs = frameState.time
-    const phase = loopPhase(frameState.time, this.loopOriginMs)
+    const phase = this.exportPhase ?? loopPhase(frameState.time, this.loopOriginMs)
 
     ctx.clearRect(0, 0, width, height)
     // los destellos suman luz entre sí (varios rayos juntos = más brillo)
@@ -143,7 +183,7 @@ export class LightningLayer extends Layer {
     }
     ctx.globalCompositeOperation = 'source-over'
 
-    this.scheduleTick()
+    if (this.exportPhase === null) this.scheduleTick()
     return this.canvas
   }
 }

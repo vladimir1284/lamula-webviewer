@@ -1,0 +1,72 @@
+{
+  "vcp": {
+    "group": "Group",
+    "elevations": "Elevations",
+    "scanDuration": "Volume scan duration",
+    "unknown": "We don't have a description for VCP {vcp}. It may be a new or experimental pattern, or from a radar that isn't a standard WSR-88D.",
+    "source": "Source:",
+    "sourceLink": "Read more at NOAA JetStream",
+    "catalog": {
+      "11": {
+        "name": "Deep convection (legacy)",
+        "group": "Precipitation",
+        "description": "Legacy precipitation pattern for severe weather and deep convection. Samples 14 elevation angles (0.5° to 19.5°) per volume scan, giving better vertical resolution than VCP 21 — preferred when convective precipitation is within about 60 nm of the radar."
+      },
+      "12": {
+        "name": "Deep convection",
+        "group": "Precipitation",
+        "description": "Successor to VCP 11: same 14 elevation angles but with overlap at the low angles and faster antenna rotation — better severe weather interrogation. Compatible with SAILS and MESO-SAILS, which repeat the 0.5° angle several times within the same volume scan to update the low-level layer more frequently."
+      },
+      "21": {
+        "name": "General precipitation (legacy)",
+        "group": "Precipitation",
+        "description": "Historical default precipitation pattern, designed for stratiform precipitation where the storm's vertical structure matters less than in convection. Samples 9 elevation angles (0.5° to 19.5°)."
+      },
+      "31": {
+        "name": "Clear air mode — long pulse",
+        "group": "Clear air",
+        "description": "One of the two original clear air VCPs (no significant precipitation). Samples 5 low angles (0.5° to 4.5°) with long dwell times; the long pulse gives a better signal-to-noise ratio and detects weaker reflectivity than VCP 32."
+      },
+      "32": {
+        "name": "Clear air mode — short pulse",
+        "group": "Clear air",
+        "description": "Same 5 elevation angles as VCP 31, but with short pulse: worse signal-to-noise ratio in exchange for a larger unambiguous Doppler velocity range."
+      },
+      "35": {
+        "name": "Clear air mode — general surveillance",
+        "group": "Clear air",
+        "description": "Clear air VCP added to replace legacy patterns; it's the default used by most WSR-88D radars when there's no precipitation nearby. Samples 9 elevation angles."
+      },
+      "112": {
+        "name": "Large-scale precipitation (SAILS/MRLE)",
+        "group": "Precipitation",
+        "description": "Designed for large-scale, fast-moving systems (hurricanes, long squall lines). Samples 14 angles (0.5° to 19.5°) using the MPDA algorithm on the three lowest to resolve velocity without range folding, with the option to repeat the low angles via SAILS or MRLE within the same volume scan."
+      },
+      "121": {
+        "name": "Multiple dealiasing (hurricanes)",
+        "group": "Precipitation",
+        "description": "Variant of VCP 21 designed for hurricanes/tropical storms and widespread precipitation. Uses the MPDA algorithm, which combines several waveforms at the low angles, to recover velocity data that would otherwise be lost to range folding."
+      },
+      "211": {
+        "name": "Deep convection with SZ-2",
+        "group": "Range folding mitigation",
+        "description": "Variant of VCP 11 with SZ-2 processing to resolve range-velocity ambiguity; same 14-elevation-angle pattern. Infrequently used in the current operational network."
+      },
+      "212": {
+        "name": "Deep convection with SZ-2",
+        "group": "Range folding mitigation",
+        "description": "Variant of VCP 12 with SZ-2 processing to mitigate range folding, keeping the same 14 elevation angles and SAILS/MESO-SAILS compatibility of VCP 12."
+      },
+      "215": {
+        "name": "General surveillance — best vertical resolution",
+        "group": "Precipitation",
+        "description": "General surveillance pattern with the best vertical resolution of all precipitation VCPs: 15 elevation angles per volume scan. Added to replace legacy patterns."
+      },
+      "221": {
+        "name": "General precipitation with SZ-2",
+        "group": "Range folding mitigation",
+        "description": "Variant of VCP 21 with SZ-2 processing to mitigate range folding, with the same 9-elevation-angle pattern."
+      }
+    }
+  }
+}

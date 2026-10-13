@@ -16,6 +16,9 @@ Principios:
 | `animationMachine` | `machines/animation.ts` | Playback: buffering, play/pause, reloj, dwell | implementada |
 | `frameMachine` | `machines/frame.ts` | Ciclo de vida de un frame del pool (pending → ready/failed) | implementada |
 | `overlayMachine` | `machines/overlay.ts` | Fenómenos + VWP: índices del día, join temporal, serie de celda, perfiles | implementada |
+| `annotationMachine` | `machines/annotation.ts` | Anotaciones del usuario sobre el mapa: modo de dibujo, herramienta, colección por sitio | implementada |
+| `feedbackMachine` | `machines/feedback.ts` | Feedback de usuarios (D39): identidad/nudge, diálogo, envío, hilo de respuestas | implementada |
+| `mosaicViewerMachine` | `machines/mosaic-viewer.ts` | Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/D45): hermana reducida de `viewerMachine`, indexada por dominio+slot_time; región `cells` para celdas multi-radar (P5) | implementada (sin animación — ver nota abajo) |
 
 ## `viewerMachine`
 
@@ -115,6 +118,134 @@ stateDiagram-v2
 **Day picker (`components/DayPicker.vue`):** botones de día UTC sobre la ventana de 72h anclada a `radar.last_seen_at` (`utils/time-window.ts::dayWindow72h`, decisión 11) — no wall-clock, así un radar muerto sigue mostrando sus días con datos y las fixtures no se pudren. Click → evento `SELECT_DAY`.
 
 **Timeline strip (`components/TimelineStrip.vue`):** strip proporcional al rango `[times[0], times.at(-1)]` del día cargado; un tick por `vol_time` (click → `SELECT_TIME`), huecos marcados cuando el intervalo excede `max(2×mediana, 10 min)` (`utils/timeline/gaps.ts::computeGaps` — con menos de 3 times no hay señal para una mediana, no se marcan huecos), botones prev/next (→ `STEP`) deshabilitados según `atStart`/`atEnd`. Teclado: `←`/`→` en `window` disparan `STEP`, ignorados con foco en `input`/`select`/`textarea`.
+
+## `mosaicViewerMachine`
+
+Raíz de `pages/mosaic/[domain]/[product]/[[time]].vue` (D43/P4, D45/P5): mismo
+patrón `type: 'parallel'` de `viewerMachine` (URL manda, `sameFrame`/`sameDay`
+evitan refetch, assign optimista de `time`), pero indexada por
+`domain`+`product`+`slot_time` contra `/api/mosaic/*` en vez de
+`site`+`product`+`vol_time`. Tres regiones: `raster`/`timeline` (diagrama
+idéntico en forma al de `viewerMachine` arriba, sustituir `vol_time` por
+`slot_time` y `site` por `domain` — no se repite acá) y `cells` (P5, propia,
+ver abajo).
+
+**Alcance recortado a propósito** (no es una omisión): sin VWP, sin meso/
+trayectorias, sin anotaciones/export/feedback. Satélite, viento y rayos SÍ
+están desde D49: el satélite es un WMS global (nada que unir) y viento/rayos
+se resuelven uniendo los N sitios del dominio (ver regiones abajo). Celdas de tormenta SÍ
+llegan (P5, región `cells`), porque ahí la pregunta ("¿qué radares ven
+tormentas ahora?") es del dominio, no de un radar. **Sin animación
+todavía**: el pool de frames (`utils/map/frame-pool.ts`, genérico desde
+D43 sobre `CogFrame` para aceptar tanto `RasterMeta` como `MosaicRasterMeta`)
+asume una única proyección compartida por toda la ventana de frames, pero
+la geometría del mosaico es **por fila** (añadir un radar recalcula la
+malla del dominio) — animar una ventana que cruza ese recálculo
+reproyectaría mal los frames viejos. `MosaicMap.vue` solo renderiza el modo
+estático; `TimelineStrip.vue` gana un prop `showPlay` (default `true`, sin
+tocar el llamador existente) para ocultar el botón play/pause acá en vez de
+dejarlo inerte.
+
+**Contexto:** `domain`, `product`, `time` (ISO naive; `null` = vista live),
+`nowT`, `raster: MosaicRasterMeta | null`, `rasterError`, `day`, `times:
+MosaicRasterMeta[]`, `timelineError`, `liveRefresh`, `atStart`/`atEnd`,
+`opacity`, `base`, `coverage` (máscara de cobertura — default `true`,
+shareable vía `?coverage=0`; **no** es una pref persistida acá, ver D48),
+`cogError`, `cells: Phenomenon[]`, `cellsError`, `selectedCell` (`SITE:ID` o
+`null`), `cellsKey` (P5, ver abajo), `layers: MosaicLayerId[]` (D48/D49 —
+`'cells' | 'wind' | 'lightning'`, `?layers=`, default vacío), `sat`/
+`satVariant`/`satOpacity` (D49, `?sat=1&satVariant&satOpacity`), `windLevel`
+(`?windLevel=`), `windGrid`/`windError`/`windKey` y `lightningStrikes`/
+`lightningError`/`lightningKey` y las prefs de display que
+la vista comparte con el viewer de un solo radar vía `lamula:prefs`:
+`units`, `clock`, `animationFrames` (tamaño de la ventana que dibuja la
+strip), `showPalette`.
+
+| Evento | Región | Efecto |
+|---|---|---|
+| `ROUTE_CHANGED` | `raster` | igual que `viewerMachine`, sustituyendo `vol_time`→`slot_time` |
+| `ROUTE_CHANGED` | `timeline` | igual que `viewerMachine` |
+| `ROUTE_CHANGED` | `cells` | refetch si la capa `cells` viene encendida **en el payload** y `route.time` (o `nowT`) difiere de `cellsKey`. El guard lee `event.route.layers`, no el contexto: en la difusión a regiones paralelas los guards ven el snapshot previo (`assignRoute` corre en la región `raster`, que va primero) |
+| `STEP(dir)` | `raster` | igual que `viewerMachine` |
+| `SELECT_TIME(time)` / `SELECT_DAY` / `SET_LIVE_REFRESH` | — / `timeline` | igual que `viewerMachine` |
+| `MOUNTED` | — | guard (time `null` + raster resuelto) → `navigate` replace al `slot_time` |
+| `CELLS_INIT` | `cells` | dispara el primer `fetchCells` — enviado por la página en `onMounted`, nunca en SSR; **guard: solo con la capa `cells` encendida** (D48) |
+| `TOGGLE_LAYER(layer)` | `layers` + la región de la capa | la región `layers` hace el assign de `layers` y el `syncLayersQuery` (`?layers=`, replace inmediato); `cells`/`wind`/`lightning` solo deciden su `→ loading`. El evento se difunde a TODAS las regiones que lo declaran: por eso el assign vive en una región propia (si no, correría una vez por región) y los guards leen el PAYLOAD + contexto previo. Apagar NO tira el dato del contexto: reencender en el mismo slot no refetchea |
+| `TOGGLE_SAT` / `SELECT_SAT_VARIANT` / `SET_SAT_OPACITY` | — | satélite GOES: puro display, sin fetch — assign + `syncQuery` (debounced, junto a opacity/base/coverage) |
+| `SELECT_WIND_LEVEL(level)` | `wind` | assign del nivel + `syncLayersQuery`; con la capa encendida además `→ loading`. Vive en la región `wind` (no en `layers`) para que el assign corra antes del `input` del invoke |
+| `PREFS_LOADED(prefs)` | — | asigna las prefs leídas de `lamula:prefs` post-mount; **no** persiste (sería write-on-read) |
+| `SET_PREF(patch)` | — | asigna + `persistPrefs` del patch exacto (mismo contrato que `viewerMachine`) |
+| `SELECT_DOMAIN` / `SELECT_PRODUCT` | — | efecto `navigate` push |
+| `SET_OPACITY` / `SELECT_BASE` | — | asignan + `syncQuery` (`?opacity&base&coverage`, igual patrón de replace debounced 300 ms que `viewerMachine`, sin `persistPrefs`) |
+| `TOGGLE_COVERAGE` | — | invierte `context.coverage` + `syncQuery` — controla la máscara de `MosaicMap.vue` (`CoverageMaskLayer`/`coverageCenterLayer`), no un fetch: la cobertura siempre se calcula, esto solo oculta el dibujo. En la UI se toca desde `PrefsDialog` (D48), no desde un checkbox propio |
+| `SELECT_CELL(cellId)` | — | asigna `selectedCell` + `syncCellQuery` (`?cell=SITE:ID`, replace **inmediato**, sin debounce — igual criterio que `SELECT_CELL` en `overlayMachine`, D23: un click no debe sentirse con latencia de slider) |
+| `COG_ERROR` | — | asigna contexto |
+
+**Celdas multi-radar (P5, D45):** región `cells` propia. `fetchCells` (provisto
+por la página, sin endpoint nuevo) resuelve, para cada `site_id` del dominio,
+el `vol_time` de fenómenos más cercano al `slot_time` mostrado
+(`nearestWithin`, mismo util que `overlayMachine`) y concatena las filas de
+`/api/phenomena` de cada sitio — **sin deduplicar**: dos radares que vean la
+misma tormenta aparecen dos veces, con su propio `cell_id` (el ID del RPG es
+local al sitio, no global). Un sitio que falla o no tiene volumen en
+tolerancia simplemente no aporta celdas — mismo espíritu que "un radar caído
+no apaga el mosaico" (D43). **Capa apagable y apagada por defecto** (D48):
+con `?layers=cells` ausente no se dispara el fan-out de `/api/phenomena` por
+sitio — ni en `CELLS_INIT` ni al cambiar de slot. Identidad compuesta `SITE:ID`
+(`utils/overlay/mosaic-cells.ts::mosaicCellId`) para no colisionar entre
+sitios; el marker es el MISMO de `phenomena-layer.ts` (`cellIcon`,
+circunferencia navy + X, radio por `dbz_max`) y lo único propio es el color
+del label `SITE:ID` (`siteColor`, ciclado por posición en
+`MosaicDomain.site_ids`, no por hash) — D48. Sin SSR: el primer fetch lo dispara `CELLS_INIT` desde
+`onMounted` (nunca en servidor), evitando un fetch servidor+cliente
+duplicado — el dominio no cambia dentro de la vida de un actor (la página
+remonta entera por `key: route => route.params.domain`), así que el refetch
+por `ROUTE_CHANGED` solo mira si cambió el `slot_time`.
+
+**Viento y rayos del dominio (D49):** regiones `wind` y `lightning`, mismo
+patrón que `cells` — índice por SITIO (`/api/wind/times`, `/api/lightning/times`
+por cada `site_id` del dominio), join en cliente y unión del resultado. El
+viento une las N grillas u/v con `mergeWindGrids` (`utils/wind/grid.ts`: bbox
+unión, paso el más fino, gana la primera fuente que cubra la celda, huecos en
+NaN); los rayos concatenan los cubos que solapan la ventana `(slot anterior,
+slot]` y **deduplican** con `dedupeStrikes` (dos radares vecinos reciben la
+misma descarga del feed GLM). El slot anterior sale de `context.times`, no de
+restar 300 s: un hueco del feed no debe inventar un intervalo observado.
+Claves de cache: `windKey = ${slot}|${level}`, `lightningKey = ${prev}|${slot}`.
+
+**Gotcha de XState v5 encontrado acá** (canario: el test "ROUTE_CHANGED a
+otro slot_time SÍ refetchea celdas" de `mosaic-viewer-machine.spec.ts` falla
+si se reintroduce): una transición de `cells` a un estado **distinto** del
+activo (p. ej. `ready`/`error` → `loading`) con `reenter: true` explícito,
+en una máquina `type: 'parallel'` donde **otra región sibling también
+maneja el mismo evento**, se descarta en silencio — ni se re-invoca el actor
+ni se re-ejecutan las acciones, sin error ni warning. Reproducido aislado
+(dos regiones paralelas mínimas, sin guards de por medio). `reenter` solo
+hace falta para forzar reentrada en una transición **al mismo** estado
+(self-transition); acá el target ya era distinto del origen, así que ya era
+una transición externa — quitar `reenter: true` lo arregla y además es el
+uso correcto.
+
+**Overlay de cobertura (la pieza central de P4):** `raster.contributing`
+(`MosaicContribution[]`, ya parseado por el DAL) da quién aportó al slot
+mostrado; `MosaicDomain.site_ids` menos esos sites da los **ausentes**.
+`utils/map/coverage-mask-layer.ts` (D46) oscurece el mapa entero y "puncha"
+transparente el círculo de cada radar que SÍ aportó (`circular()` +
+reproyección a 3857 — un círculo esférico centrado en el radar, no uno plano
+en 3857 que a 460 km de radio ya se ve elíptico); `coverage-rings-layer.ts`
+queda solo para el marcador+label de los contribuyentes.
+`MosaicDomainChip.vue` repite el mismo dato en UNA línea de texto (D48):
+todos los sitios del dominio, los que aportan en color de acento y los
+ausentes en gris. Radio único por
+dominio (`MosaicDomainRow.radius_m`): el contrato no trae un alcance
+por-radar, así que los N anillos salen del mismo tamaño — aproximación
+visual, no el alcance físico exacto de cada antena.
+
+**Proyección por fila:** `utils/map/projection.ts::registerDomainProjection`
+registra por el **contenido** del `proj4` de la fila (hash FNV-1a), no por
+`domain_id` — dos filas del mismo dominio pueden traer geometría distinta
+si el dominio se recalculó entre medias, y una clave por `domain_id`
+pisaría la definición vieja con la nueva bajo el mismo código ya en uso.
 
 ## `overlayMachine`
 
@@ -344,7 +475,7 @@ stateDiagram-v2
 | `PLAY` / `TOGGLE` (en `paused`) | → `playing` |
 | `PAUSE` / `TOGGLE` (en `playing`) | → `paused` |
 | `SEEK(i)` | asigna `index` (clamped); manejado en `buffering`/`paused`/`playing` |
-| `MOVE_END` | → `paused` (no sigue animando durante pan/zoom); ya no invalida frames — el pool solo oculta capas inactivas, los blobs siguen siendo válidos bajo cualquier extent |
+| `MOVE_END` | → `paused` (no sigue animando durante pan/zoom); ya no invalida frames — el pool solo oculta capas inactivas, los blobs siguen siendo válidos bajo cualquier extent. **Solo llega desde un gesto real** (decisión 41): `RadarMap.vue` filtra el `moveend` de OL por origen (`pointerdown`/`wheel`/`keydown` en el viewport), así que un `moveend` disparado por el propio render interno de OL — p.ej. al reconstruir el pool — ya no pausa la animación recién arrancada |
 | `SPEED(fps)` | asigna `fps` — válido en cualquier estado (selector `.5x/1x/2x/3x` en `AnimationControls.vue`, `1x` = `ANIM_BASE_FPS` ya afinado antes de esto, el resto escala sobre esa base). En `playing` además hace `reenter` sobre el mismo estado para recalcular `FRAME_DELAY` de inmediato — el `after` en curso no se actualiza solo, así que sin el reenter el cambio de velocidad tardaría hasta un frame completo (con la velocidad vieja) en notarse |
 
 **Salida de `buffering` sin bloqueo permanente:** el caso feliz es "el frame objetivo (`context.index`) está `ready`". Si ese frame específico *falla* (404 real, no un hueco transitorio), esperar solo por él colgaría la UI para siempre — por eso hay una segunda condición: en cuanto **todos** los hijos terminan de resolver (ninguno sigue `pending`), se sale igual, saltando a un índice `ready` si existe alguno; si absolutamente todos fallaron, se sale sin más (nada que mostrar, degradación vía `rasterError` del pool, no un buffering infinito).
@@ -354,6 +485,88 @@ stateDiagram-v2
 **Bug real encontrado con e2e (no solo unitario):** el primer intento de `SET_FRAMES` reseteaba `index` a `0` incondicionalmente; la página mandaba un `SEEK` aparte para corregirlo, pero `buffering` no manejaba `SEEK` en ese momento (evento ignorado silenciosamente) — el buffer esperaba el frame equivocado durante ~1 s hasta que el fallback de "todos resueltos" lo rescataba. Fix: `SET_FRAMES` acepta `startIndex` y fija el índice correcto en el mismo paso (además, `buffering` ahora sí maneja `SEEK` por robustez). Ilustra por qué la puerta de animación necesita e2e real, no solo tests de la máquina en aislamiento — el bug era de *integración* (dos eventos separados con una ventana de estado inválida en medio), invisible probando la máquina con un solo evento a la vez.
 
 **Orquestación en la página** (`pages/[site]/[product]/[[time]].vue`): modo estático (F2, `RadarMap` con `:raster`) hasta que el usuario presiona play por primera vez (`animationEngaged`); a partir de ahí `RadarMap` pasa a modo pool (`:frames`) y lo mantiene aun en pausa (el scrubbing reutiliza el mismo pool, sin destruir/recrear capas). Mientras la animación está pausada, `context.time` de `viewerMachine` y `context.index` de `animationMachine` se mantienen sincronizados en ambas direcciones (stepping externo → `SEEK`; `PLAY`/`TOGGLE` al pausar → `SELECT_TIME` con replace) — decisión F3: **durante playback la URL no se toca**, solo al pausar.
+
+## `annotationMachine`
+
+Anotaciones que el usuario dibuja sobre el mapa (F7.2): flecha, círculo, trazo libre y rótulo. Dos estados nada más — el modo de dibujo está encendido o apagado —, y toda la colección vive en el contexto.
+
+```mermaid
+stateDiagram-v2
+    [*] --> off
+    off --> drawing: ENABLE
+    drawing --> off: DISABLE
+    drawing --> drawing: SET_TOOL / ADD
+    note right of off
+        En la raíz (válidos en los dos estados):
+        SITE_CHANGED, LOADED, SET_COLOR, SET_TEXT,
+        UPDATE, REMOVE, UNDO, CLEAR
+    end note
+```
+
+**Contexto:** `site` (radar mostrado), `tool`, `color`, `pendingText` (rótulo del próximo punto con la herramienta de texto), `bySite` (`Record<site_id, Annotation[]>`).
+
+| Evento | Efecto |
+|---|---|
+| `ENABLE` / `DISABLE` | entra/sale del modo dibujo. La página traduce `drawing` a la prop `annotationTool` de `RadarMap`, que crea o destruye las interacciones `Draw`/`Modify` de OL |
+| `SET_TOOL(tool)` | solo en `drawing` — un `Draw` no cambia de tipo de geometría en caliente, así que `RadarMap` lo recrea entero |
+| `ADD(annotation)` | solo en `drawing`: añade al sitio actual y persiste |
+| `UPDATE(annotation)` | reemplaza por `id` sin reordenar (llega del `modifyend` de OL) y persiste |
+| `REMOVE(id)` / `UNDO` / `CLEAR` | borran y persisten. Válidos con el modo apagado: corregir no obliga a volver a entrar a dibujar |
+| `SITE_CHANGED(site)` | cambia de colección. **Las anotaciones son por sitio**: un trazo sobre una tormenta de BYX no pinta en KTLX |
+| `LOADED(bySite)` | rehidratación desde `localStorage` tras montar (SSR no tiene `localStorage`). No persiste: escribir lo que se acaba de leer no aporta nada |
+
+**Persistencia inyectada.** La acción `persist` la provee la página (`saveAnnotations`, clave `lamula:annotations`), igual que `syncQuery` en `viewerMachine`: la máquina sigue pura y los tests corren con `createActor` sin DOM.
+
+**Fuera de la URL — excepción a la decisión 23**, documentada en la 40: lo compartible vive en la URL, pero un trazo a mano alzada son cientos de puntos y reventaría su longitud. Las coordenadas se guardan en **metros EPSG:3857** (la proyección de la vista), no en píxeles: así la anotación queda clavada a la geografía y sobrevive a pan/zoom, a exportar con otro `pixelRatio` y a la secuencia de frames de F7.3.
+
+## `feedbackMachine`
+
+Feedback de usuarios (F-aparte, decisión 39): identidad por token opaco, nudge ocasional, diálogo de envío/hilo. `type: 'parallel'` con **cuatro** regiones — `identity`, `dialog`, `form`, `thread` — no tres como anticipaba el plan original (`docs/plan-feedback.md`): el diálogo abierto/cerrado se separó en su propia región en vez de vivir dentro de `form`, y no hay región `nudge` aparte — la política de snooze/shownCount vive dentro de `identity` (evento `NUDGE_ACTION`), orquestada por `utils/feedback/nudge.ts` desde la página.
+
+```mermaid
+stateDiagram-v2
+    state identity {
+        [*] --> ready
+        ready --> ready: SAVE_PROFILE / NUDGE_ACTION
+    }
+    state dialog {
+        [*] --> closed
+        closed --> open: OPEN_DIALOG
+        open --> closed: CLOSE_DIALOG
+        open --> open: SWITCH_TAB
+    }
+    state form {
+        [*] --> idle
+        idle --> submitting: SUBMIT_FEEDBACK
+        submitting --> idle: onDone
+        submitting --> error: onError
+        error --> submitting: SUBMIT_FEEDBACK
+    }
+    state thread {
+        [*] --> idle
+        idle --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+        loading --> ready: onDone
+        loading --> error: onError
+        ready --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+        ready --> ready: MARK_READ
+        error --> loading: FETCH_MINE / SUBMIT_FEEDBACK
+    }
+```
+
+**Contexto:** `identity` (`FeedbackStorageV1` — token, perfil, estado del nudge), `sessionStartTimeMs`, `dialogOpen`, `activeTab` (`'submit' | 'mine'`), `submissionError`, `items` (hilos con respuestas), `unreadCount`.
+
+| Evento | Efecto |
+|---|---|
+| `OPEN_DIALOG` / `CLOSE_DIALOG` / `SWITCH_TAB` | región `dialog` — solo UI, nada de red |
+| `SUBMIT_FEEDBACK` | región `form`: invoca `submitFeedbackActor` (`POST /api/feedback` con `x-feedback-token`); al terminar fusiona el perfil enviado en `identity` y marca `nudge.submitted = true` (el pill sigue, el nudge no vuelve a aparecer). La misma transición dispara `thread` a `loading` para refrescar el hilo con el envío nuevo |
+| `FETCH_MINE` | región `thread`: invoca `fetchMineActor` (`GET /api/feedback/mine`); calcula `unreadCount` contando `replies` con `readAt` nulo |
+| `MARK_READ` | región `thread`: limpia `unreadCount` de forma optimista y dispara `sendMarkRead` (`POST /api/feedback/mine/read`), fire-and-forget |
+| `SAVE_PROFILE` | región `identity`: fusiona el perfil (precarga del formulario desde `localStorage`) |
+| `NUDGE_ACTION('open'\|'later'\|'never')` | región `identity`: `'open'` también abre el diálogo (`dialogOpen: true`); `'later'`/`'never'` fijan `nudge.snoozeUntil` vía `calcSnoozeUntil` (`utils/feedback/nudge.ts`, reloj inyectado — tests deterministas) |
+
+**Identidad y persistencia inyectadas.** `loadFeedbackIdentity`/`saveFeedbackIdentity` (`composables/useFeedbackIdentity.ts`) leen/escriben `lamula:feedback` en `localStorage` — clave propia, fuera de `lamula:prefs` (no es una preferencia de display) y **fuera de la URL** (no es estado compartible, mismo criterio que D28 para las prefs).
+
+**No va a la URL.** Ningún evento se maneja en la raíz de la máquina (mismo patrón que `overlayMachine`, decisión 27): la máquina vive orquestada por la página, con ciclo de vida propio que no debe reiniciarse con el del raster o la animación.
 
 ## Pool de capas WebGL (`utils/map/frame-pool.ts`)
 

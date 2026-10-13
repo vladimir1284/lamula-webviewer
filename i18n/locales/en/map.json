@@ -1,0 +1,9 @@
+{
+  "map": {
+    "legendAriaLabel": "Legend ({unit})",
+    "rangeFoldedLegend": "RF — range folded",
+    "dayPickerAriaLabel": "Day (UTC)",
+    "ariaLabel": "Radar map. Arrow keys to pan, + and − to zoom.",
+    "ariaRoleDescription": "interactive map"
+  }
+}

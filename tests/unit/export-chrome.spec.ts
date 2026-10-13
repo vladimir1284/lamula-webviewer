@@ -59,7 +59,8 @@ const BASE: ChromeSpec = {
   units: 'imperial',
   palette: n0b.palette,
   attributions: attributionsFor('osm', true),
-  parts: { title: true, meta: true, legend: true, attribution: true },
+  parts: { title: true, meta: true, legend: true, attribution: true, watermark: false, avatar: false },
+  avatar: null,
 }
 
 describe('chromeLayout', () => {
@@ -79,7 +80,7 @@ describe('chromeLayout', () => {
 
   it('modo none: layout vacío', () => {
     expect(chromeLayout({ ...BASE, mode: 'none' }, 800, 600))
-      .toEqual({ barHeight: 0, lines: [], legend: null, attribution: null })
+      .toEqual({ barHeight: 0, lines: [], legend: null, attribution: null, avatar: null, textX: 0 })
   })
 
   it('cada parte desactivada desaparece y encoge la franja', () => {
@@ -89,7 +90,7 @@ describe('chromeLayout', () => {
     // con las tres líneas de texto el bloque manda sobre la leyenda: quitarla
     // no encoge la franja. Sí lo hace cuando la leyenda es lo más alto.
     expect(noLegend.barHeight).toBeLessThanOrEqual(full.barHeight)
-    const soloTitulo = { title: true, meta: false, attribution: false }
+    const soloTitulo = { ...BASE.parts, title: true, meta: false, attribution: false }
     const conLeyenda = chromeLayout({ ...BASE, parts: { ...soloTitulo, legend: true } }, 800, 600)
     const sinLeyenda = chromeLayout({ ...BASE, parts: { ...soloTitulo, legend: false } }, 800, 600)
     expect(sinLeyenda.barHeight).toBeLessThan(conLeyenda.barHeight)
@@ -98,11 +99,40 @@ describe('chromeLayout', () => {
     expect(noAttr.attribution).toBeNull()
 
     const nothing = chromeLayout(
-      { ...BASE, parts: { title: false, meta: false, legend: false, attribution: false } },
+      { ...BASE, parts: { ...BASE.parts, title: false, meta: false, legend: false, attribution: false } },
       800,
       600,
     )
     expect(nothing.barHeight).toBe(0)
+  })
+
+  it('el avatar desplaza el texto y puede crecer la franja', () => {
+    const avatar = { image: {} as CanvasImageSource, width: 128, height: 128 }
+    const sin = chromeLayout(BASE, 800, 600)
+    const con = chromeLayout({ ...BASE, avatar, parts: { ...BASE.parts, avatar: true } }, 800, 600)
+    expect(con.avatar).not.toBeNull()
+    expect(con.textX).toBeGreaterThan(sin.textX)
+    expect(con.textX - sin.textX).toBe(con.avatar!.size + 10)
+    expect(con.barHeight).toBeGreaterThanOrEqual(sin.barHeight)
+    // dentro de la franja, nunca sobre el mapa
+    expect(con.avatar!.y).toBeGreaterThanOrEqual(600)
+
+    // la parte apagada manda aunque haya foto cargada
+    expect(chromeLayout({ ...BASE, avatar }, 800, 600).avatar).toBeNull()
+    // y sin foto, la parte encendida no inventa una caja
+    expect(chromeLayout({ ...BASE, parts: { ...BASE.parts, avatar: true } }, 800, 600).avatar).toBeNull()
+  })
+
+  it('en superpuesto el avatar va dentro de la pastilla de texto', () => {
+    const avatar = { image: {} as CanvasImageSource, width: 128, height: 128 }
+    const l = chromeLayout(
+      { ...BASE, mode: 'overlay', avatar, parts: { ...BASE.parts, avatar: true } },
+      800,
+      600,
+    )
+    expect(l.avatar!.x).toBe(24) // PAD + GAP
+    expect(l.avatar!.y).toBeLessThan(100)
+    expect(l.textX).toBe(l.avatar!.x + l.avatar!.size + 10)
   })
 
   it('sin paleta no hay leyenda aunque la parte esté activa', () => {

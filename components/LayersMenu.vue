@@ -7,14 +7,22 @@
 // DOM: el contenido no se duplica entre escritorio/mobile, solo cambia de
 // posición vía clases responsive de Tailwind (md:) — sin composable de
 // media query (SSR + matchMedia meten flash de hidratación; CSS puro no).
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { BaseMapId } from '#shared/basemaps'
-import { BASE_MAP_IDS, BASE_MAP_LABELS } from '#shared/basemaps'
+import { BASE_MAP_IDS } from '#shared/basemaps'
 import type { WindLevel } from '#shared/contract'
-import { WIND_LEVEL_LABELS, WIND_LEVELS } from '#shared/contract'
+import { WIND_LEVELS } from '#shared/contract'
 import type { OverlayLayerId, PanelId } from '../machines/overlay'
 
-defineProps<{
+const { t } = useI18n()
+
+const props = withDefaults(defineProps<{
+  /** 'mosaic' (D48) oculta lo que no existe en la vista de mosaico
+      (meso/trayectorias, Tendencia/VWP, anotaciones, export, feedback y el
+      suavizado del raster) — el resto del menú es EL MISMO componente, para
+      que las dos vistas se vean y se operen igual. Satélite, viento y rayos
+      SÍ existen en las dos desde D49. */
+  variant?: 'radar' | 'mosaic'
   base: BaseMapId
   /** true con el dock de Datos abierto (D37): oculta también los pills
       flotantes (Menú/Satélite/...) — comparten el mismo rincón superior
@@ -26,23 +34,42 @@ defineProps<{
       antiguo v-if="productDef" del aside */
   hasPalette: boolean
   opacity: number
-  smooth: boolean
-  smoothRadius: 1 | 2 | 4 | 8
+  smooth?: boolean
+  smoothRadius?: 1 | 2 | 4 | 8
   showPalette: boolean
-  animationEngaged: boolean
-  sat: boolean
-  satVariant: 'ir' | 'vis'
-  satOpacity: number
-  satTimeLabel: string | null
+  animationEngaged?: boolean
+  sat?: boolean
+  satVariant?: 'ir' | 'vis'
+  satOpacity?: number
+  satTimeLabel?: string | null
+  /** en 'mosaic' solo se honra 'cells' (ver MOSAIC_LAYERS) */
   layers: OverlayLayerId[]
-  windLevel: WindLevel
-  windInfo: string | null
-  lightningInfo: string | null
-  overlayJoinInfo: string | null
+  windLevel?: WindLevel
+  windInfo?: string | null
+  lightningInfo?: string | null
+  overlayJoinInfo?: string | null
   availableDays: string[]
   day: string
   unreadFeedbackCount?: number
-}>()
+}>(), {
+  variant: 'radar',
+  smooth: false,
+  smoothRadius: 1,
+  animationEngaged: false,
+  sat: false,
+  satVariant: 'ir',
+  satOpacity: 0.6,
+  satTimeLabel: null,
+  windLevel: '10m',
+  windInfo: null,
+  lightningInfo: null,
+  overlayJoinInfo: null,
+  unreadFeedbackCount: 0,
+})
+
+/** la vista de mosaico no tiene satélite/viento/rayos/tendencia/VWP/
+ * anotaciones/export/feedback ni suavizado del raster (MosaicMap.vue) */
+const isRadar = computed(() => props.variant === 'radar')
 
 const emit = defineEmits<{
   'select-base': [event: Event]
@@ -60,6 +87,7 @@ const emit = defineEmits<{
   'open-prefs': []
   'open-feedback': []
   'open-export': []
+  'open-annotations': []
 }>()
 
 const open = ref(false)
@@ -83,6 +111,11 @@ function openExport() {
   open.value = false
   emit('open-export')
 }
+
+function openAnnotations() {
+  open.value = false
+  emit('open-annotations')
+}
 </script>
 
 <template>
@@ -101,9 +134,11 @@ function openExport() {
       type="button"
       data-testid="layers-menu-toggle"
       class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-1.5 text-sm font-bold shadow-lg"
+      :aria-expanded="open"
+      aria-controls="layers-menu-dock"
       @click="open = !open"
     >
-      Menú
+      {{ t('layers.pills.menu') }}
       <span
         class="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-base leading-none text-white"
         aria-hidden="true"
@@ -112,12 +147,13 @@ function openExport() {
 
     <div class="hidden md:flex md:flex-col md:items-end md:gap-2">
       <button
+        v-if="isRadar"
         type="button"
         data-testid="feedback-pill"
         class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-3 text-sm font-bold shadow-lg hover:bg-slate-800"
         @click="openFeedback"
       >
-        <span>Feedback</span>
+        <span>{{ t('layers.pills.feedback') }}</span>
         <span
           v-if="unreadFeedbackCount && unreadFeedbackCount > 0"
           data-testid="feedback-unread-badge"
@@ -129,7 +165,7 @@ function openExport() {
       <label
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span class="whitespace-nowrap">Satélite</span>
+        <span class="whitespace-nowrap">{{ t('layers.pills.satellite') }}</span>
         <LayerIcon kind="sat" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -143,7 +179,7 @@ function openExport() {
       <label
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span class="whitespace-nowrap">Fenómenos</span>
+        <span class="whitespace-nowrap">{{ t('layers.pills.phenomena') }}</span>
         <LayerIcon kind="cells" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -157,7 +193,7 @@ function openExport() {
       <label
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span class="whitespace-nowrap">Viento</span>
+        <span class="whitespace-nowrap">{{ t('layers.pills.wind') }}</span>
         <LayerIcon kind="wind" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -171,7 +207,7 @@ function openExport() {
       <label
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
-        <span class="whitespace-nowrap">Rayos</span>
+        <span class="whitespace-nowrap">{{ t('layers.pills.lightning') }}</span>
         <LayerIcon kind="lightning" class="absolute -right-1 top-1/2 -translate-y-1/2 rounded-full ring-2 ring-slate-900" />
         <input
           type="checkbox"
@@ -195,6 +231,7 @@ function openExport() {
 
   <div
     v-if="open"
+    id="layers-menu-dock"
     data-testid="layers-menu"
     class="pointer-events-auto fixed inset-x-0 bottom-0 top-12 z-40 overflow-y-auto rounded-t-2xl bg-slate-900 p-4 md:static md:z-auto md:h-full md:w-80 md:shrink-0 md:rounded-none md:border-l md:border-slate-700 md:bg-slate-900/95 md:p-3 md:shadow-lg"
   >
@@ -203,11 +240,11 @@ function openExport() {
     </div>
 
     <div class="mb-3 flex items-center justify-between">
-      <h2 class="text-sm font-bold">Capas</h2>
+      <h2 class="text-sm font-bold">{{ t('layers.panel.title') }}</h2>
       <button
         type="button"
         data-testid="layers-menu-close"
-        aria-label="Cerrar"
+        :aria-label="t('layers.panel.close')"
         class="rounded px-2 py-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
         @click="open = false"
       >
@@ -217,24 +254,24 @@ function openExport() {
 
     <div class="space-y-4 text-sm">
       <label class="block">
-        <span class="mb-1 block text-slate-400">Mapa base</span>
+        <span class="mb-1 block text-slate-400">{{ t('layers.basemap.label') }}</span>
         <!-- sin opción 'off': apagar la base es cosa de e2e/goldens (?base=off),
              no una elección de usuario; con base=off el select muestra el default -->
         <select
           :value="base === 'off' ? 'osm' : base"
           data-testid="base-select"
-          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+          class="w-full rounded border border-slate-500 bg-slate-800 p-2"
           @change="emit('select-base', $event)"
         >
           <option v-for="id in BASE_MAP_IDS" :key="id" :value="id">
-            {{ BASE_MAP_LABELS[id] }}
+            {{ t(`layers.basemap.options.${id}`) }}
           </option>
         </select>
       </label>
 
       <template v-if="hasPalette">
         <label class="block">
-          <span class="mb-1 block text-slate-400">Opacidad</span>
+          <span class="mb-1 block text-slate-400">{{ t('layers.opacity.label') }}</span>
           <input
             :value="opacity"
             data-testid="opacity-slider"
@@ -247,7 +284,7 @@ function openExport() {
           >
         </label>
 
-        <label class="flex items-center gap-2" :class="{ 'opacity-50': animationEngaged }">
+        <label v-if="isRadar" class="flex items-center gap-2" :class="{ 'opacity-50': animationEngaged }">
           <input
             type="checkbox"
             data-testid="smooth-toggle"
@@ -255,7 +292,7 @@ function openExport() {
             :disabled="animationEngaged"
             @change="emit('toggle-smooth', $event)"
           >
-          <span>Suavizar celdas del raster</span>
+          <span>{{ t('layers.smooth.toggle') }}</span>
         </label>
 
         <label class="flex items-center gap-2">
@@ -265,15 +302,15 @@ function openExport() {
             :checked="showPalette"
             @change="emit('toggle-show-palette', $event)"
           >
-          <span>Mostrar paleta de colores</span>
+          <span>{{ t('layers.palette.toggle') }}</span>
         </label>
 
         <label
-          v-if="smooth"
+          v-if="isRadar && smooth"
           class="block"
           :class="{ 'opacity-50': animationEngaged }"
         >
-          <span class="mb-1 block text-slate-400">Radio de suavizado</span>
+          <span class="mb-1 block text-slate-400">{{ t('layers.smooth.radiusLabel') }}</span>
           <select
             data-testid="smooth-radius-select"
             :value="smoothRadius"
@@ -281,21 +318,21 @@ function openExport() {
             class="w-full rounded bg-slate-800 text-slate-100"
             @change="emit('select-smooth-radius', $event)"
           >
-            <option value="1">1× (sin remuestreo)</option>
-            <option value="2">2×</option>
-            <option value="4">4×</option>
-            <option value="8">8×</option>
+            <option value="1">{{ t('layers.smooth.radius1') }}</option>
+            <option value="2">{{ t('layers.smooth.radius2') }}</option>
+            <option value="4">{{ t('layers.smooth.radius4') }}</option>
+            <option value="8">{{ t('layers.smooth.radius8') }}</option>
           </select>
         </label>
 
-        <p v-if="animationEngaged" class="text-xs text-slate-400">
-          No disponible durante la animación.
+        <p v-if="isRadar && animationEngaged" class="text-xs text-slate-400">
+          {{ t('layers.smooth.disabledDuringAnimation') }}
         </p>
       </template>
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': sat }">
-          <span class="flex items-center gap-2"><LayerIcon kind="sat" class="h-5 w-5" />Satélite</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="sat" class="h-5 w-5" />{{ t('layers.satellite.title') }}</span>
           <input
             type="checkbox"
             data-testid="sat-toggle"
@@ -308,19 +345,19 @@ function openExport() {
             {{ satTimeLabel }}
           </p>
           <label class="mt-2 block">
-            <span class="mb-1 block text-slate-400">Variante</span>
+            <span class="mb-1 block text-slate-400">{{ t('layers.satellite.variantLabel') }}</span>
             <select
               :value="satVariant"
               data-testid="sat-variant-select"
-              class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+              class="w-full rounded border border-slate-500 bg-slate-800 p-2"
               @change="emit('select-sat-variant', $event)"
             >
-              <option value="ir">Infrarrojo</option>
-              <option value="vis">Visible</option>
+              <option value="ir">{{ t('layers.satellite.variantIr') }}</option>
+              <option value="vis">{{ t('layers.satellite.variantVis') }}</option>
             </select>
           </label>
           <label class="mt-2 block">
-            <span class="mb-1 block text-slate-400">Opacidad</span>
+            <span class="mb-1 block text-slate-400">{{ t('layers.satellite.opacityLabel') }}</span>
             <input
               :value="satOpacity"
               data-testid="sat-opacity-slider"
@@ -332,15 +369,15 @@ function openExport() {
               @input="emit('sat-opacity-input', $event)"
             >
           </label>
-          <p class="mt-1 text-xs text-slate-400">
-            No se muestra durante la animación.
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
+            {{ t('layers.satellite.hiddenDuringAnimation') }}
           </p>
         </template>
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('cells') }">
-          <span class="flex items-center gap-2"><LayerIcon kind="cells" class="h-5 w-5" />Fenómenos</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="cells" class="h-5 w-5" />{{ t('layers.phenomena.title') }}</span>
           <input
             type="checkbox"
             data-testid="layer-toggle-cells"
@@ -348,7 +385,7 @@ function openExport() {
             @change="emit('toggle-layer', 'cells')"
           >
         </label>
-        <template v-if="layers.includes('cells')">
+        <template v-if="isRadar && layers.includes('cells')">
           <label class="mt-1 flex items-center gap-2 pl-4">
             <input
               type="checkbox"
@@ -356,7 +393,7 @@ function openExport() {
               :checked="layers.includes('trackPast')"
               @change="emit('toggle-layer', 'trackPast')"
             >
-            <span>Trayectoria pasada (todas)</span>
+            <span>{{ t('layers.phenomena.trackPast') }}</span>
           </label>
           <label class="mt-1 flex items-center gap-2 pl-4">
             <input
@@ -365,17 +402,17 @@ function openExport() {
               :checked="layers.includes('trackFuture')"
               @change="emit('toggle-layer', 'trackFuture')"
             >
-            <span>Trayectoria futura (todas)</span>
+            <span>{{ t('layers.phenomena.trackFuture') }}</span>
           </label>
         </template>
-        <label class="mt-1 flex items-center gap-2">
+        <label v-if="isRadar" class="mt-1 flex items-center gap-2">
           <input
             type="checkbox"
             data-testid="layer-toggle-meso"
             :checked="layers.includes('meso')"
             @change="emit('toggle-layer', 'meso')"
           >
-          <span>Mesociclones / TVS</span>
+          <span>{{ t('layers.phenomena.meso') }}</span>
         </label>
         <p
           v-if="overlayJoinInfo"
@@ -388,7 +425,7 @@ function openExport() {
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('wind') }">
-          <span class="flex items-center gap-2"><LayerIcon kind="wind" class="h-5 w-5" />Viento<template v-if="layers.includes('wind')"> ({{ WIND_LEVEL_LABELS[windLevel] }})</template></span>
+          <span class="flex items-center gap-2"><LayerIcon kind="wind" class="h-5 w-5" />{{ t('layers.wind.title') }}<template v-if="layers.includes('wind')"> ({{ t(`layers.wind.levels.${windLevel}`) }})</template></span>
           <input
             type="checkbox"
             data-testid="layer-toggle-wind"
@@ -398,15 +435,15 @@ function openExport() {
         </label>
         <template v-if="layers.includes('wind')">
           <label class="mt-2 block">
-            <span class="mb-1 block text-slate-400">Nivel de altura</span>
+            <span class="mb-1 block text-slate-400">{{ t('layers.wind.levelLabel') }}</span>
             <select
               :value="windLevel"
               data-testid="wind-level-select"
-              class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+              class="w-full rounded border border-slate-500 bg-slate-800 p-2"
               @change="emit('select-wind-level', $event)"
             >
               <option v-for="level in WIND_LEVELS" :key="level" :value="level">
-                {{ WIND_LEVEL_LABELS[level] }}
+                {{ t(`layers.wind.levels.${level}`) }}
               </option>
             </select>
           </label>
@@ -417,15 +454,15 @@ function openExport() {
           >
             {{ windInfo }}
           </p>
-          <p class="mt-1 text-xs text-slate-400">
-            No se muestra durante la animación.
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
+            {{ t('layers.wind.hiddenDuringAnimation') }}
           </p>
         </template>
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
         <label class="flex cursor-pointer items-center justify-between" :class="{ 'font-bold': layers.includes('lightning') }">
-          <span class="flex items-center gap-2"><LayerIcon kind="lightning" class="h-5 w-5" />Rayos</span>
+          <span class="flex items-center gap-2"><LayerIcon kind="lightning" class="h-5 w-5" />{{ t('layers.lightning.title') }}</span>
           <input
             type="checkbox"
             data-testid="layer-toggle-lightning"
@@ -441,68 +478,79 @@ function openExport() {
           >
             {{ lightningInfo }}
           </p>
-          <p class="mt-1 text-xs text-slate-400">
-            No se muestra durante la animación.
+          <p v-if="isRadar" class="mt-1 text-xs text-slate-400">
+            {{ t('layers.lightning.hiddenDuringAnimation') }}
           </p>
         </template>
       </fieldset>
 
-      <fieldset class="rounded bg-slate-800 p-3">
-        <legend class="px-1 text-slate-400">Datos</legend>
+      <fieldset v-if="isRadar" class="rounded bg-slate-800 p-3">
+        <legend class="px-1 text-slate-400">{{ t('layers.data.legend') }}</legend>
         <div class="flex gap-2">
           <button
             type="button"
             data-testid="panel-open-cells"
-            class="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openPanel('cells')"
           >
-            Celdas
+            {{ t('layers.data.cells') }}
           </button>
           <button
             type="button"
             data-testid="panel-open-trend"
-            class="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openPanel('trend')"
           >
-            Tendencia
+            {{ t('layers.data.trend') }}
           </button>
           <button
             type="button"
             data-testid="vwp-open"
-            class="flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="flex-1 rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openPanel('vwp')"
           >
-            VWP
+            {{ t('layers.data.vwp') }}
           </button>
         </div>
       </fieldset>
 
       <fieldset class="rounded bg-slate-800 p-3">
-        <legend class="px-1 text-slate-400">Preferencias y Opinión</legend>
+        <legend class="px-1 text-slate-400">{{ isRadar ? t('layers.prefs.legendRadar') : t('layers.prefs.legendMosaic') }}</legend>
         <div class="flex flex-col gap-2">
           <button
             type="button"
             data-testid="prefs-open"
-            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openPrefs"
           >
-            Unidades, hora, alcance del radar
+            {{ isRadar ? t('layers.prefs.openRadar') : t('layers.prefs.openMosaic') }}
           </button>
           <button
+            v-if="isRadar"
+            type="button"
+            data-testid="annotations-open"
+            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            @click="openAnnotations"
+          >
+            {{ t('layers.prefs.annotations') }}
+          </button>
+          <button
+            v-if="isRadar"
             type="button"
             data-testid="export-open"
-            class="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openExport"
           >
-            Exportar imagen del mapa
+            {{ t('layers.prefs.export') }}
           </button>
           <button
+            v-if="isRadar"
             type="button"
             data-testid="menu-feedback-open"
-            class="w-full flex items-center justify-between rounded border border-slate-600 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
+            class="w-full flex items-center justify-between rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700"
             @click="openFeedback"
           >
-            <span>Dejar opinión / Sugerencia</span>
+            <span>{{ t('layers.prefs.feedback') }}</span>
             <span
               v-if="unreadFeedbackCount && unreadFeedbackCount > 0"
               class="h-2 w-2 rounded-full bg-red-500"

@@ -3,6 +3,8 @@
 import type {
   Health,
   LightningBucketMeta,
+  MosaicDomain,
+  MosaicRasterMeta,
   Phenomenon,
   Product,
   Radar,
@@ -46,6 +48,20 @@ export interface Dal {
   /** Cubos de rayos de un site en un día UTC ±900 s (LIGHTNING_DAY_PAD_S),
    * ascendente por bucket_start — índice para el join por ventana cliente. */
   listLightningBuckets(site: string, day: string): Promise<LightningBucketMeta[]>
+  /** Dominios del mosaico con sus radares miembros — la lista completa es
+   * lo que permite al overlay de cobertura pintar los AUSENTES de un slot
+   * (miembros menos `contributing`). */
+  listMosaicDomains(): Promise<MosaicDomain[]>
+  /** Metadata completa (batch) de un (dominio, producto) dentro de un día
+   * UTC, ascendente por slot_time — timeline y frames en un request. */
+  listMosaicRasters(domain: string, productCode: number, day: string): Promise<MosaicRasterMeta[]>
+  /** Mosaico más cercano / siguiente estricto / anterior estricto a t. */
+  findMosaicRaster(
+    domain: string,
+    productCode: number,
+    t: string,
+    mode: RasterLookupMode,
+  ): Promise<MosaicRasterMeta | null>
   /** Frescura por radar desde radars.last_seen_at. */
   health(now: Date): Promise<Health>
 }

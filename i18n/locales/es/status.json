@@ -1,0 +1,28 @@
+{
+  "status": {
+    "wind": {
+      "error": "Error cargando viento: {detail}",
+      "loading": "Cargando viento…",
+      "noDataFrame": "Sin dato de viento para este frame.",
+      "noDataSlot": "Sin dato de viento para este slot.",
+      "mosaicUnion": "Unión de las grillas GFS de los radares del dominio.",
+      "gfs": "GFS ciclo {cycle}Z f{forecastHour} · {valid}Z{levelSuffix}"
+    },
+    "lightning": {
+      "error": "Error cargando rayos: {detail}",
+      "loading": "Cargando rayos…",
+      "noDataFrame": "Sin descargas registradas para este frame.",
+      "emptyFrame": "Sin descargas dentro del intervalo del frame.",
+      "countFrame": "{n} descarga en el intervalo del frame. | {n} descargas en el intervalo del frame.",
+      "emptySlot": "Sin descargas dentro del intervalo del slot.",
+      "countSlot": "{n} descarga en el intervalo del slot. | {n} descargas en el intervalo del slot."
+    },
+    "timeline": {
+      "error": "Error consultando la timeline: {detail}",
+      "empty": "Sin volúmenes este día (UTC).",
+      "mosaicError": "Error consultando la timeline del mosaico: {detail}",
+      "mosaicEmpty": "Sin mosaicos este día (UTC)."
+    },
+    "domainsUnavailable": "Dominios de mosaico no disponibles: {detail}"
+  }
+}

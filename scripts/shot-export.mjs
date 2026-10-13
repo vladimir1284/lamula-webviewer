@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Genera PNG de muestra del exportador (F7.1, decisión 40) para inspección
+// Genera muestras del exportador (F7.1 y F7.3, decisiones 40 y 42) para
+// inspección
 // humana: el mapa real con sus capas, en los dos modos de chrome. No es un
 // test — no asserta nada; existe porque la franja y la leyenda del export
 // sólo se validan mirándolas, y reconstruir el montaje a mano cada vez es
@@ -10,7 +11,8 @@
 // Levanta los COGs golden (scripts/serve-cogs.mjs) y el server Nuxt en modo
 // fixture, calcula el deep link al volumen con más mesociclones que además
 // tiene raster (hoy BYX 03:08:18), enciende celdas/meso/viento/rayos y
-// descarga el PNG en modo franja y en modo superpuesto.
+// descarga el PNG en modo franja y en modo superpuesto, y un GIF del bucle
+// de rayos (lo único que valida que el bucle empalma sin costura es verlo).
 //
 // Zona horaria fijada a America/New_York: la hora del chrome se formatea en
 // local, y sin esto la muestra cambia según la máquina.
@@ -115,6 +117,17 @@ try {
   await page.getByTestId('export-chrome-overlay').click()
   await page.waitForTimeout(1500)
   await grab('export-superpuesto.png')
+
+  // GIF del bucle de rayos (F7.3): lo único que valida que el bucle empalma
+  // sin costura es verlo dar la vuelta. Vuelve al chrome en franja primero.
+  await page.getByTestId('export-chrome-bar').click()
+  await page.waitForSelector('[data-testid="export-download"]:not([disabled])', { timeout: 60_000 })
+  const [gif] = await Promise.all([
+    page.waitForEvent('download', { timeout: 180_000 }),
+    page.getByTestId('export-anim-run').click(),
+  ])
+  await gif.saveAs(join(OUT, 'export-rayos.gif'))
+  console.log('guardado', join(OUT, 'export-rayos.gif'))
 }
 finally {
   await browser?.close()

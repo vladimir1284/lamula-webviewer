@@ -16,9 +16,18 @@ export type FeedbackKind = (typeof FEEDBACK_KINDS)[number]
 export const FEEDBACK_STATUSES = ['nuevo', 'leido', 'respondido', 'cerrado'] as const
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number]
 
+/**
+ * Producto del que viene el mensaje. La bandeja es una sola para los dos (decisión 50);
+ * esto es lo que dice cuál es cuál. Espejo a mano en lamula-process:
+ * `src/lib/feedback/contract.ts` — no hay paquete compartido entre los dos repos.
+ */
+export const FEEDBACK_APPS = ['webviewer', 'process'] as const
+export type FeedbackApp = (typeof FEEDBACK_APPS)[number]
+
 export const zFeedbackRole = z.enum(FEEDBACK_ROLES)
 export const zFeedbackKind = z.enum(FEEDBACK_KINDS)
 export const zFeedbackStatus = z.enum(FEEDBACK_STATUSES)
+export const zFeedbackApp = z.enum(FEEDBACK_APPS)
 
 export const zFeedbackProfile = z.object({
   role: zFeedbackRole,
@@ -35,6 +44,8 @@ export const zFeedbackContext = z.record(z.string(), z.unknown())
 export type FeedbackContext = z.infer<typeof zFeedbackContext>
 
 export const zFeedbackSubmission = z.object({
+  // `.default()`: un cliente anterior a la decisión 50 que no lo mande sigue validando.
+  app: zFeedbackApp.default('webviewer'),
   kind: zFeedbackKind,
   rating: z.number().int().min(1).max(5).optional().nullable(),
   message: z.string().min(1, 'El mensaje no puede estar vacío').max(5000),
@@ -71,6 +82,7 @@ export type FeedbackThreadItem = z.infer<typeof zFeedbackThreadItem>
 export const zFeedbackAdminItem = z.object({
   id: z.string(),
   tokenHash: z.string(),
+  app: zFeedbackApp,
   kind: zFeedbackKind,
   rating: z.number().nullable().optional(),
   message: z.string(),

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const { t } = useI18n()
+
 const emit = defineEmits<{
   open: []
   later: []
@@ -13,11 +15,11 @@ const emit = defineEmits<{
   >
     <div class="flex items-start justify-between gap-2">
       <h3 class="text-xs font-bold text-teal-400 uppercase tracking-wider">
-        ¿Qué te parece el visor?
+        {{ t('feedback.nudge.title') }}
       </h3>
       <button
         type="button"
-        class="text-slate-500 hover:text-slate-300"
+        class="text-slate-400 hover:text-slate-300"
         @click="emit('later')"
       >
         ✕
@@ -25,7 +27,7 @@ const emit = defineEmits<{
     </div>
 
     <p class="mt-1 text-xs text-slate-300">
-      Tu opinión como meteorólogo o especialista nos ayuda a mejorar el servicio.
+      {{ t('feedback.nudge.body') }}
     </p>
 
     <div class="mt-3 flex items-center gap-2">
@@ -35,7 +37,7 @@ const emit = defineEmits<{
         class="rounded bg-teal-600 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-teal-500"
         @click="emit('open')"
       >
-        Dejar opinión
+        {{ t('feedback.nudge.open') }}
       </button>
 
       <button
@@ -44,16 +46,16 @@ const emit = defineEmits<{
         class="rounded border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
         @click="emit('later')"
       >
-        Más tarde
+        {{ t('feedback.nudge.later') }}
       </button>
 
       <button
         type="button"
         data-testid="nudge-action-never"
-        class="text-xs text-slate-500 hover:underline"
+        class="text-xs text-slate-400 hover:underline"
         @click="emit('never')"
       >
-        No, gracias
+        {{ t('feedback.nudge.never') }}
       </button>
     </div>
   </div>

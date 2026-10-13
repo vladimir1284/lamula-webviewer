@@ -16,6 +16,8 @@ import { formatHhmm } from '../utils/time-display'
 import type { UnitsPref } from '../utils/units'
 import { convertHeightFt, convertSpeedKt, heightUnit, speedUnit } from '../utils/units'
 
+const { t } = useI18n()
+
 const props = withDefaults(defineProps<{
   /** cache de perfiles por vol_time (contexto de overlayMachine) */
   profiles: Record<string, VwpLevel[]>
@@ -102,12 +104,12 @@ const rmsLabel = (kt: number) =>
         >{{ tick.label }}</text>
       </g>
       <text
-        v-for="(t, i) in window"
-        :key="t"
+        v-for="(volTime, i) in window"
+        :key="volTime"
         :x="xOf(i)" :y="H - 8"
         text-anchor="middle" font-size="8" fill="#94a3b8"
-        :font-weight="t === joined ? 'bold' : 'normal'"
-      >{{ hhmm(t) }}</text>
+        :font-weight="volTime === joined ? 'bold' : 'normal'"
+      >{{ hhmm(volTime) }}</text>
       <WindBarb
         v-for="b in barbs"
         :key="b.key"
@@ -119,8 +121,12 @@ const rmsLabel = (kt: number) =>
       />
     </svg>
     <figcaption class="mt-1 text-xs text-slate-400">
-      Altura ({{ heightUnit(units, 'ft') }}) × hora {{ clock === 'utc' ? 'Z' : 'local' }} —
-      barbas WMO (kt); ámbar = RMS &gt; {{ rmsLabel(RMS_WARN_KT) }} {{ speedUnit(units) }}, gris = sin RMS
+      {{ t('charts.vwp.chart.caption', {
+        unit: heightUnit(units, 'ft'),
+        clock: clock === 'utc' ? 'Z' : t('charts.vwp.chart.localTime'),
+        rms: rmsLabel(RMS_WARN_KT),
+        speedUnit: speedUnit(units),
+      }) }}
     </figcaption>
   </figure>
 </template>

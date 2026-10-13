@@ -1,0 +1,7 @@
+{
+  "app": {
+    "title": "LAMULA WebViewer — Visualizador Radar NEXRAD",
+    "shortTitle": "LAMULA WebViewer — Radar NEXRAD",
+    "description": "Visualizador Web de productos de radar NEXRAD Level III con OpenLayers WebGL"
+  }
+}

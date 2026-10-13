@@ -1,0 +1,74 @@
+{
+  "export": {
+    "dialog": {
+      "title": "Exportar imagen",
+      "close": "Cerrar",
+      "capturing": "Capturando…",
+      "errors": {
+        "captureFailed": "No se pudo capturar el mapa",
+        "avatarReadFailed": "No se pudo leer la imagen elegida.",
+        "copyFailed": "El navegador no dejó copiar la imagen.",
+        "downloadFailed": "No se pudo generar el PNG",
+        "animationFailed": "No se pudo generar la animación"
+      },
+      "notices": {
+        "skippedLayers": "Se omitieron {n} capa(s) que el navegador no deja leer.",
+        "copied": "Imagen copiada al portapapeles.",
+        "cancelled": "Cancelado tras {n} frames.",
+        "animationSummary": "{frames} frames · {width}×{height} · {kb} kB"
+      }
+    },
+    "chrome": {
+      "legend": "Datos sobre la imagen",
+      "mode": {
+        "bar": "Franja",
+        "overlay": "Superpuesto",
+        "none": "Sin datos"
+      },
+      "parts": {
+        "title": "Marca",
+        "meta": "Sitio, producto y hora",
+        "legend": "Paleta de colores",
+        "attribution": "Atribución"
+      }
+    },
+    "brand": {
+      "legend": "Marca",
+      "watermark": "Logo como marca de agua",
+      "includeAvatar": "Incluir mi foto",
+      "avatarNote": "Se guarda solo en este navegador y nunca se envía.",
+      "removeAvatar": "Quitar"
+    },
+    "resolution": {
+      "legend": "Resolución"
+    },
+    "animation": {
+      "legend": "Animación",
+      "sequence": "Secuencia del radar",
+      "phase": "Bucle de rayos",
+      "sequenceHint": "Para exportar la secuencia, reproduce primero la animación: los frames se exportan del mismo pool que usa el reproductor.",
+      "formatVideo": "Vídeo",
+      "generating": "Capturando {done}/{total}…",
+      "generate": "Generar y descargar",
+      "cancel": "Cancelar"
+    },
+    "actions": {
+      "downloadPng": "Descargar PNG",
+      "copy": "Copiar"
+    },
+    "annotations": {
+      "tools": {
+        "arrow": "Flecha",
+        "circle": "Círculo",
+        "freehand": "Trazo libre",
+        "text": "Texto"
+      },
+      "color": "Color {hex}",
+      "textPlaceholder": "Texto del rótulo",
+      "textHint": "Escribe el rótulo antes de marcar el punto.",
+      "undo": "Deshacer",
+      "clear": "Borrar todo",
+      "done": "Listo"
+    }
+  }
+}

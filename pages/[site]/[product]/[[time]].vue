@@ -14,9 +14,11 @@ import type {
   WindGridMeta,
   WindLevel,
 } from '#shared/contract'
-import { WIND_LEVEL_LABELS, zLightningBucketFile, zWindGridFile } from '#shared/contract'
+import { zLightningBucketFile, zWindGridFile } from '#shared/contract'
 import { rasterProductDef } from '#shared/products'
+import { loadAnnotations, saveAnnotations } from '../../../composables/useAnnotations'
 import { loadPrefs, PREF_DEFAULTS, savePrefs } from '../../../composables/useViewerPrefs'
+import { annotationMachine, annotationsOf } from '../../../machines/annotation'
 import { animationMachine } from '../../../machines/animation'
 import { feedbackMachine } from '../../../machines/feedback'
 import { overlayMachine } from '../../../machines/overlay'
@@ -24,6 +26,7 @@ import type { OverlayLayerId, PanelId } from '../../../machines/overlay'
 import { viewerMachine } from '../../../machines/viewer'
 import type { DisplayQueryParams, NavigateParams, OverlayQueryParams, PrefsParams } from '../../../machines/viewer'
 
+import type { Annotation, AnnotationKind } from '../../../utils/export/annotations'
 import { shouldShowNudge } from '../../../utils/feedback/nudge'
 import type { MapCaptureHandle } from '../../../utils/export/types'
 import { formatFull, formatFullParts } from '../../../utils/time-display'
@@ -55,6 +58,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { t } = useI18n()
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 const exportDialog = ref<{ open: () => void }>()
@@ -63,6 +67,10 @@ const radarMap = ref<MapCaptureHandle | null>(null)
 
 const { data: radars, error: radarsError } = await useFetch('/api/radars')
 const { data: products } = await useFetch('/api/products')
+// solo para el link "ver mosaico" del chip de marca (D43/P4) — no afecta
+// nada del flujo de un solo radar si falla o si el sitio no pertenece a
+// ningún dominio
+const { data: mosaicDomains } = await useFetch('/api/mosaic/domains')
 
 const initialRoute = parseViewerRoute(route)
 if (!initialRoute) {
@@ -233,6 +241,12 @@ function onDataModalUpdatePanel(panel: PanelId) {
   send({ type: 'SELECT_PANEL', panel })
 }
 const radar = computed(() => ctx.value.radars.find(r => r.site_id === ctx.value.site) ?? null)
+const mosaicDomainForSite = computed(() =>
+  (mosaicDomains.value ?? []).find(d => d.site_ids.includes(ctx.value.site)) ?? null,
+)
+const mosaicPath = computed(() =>
+  mosaicDomainForSite.value ? `/mosaic/${mosaicDomainForSite.value.domain_id}/${ctx.value.product}` : null,
+)
 const rasterProducts = computed(() => ctx.value.products.filter(p => p.kind === 'raster'))
 const productDef = computed(() => rasterProductDef(ctx.value.product))
 const raster = computed(() => (snapshot.value.matches({ raster: 'shown' }) ? ctx.value.raster : null))
@@ -404,8 +418,8 @@ function onToggleAnimation() {
   if (wasPlaying) {
     // decisión F3: durante playback la URL no se toca; al pausar, replace
     // con el frame que quedó visible
-    const t = animFrames.value?.[animSnapshot.value.context.index]?.vol_time
-    if (t) send({ type: 'SELECT_TIME', time: t })
+    const volTime = animFrames.value?.[animSnapshot.value.context.index]?.vol_time
+    if (volTime) send({ type: 'SELECT_TIME', time: volTime })
   }
 }
 
@@ -432,6 +446,9 @@ watch(() => ctx.value.time, () => {
 })
 
 const animCurrentVolTime = computed(() => animFrames.value?.[activeFrameIndex.value]?.vol_time ?? ctx.value.time)
+// vol_times de la ventana, en el orden del pool: el chrome del GIF sella cada
+// frame con SU hora, no con la del volumen en reposo (F7.3)
+const animFrameTimes = computed(() => animFrames.value?.map(f => f.vol_time) ?? null)
 // resalta el frame realmente mostrado en la barra: el de animación mientras
 // está enganchada (aunque en pausa — la URL no se toca hasta pausar), si no
 // el de timelineCurrent de siempre
@@ -514,6 +531,40 @@ const overlayCtx = computed(() => overlaySnapshot.value.context)
 const displayedVolTime = computed(() =>
   animationEngaged.value ? animCurrentVolTime.value : raster.value?.vol_time ?? null,
 )
+
+// ── Anotaciones del mapa (F7.2) ─────────────────────────────────────────
+// La máquina es pura: la persistencia entra como acción inyectada, igual que
+// syncQuery en viewerMachine. Fuera de la URL a propósito (excepción a D23
+// documentada en la decisión 40).
+const { snapshot: annotationSnapshot, send: annotationSend } = useActor(
+  annotationMachine.provide({
+    actions: { persist: (_, bySite) => saveAnnotations(bySite) },
+  }),
+  { input: { site: initialRoute.site } },
+)
+const annotationCtx = computed(() => annotationSnapshot.value.context)
+const annotationDrawing = computed(() => annotationSnapshot.value.matches('drawing'))
+const siteAnnotations = computed(() => annotationsOf(annotationCtx.value))
+/** null apaga las interacciones de dibujo en RadarMap */
+const annotationTool = computed<AnnotationKind | null>(() =>
+  annotationDrawing.value ? annotationCtx.value.tool : null,
+)
+
+onMounted(() => {
+  // localStorage no existe en SSR: la colección entra tras montar, igual que
+  // las prefs de display
+  annotationSend({ type: 'LOADED', bySite: loadAnnotations() })
+})
+
+watch(() => ctx.value.site, site => annotationSend({ type: 'SITE_CHANGED', site }))
+
+function onAnnotationAdd(annotation: Annotation) {
+  annotationSend({ type: 'ADD', annotation })
+}
+
+function onAnnotationUpdate(annotation: Annotation) {
+  annotationSend({ type: 'UPDATE', annotation })
+}
 
 // ── Feedback ────────────────────────────────────────────────────────────
 const { snapshot: feedbackSnapshot, send: feedbackSend } = useActor(feedbackMachine)
@@ -657,19 +708,22 @@ const windInfo = computed(() => {
   if (!ctx.value.layers.includes('wind')) return null
   const s = overlaySnapshot.value
   if (s.matches({ wind: 'error' })) {
-    return `Error cargando viento: ${overlayCtx.value.windError}`
+    return t('status.wind.error', { detail: overlayCtx.value.windError })
   }
-  if (s.matches({ wind: 'noData' })) return 'Sin dato de viento para este frame.'
+  if (s.matches({ wind: 'noData' })) return t('status.wind.noDataFrame')
   const meta = overlayCtx.value.windTimes?.find(
     w => w.valid_time === overlayCtx.value.windJoined,
   )
   if (!meta) return null
-  const cycleH = meta.cycle_time.slice(11, 13)
-  const validHm = meta.valid_time.slice(11, 16)
   // '10m' es el nivel por defecto (único ingerido en producción) — no se
   // repite en la etiqueta, que ya se lee en el <select> de nivel
-  const levelSuffix = meta.level === '10m' ? '' : ` · ${WIND_LEVEL_LABELS[meta.level]}`
-  return `GFS ciclo ${cycleH}Z f${String(meta.forecast_hour).padStart(3, '0')} · ${validHm}Z${levelSuffix}`
+  const levelSuffix = meta.level === '10m' ? '' : ` · ${t(`layers.wind.levels.${meta.level}`)}`
+  return t('status.wind.gfs', {
+    cycle: meta.cycle_time.slice(11, 13),
+    forecastHour: String(meta.forecast_hour).padStart(3, '0'),
+    valid: meta.valid_time.slice(11, 16),
+    levelSuffix,
+  })
 })
 
 // ── Capa de rayos (GLM) ──────────────────────────────────────────────────
@@ -682,16 +736,16 @@ const lightningInfo = computed(() => {
   if (!ctx.value.layers.includes('lightning')) return null
   const s = overlaySnapshot.value
   if (s.matches({ lightning: 'error' })) {
-    return `Error cargando rayos: ${overlayCtx.value.lightningError}`
+    return t('status.lightning.error', { detail: overlayCtx.value.lightningError })
   }
   if (s.matches({ lightning: 'noData' })) {
-    return 'Sin descargas registradas para este frame.'
+    return t('status.lightning.noDataFrame')
   }
   const strikes = overlayCtx.value.lightningStrikes
   if (strikes === null) return null
   return strikes.length === 0
-    ? 'Sin descargas dentro del intervalo del frame.'
-    : `${strikes.length} descargas en el intervalo del frame.`
+    ? t('status.lightning.emptyFrame')
+    : t('status.lightning.countFrame', { n: strikes.length }, strikes.length)
 })
 
 function onToggleLayer(layer: OverlayLayerId) {
@@ -710,6 +764,10 @@ const EDITABLE_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA'])
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (target && EDITABLE_TAGS.has(target.tagName)) return
+  // El mapa es focusable (accesibilidad) y OL panea con las flechas. Sin este
+  // guard un ArrowLeft con el foco en el mapa paneaba Y retrocedía de frame.
+  // El dueño de las flechas es quien tiene el foco, no la página.
+  if (target?.closest('[role="application"]')) return
   if (event.key === 'ArrowLeft') onTimelineStep(-1)
   else if (event.key === 'ArrowRight') onTimelineStep(1)
 }
@@ -807,6 +865,7 @@ function onSatOpacityInput(event: Event) {
         :units="ctx.units"
         :base="ctx.base"
         :sat-enabled="ctx.sat"
+        :frame-times="animFrameTimes"
       />
 
       <TimelineMenu
@@ -864,6 +923,12 @@ function onSatOpacityInput(event: Event) {
           :lightning-strikes="lightningStrikesShown"
           :smooth="ctx.smooth"
           :smooth-radius="ctx.smoothRadius"
+          :annotations="siteAnnotations"
+          :annotation-tool="annotationTool"
+          :annotation-color="annotationCtx.color"
+          :annotation-text="annotationCtx.pendingText"
+          @annotation-add="onAnnotationAdd"
+          @annotation-update="onAnnotationUpdate"
           @select-cell="send({ type: 'SELECT_CELL', cellId: $event })"
           @cursor="send({ type: 'CURSOR_MOVE', sample: $event })"
           @raster-error="send({ type: 'COG_ERROR', message: $event })"
@@ -904,8 +969,23 @@ function onSatOpacityInput(event: Event) {
         :cursor-lat-lon-label="cursorLatLonLabel"
         :show-palette="ctx.showPalette"
         :units="ctx.units"
+        :mosaic-path="mosaicPath"
         @select-site="onSelectSite"
         @select-product="onSelectProduct"
+      />
+
+      <AnnotationBar
+        v-if="annotationDrawing"
+        :tool="annotationCtx.tool"
+        :color="annotationCtx.color"
+        :text="annotationCtx.pendingText"
+        :count="siteAnnotations.length"
+        @set-tool="annotationSend({ type: 'SET_TOOL', tool: $event })"
+        @set-color="annotationSend({ type: 'SET_COLOR', color: $event })"
+        @set-text="annotationSend({ type: 'SET_TEXT', text: $event })"
+        @undo="annotationSend({ type: 'UNDO' })"
+        @clear="annotationSend({ type: 'CLEAR' })"
+        @close="annotationSend({ type: 'DISABLE' })"
       />
 
       <!-- barra de tiempo flotante (estilo nowCOAST): sin panel contenedor,
@@ -920,16 +1000,18 @@ function onSatOpacityInput(event: Event) {
           <p
             v-if="timelineFetchError"
             data-testid="timeline-error"
+            role="alert"
             class="rounded bg-amber-900/80 p-3 text-sm text-amber-200 shadow"
           >
-            Error consultando la timeline: {{ timelineFetchError }}
+            {{ t('status.timeline.error', { detail: timelineFetchError }) }}
           </p>
           <p
             v-else-if="timelineEmpty"
             data-testid="timeline-empty"
+            role="status"
             class="rounded bg-slate-800/80 p-3 text-sm text-slate-400 shadow"
           >
-            Sin volúmenes este día (UTC).
+            {{ t('status.timeline.empty') }}
           </p>
           <TimelineStrip
             v-else-if="timelineReady"
@@ -1019,6 +1101,7 @@ function onSatOpacityInput(event: Event) {
       @open-panel="send({ type: 'SELECT_PANEL', panel: $event })"
       @open-prefs="prefsDialog?.open()"
       @open-export="exportDialog?.open()"
+      @open-annotations="annotationSend({ type: 'ENABLE' })"
       @open-feedback="feedbackSend({ type: 'OPEN_DIALOG' })"
     />
   </div>

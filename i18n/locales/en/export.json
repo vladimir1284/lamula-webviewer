@@ -1,0 +1,74 @@
+{
+  "export": {
+    "dialog": {
+      "title": "Export image",
+      "close": "Close",
+      "capturing": "Capturing…",
+      "errors": {
+        "captureFailed": "Could not capture the map",
+        "avatarReadFailed": "Could not read the selected image.",
+        "copyFailed": "The browser would not allow copying the image.",
+        "downloadFailed": "Could not generate the PNG",
+        "animationFailed": "Could not generate the animation"
+      },
+      "notices": {
+        "skippedLayers": "Skipped {n} layer(s) the browser would not allow reading.",
+        "copied": "Image copied to clipboard.",
+        "cancelled": "Cancelled after {n} frames.",
+        "animationSummary": "{frames} frames · {width}×{height} · {kb} kB"
+      }
+    },
+    "chrome": {
+      "legend": "Image metadata",
+      "mode": {
+        "bar": "Bar",
+        "overlay": "Overlay",
+        "none": "No data"
+      },
+      "parts": {
+        "title": "Brand",
+        "meta": "Site, product and time",
+        "legend": "Color palette",
+        "attribution": "Attribution"
+      }
+    },
+    "brand": {
+      "legend": "Brand",
+      "watermark": "Logo as watermark",
+      "includeAvatar": "Include my photo",
+      "avatarNote": "Stored only in this browser and never sent.",
+      "removeAvatar": "Remove"
+    },
+    "resolution": {
+      "legend": "Resolution"
+    },
+    "animation": {
+      "legend": "Animation",
+      "sequence": "Radar sequence",
+      "phase": "Lightning loop",
+      "sequenceHint": "To export the sequence, play the animation first: frames are exported from the same pool the player uses.",
+      "formatVideo": "Video",
+      "generating": "Capturing {done}/{total}…",
+      "generate": "Generate and download",
+      "cancel": "Cancel"
+    },
+    "actions": {
+      "downloadPng": "Download PNG",
+      "copy": "Copy"
+    },
+    "annotations": {
+      "tools": {
+        "arrow": "Arrow",
+        "circle": "Circle",
+        "freehand": "Freehand",
+        "text": "Label"
+      },
+      "color": "Color {hex}",
+      "textPlaceholder": "Label text",
+      "textHint": "Write the label before placing the point.",
+      "undo": "Undo",
+      "clear": "Clear all",
+      "done": "Done"
+    }
+  }
+}

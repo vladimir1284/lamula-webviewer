@@ -19,6 +19,7 @@ describe('FeedbackDal Parity (Live vs Memory)', () => {
     for (const dal of [liveDal, memoryDal]) {
       const tokenHash = 'hash_1234567890abcdef'
       const submission: FeedbackSubmission = {
+        app: 'webviewer',
         role: 'meteorologo',
         kind: 'mejora',
         rating: 5,
@@ -62,6 +63,38 @@ describe('FeedbackDal Parity (Live vs Memory)', () => {
       await dal.markRepliesRead(tokenHash)
       mine = await dal.listMine(tokenHash)
       expect(mine[0]!.replies[0]!.readAt).toBeDefined()
+    }
+  })
+
+  // Decisión 50: la bandeja es compartida entre webviewer y lamula-process.
+  it('persiste y filtra por producto de origen en ambas implementaciones', async () => {
+    for (const dal of [liveDal, memoryDal]) {
+      const base = {
+        role: 'meteorologo' as const,
+        kind: 'bug' as const,
+        message: 'da igual el texto',
+        rating: null,
+        profile: { role: 'meteorologo' as const },
+        context: {},
+      }
+
+      await dal.createFeedback('hash_desde_el_webviewer', { ...base, app: 'webviewer' })
+      await dal.createFeedback('hash_desde_process', { ...base, app: 'process' })
+
+      const soloProcess = await dal.listAll({ app: 'process' })
+      expect(soloProcess.length).toBe(1)
+      expect(soloProcess[0]!.app).toBe('process')
+      expect(soloProcess[0]!.tokenHash).toBe('hash_desde_process')
+
+      const soloWebviewer = await dal.listAll({ app: 'webviewer' })
+      expect(soloWebviewer.length).toBe(1)
+      expect(soloWebviewer[0]!.app).toBe('webviewer')
+
+      // Canario: sin filtro tienen que venir los dos. Si alguien cuela un WHERE fijo
+      // por app, este es el test que lo caza.
+      const todos = await dal.listAll()
+      expect(todos.length).toBe(2)
+      expect(todos.map(i => i.app).sort()).toEqual(['process', 'webviewer'])
     }
   })
 })

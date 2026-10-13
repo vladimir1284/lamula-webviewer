@@ -1,0 +1,48 @@
+{
+  "admin": {
+    "login": {
+      "title": "LAMULA Administration",
+      "subtitle": "Sign in with the administrator password.",
+      "passwordLabel": "Password",
+      "submit": "Sign in",
+      "loggingIn": "Signing in...",
+      "invalidPassword": "Incorrect password"
+    },
+    "feedback": {
+      "pageTitle": "Feedback Management — LAMULA Admin",
+      "title": "Feedback Management",
+      "subtitle": "Review and respond to LAMULA WebViewer user feedback.",
+      "refresh": "Refresh",
+      "filters": {
+        "statusLabel": "Status",
+        "allStatuses": "All statuses",
+        "roleLabel": "Occupation / Role",
+        "allRoles": "All occupations",
+        "appLabel": "Product",
+        "allApps": "All products"
+      },
+      "loading": "Loading messages...",
+      "loadError": "Error loading feedback",
+      "empty": "No messages found with these filters.",
+      "contextSummary": "Map context (site, product, URL, viewer)",
+      "read": "(Read)",
+      "pending": "(Pending)",
+      "replyButton": "Reply to this user",
+      "replyPlaceholder": "Write the official reply for the user...",
+      "cancel": "Cancel",
+      "sendReply": "Send reply",
+      "statusUpdateError": "Error updating status",
+      "replyError": "Error sending reply"
+    },
+    "statuses": {
+      "nuevo": "New",
+      "leido": "Read",
+      "respondido": "Replied",
+      "cerrado": "Closed"
+    },
+    "apps": {
+      "webviewer": "WebViewer",
+      "process": "Process"
+    }
+  }
+}

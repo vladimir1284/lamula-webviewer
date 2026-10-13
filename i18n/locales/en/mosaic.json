@@ -1,0 +1,18 @@
+{
+  "mosaic": {
+    "noPaletteShort": "no palette",
+    "badgeLabel": "mosaic",
+    "singleRadarLink": "single radar",
+    "domainLabel": "Domain",
+    "productLabel": "Product",
+    "domainsUnavailable": "Mosaic domains unavailable: {detail}",
+    "noPaletteCatalog": "Product has no palette in the viewer catalog.",
+    "fetchError": "Error fetching mosaics: {detail}",
+    "empty": "No mosaic for this selection.",
+    "cursorValueLabel": "Value under cursor",
+    "latLonLabel": "Lat/lon",
+    "sitesLabel": "Radars",
+    "cellsHeading": "Storm cells",
+    "cogLoadError": "Could not load the mosaic COG ({key})"
+  }
+}

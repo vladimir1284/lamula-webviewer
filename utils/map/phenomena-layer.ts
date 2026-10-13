@@ -50,7 +50,8 @@ const RADIUS_MIN = 5
 const RADIUS_MAX = 14
 const RADIUS_FALLBACK = 7 // sin dbz_max: tamaño previo por defecto
 
-function dbzToRadius(dbzMax: number | null | undefined): number {
+/** compartida con utils/map/mosaic-cells-layer.ts (P5): misma curva, no duplicar la calibración */
+export function dbzToRadius(dbzMax: number | null | undefined): number {
   if (dbzMax === null || dbzMax === undefined || Number.isNaN(dbzMax)) return RADIUS_FALLBACK
   const clamped = Math.min(DBZ_MAX, Math.max(DBZ_MIN, dbzMax))
   const t = (clamped - DBZ_MIN) / (DBZ_MAX - DBZ_MIN)
@@ -161,8 +162,12 @@ const cellIconCache = new Map<string, Icon>()
  * pinta UN `image` por feature del grupo — el resto se descartaba según
  * el orden del índice espacial, que cambia con el zoom (por eso el marker
  * alternaba entre círculo y X, y la X entre blanca/azul según cuál ganara).
+ *
+ * Compartido con utils/map/mosaic-cells-layer.ts (P5): la simbología de celda
+ * es la MISMA en las dos vistas — el mosaico solo cambia el color de la
+ * etiqueta (por sitio de origen), nunca el marker.
  */
-function cellIcon(radiusKey: number, selected: boolean): Icon {
+export function cellIcon(radiusKey: number, selected: boolean): Icon {
   const key = `${radiusKey}|${selected}`
   let icon = cellIconCache.get(key)
   if (!icon) {

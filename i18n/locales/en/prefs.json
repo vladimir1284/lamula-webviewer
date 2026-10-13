@@ -1,0 +1,17 @@
+{
+  "prefs": {
+    "title": "Preferences",
+    "coverage": "Show radar range",
+    "units": {
+      "legend": "Units",
+      "imperial": "Aeronautical (kt, kft)",
+      "si": "Metric (km/h, km)"
+    },
+    "clock": {
+      "legend": "Time",
+      "local": "Local (your time zone)",
+      "utc": "UTC",
+      "note": "Timeline days stay in UTC."
+    }
+  }
+}

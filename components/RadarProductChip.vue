@@ -8,6 +8,9 @@ import type { Radar, Product, RasterMeta } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
 import { rasterProductDef } from '#shared/products'
 import type { UnitsPref } from '../utils/units'
+// Import explícito (no auto-import de Nuxt): así el componente también monta
+// en los tests de vitest, que corren fuera del runtime de Nuxt.
+import { useProductLabel } from '../composables/useProductLabel'
 
 const props = defineProps<{
   radars: Radar[]
@@ -27,6 +30,8 @@ const props = defineProps<{
   /** paleta de colores on/off (LayersMenu) — controla la leyenda de abajo */
   showPalette: boolean
   units: UnitsPref
+  /** ruta al mosaico que incluye este sitio (D43/P4); null = no pertenece a ninguno */
+  mosaicPath?: string | null
 }>()
 
 defineEmits<{
@@ -34,8 +39,15 @@ defineEmits<{
   'select-product': [event: Event]
 }>()
 
+const { t } = useI18n()
+const productLabel = useProductLabel()
+
+// Un solo control de despliegue (D56). Antes había dos en una tarjeta de 216 px
+// de ancho: `⌄` abría los selectores y un botón ⓘ aparte abría el bloque de
+// estado. El ⓘ costaba 44 px de los 190 útiles (23 %) para exponer un panel que
+// de todas formas se apila bajo el otro. Ahora `expanded` gobierna los dos; en
+// `md:` el bloque de estado sigue visible siempre, como antes.
 const expanded = ref(false)
-const showDetailsMobile = ref(false)
 const vcpInfoModal = ref<{ open: () => void }>()
 const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchError || !props.productDef))
 </script>
@@ -43,48 +55,59 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
 <template>
   <div class="pointer-events-auto absolute left-4 top-4 z-20 w-auto md:w-72 max-w-[calc(100vw-9rem)] md:max-w-[calc(100vw-2rem)]">
     <div class="rounded-lg border border-slate-700 bg-slate-900/95 shadow-lg" :class="expanded ? 'rounded-b-none border-b-0' : ''">
-      <div class="flex items-center justify-between gap-1 px-3 py-2">
+      <!--
+        Cabecera en dos filas, no en una (D56). El enlace a mosaico salió de la
+        fila del título: ahí le quitaba 62 px de los 190 útiles a 360 px y el
+        título se quedaba con 73, así que se cortaba en "AMX · ". En la fila de
+        estado cabe junto a la hora y la insignia, y a 1280 px entra en el mismo
+        renglón que ellas — el título recupera los 197 px que necesita y deja de
+        truncarse también en escritorio. La fila de estado no puede vivir dentro
+        del <button> porque lleva un <a>.
+      -->
+      <div class="px-3 py-2">
         <button
           type="button"
           data-testid="radar-chip-toggle"
-          class="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          class="flex min-h-11 w-full items-center gap-2.5 text-left md:min-h-0"
+          :aria-expanded="expanded"
+          aria-controls="radar-chip-selectors radar-chip-details"
           @click="expanded = !expanded"
         >
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-bold">
-              {{ radar?.icao ?? site }} · {{ productDef?.name ?? 'sin paleta' }}
-            </span>
-            <span class="flex items-center gap-2 text-xs text-slate-300">
-              <span v-if="volTimeParts" class="font-mono font-semibold text-teal-400">{{ volTimeParts.time }}</span>
-              <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0" />
-            </span>
+          <!-- sin `truncate`: a ningún ancho de móvil cabe el título en un
+               renglón, y cortarlo deja "AMX · " sin producto. Envuelve. -->
+          <span class="min-w-0 flex-1 text-sm font-bold">
+            {{ radar?.icao ?? site }} · {{ productLabel(productDef, t('chip.noPaletteShort')) }}
           </span>
           <span class="shrink-0 text-slate-400" aria-hidden="true">{{ expanded ? '︿' : '⌄' }}</span>
         </button>
 
-        <button
-          type="button"
-          data-testid="radar-details-toggle"
-          aria-label="Detalles de radar"
-          class="grid h-7 w-7 shrink-0 place-items-center rounded bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700 md:hidden"
-          @click="showDetailsMobile = !showDetailsMobile"
-        >
-          ℹ️
-        </button>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-300">
+          <span v-if="volTimeParts" class="font-mono font-semibold text-teal-400">{{ volTimeParts.time }}</span>
+          <FreshnessBadge v-if="radar" :last-seen-at="radar.last_seen_at" class="ml-0" />
+          <NuxtLink
+            v-if="mosaicPath"
+            :to="mosaicPath"
+            data-testid="mosaic-enter-link"
+            class="inline-flex min-h-11 items-center rounded bg-slate-800 px-1.5 py-1 text-[11px] text-teal-400 underline hover:bg-slate-700 md:min-h-0"
+          >
+            {{ t('chip.mosaicLink') }}
+          </NuxtLink>
+        </div>
       </div>
     </div>
 
     <!-- selectores pegados al toggle: mismo card, sin gap -->
     <div
       v-if="expanded"
+      id="radar-chip-selectors"
       class="space-y-3 rounded-b-lg border border-t border-slate-700 border-t-slate-700/60 bg-slate-900/95 p-3 text-sm shadow-lg"
     >
       <label class="block">
-        <span class="mb-1 block text-slate-400">Radar</span>
+        <span class="mb-1 block text-slate-400">{{ t('chip.radarLabel') }}</span>
         <select
           :value="site"
           data-testid="radar-select"
-          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+          class="w-full rounded border border-slate-500 bg-slate-800 p-2"
           @change="$emit('select-site', $event)"
         >
           <option v-for="r in radars" :key="r.site_id" :value="r.site_id">
@@ -94,52 +117,58 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
       </label>
 
       <label class="block">
-        <span class="mb-1 block text-slate-400">Producto</span>
+        <span class="mb-1 block text-slate-400">{{ t('chip.productLabel') }}</span>
         <select
           :value="String(product)"
           data-testid="product-select"
-          class="w-full rounded border border-slate-600 bg-slate-800 p-2"
+          class="w-full rounded border border-slate-500 bg-slate-800 p-2"
           @change="$emit('select-product', $event)"
         >
           <option v-for="p in rasterProducts" :key="p.code" :value="String(p.code)">
-            {{ rasterProductDef(p.code)?.name ?? p.mnemonic }} ({{ p.mnemonic }})
+            {{ productLabel(rasterProductDef(p.code), p.mnemonic) }} ({{ p.mnemonic }})
           </option>
         </select>
       </label>
     </div>
 
-    <!-- estado del raster: visible siempre en md+, y en móvil solo si showDetailsMobile es true o si hay un error -->
+    <!-- estado del raster: visible siempre en md+, y en móvil solo si la tarjeta
+         está desplegada o si hay un error (un error nunca espera a un toque) -->
     <div
+      id="radar-chip-details"
       class="mt-1.5 space-y-2"
-      :class="(showDetailsMobile || hasError) ? 'block' : 'hidden md:block'"
+      :class="(expanded || hasError) ? 'block' : 'hidden md:block'"
     >
       <p
         v-if="radarsError"
         data-testid="radars-error"
+        role="alert"
         class="rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
       >
-        D1 no disponible: {{ radarsError.statusMessage ?? radarsError.message }}
+        {{ t('chip.radarsUnavailable', { detail: radarsError.statusMessage ?? radarsError.message }) }}
       </p>
       <p
         v-if="!productDef"
         data-testid="product-no-palette"
+        role="alert"
         class="rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
       >
-        Producto sin paleta en el catálogo del viewer.
+        {{ t('chip.noPaletteCatalog') }}
       </p>
       <p
         v-if="rasterFetchError"
         data-testid="raster-error"
+        role="alert"
         class="rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
       >
-        Error consultando rasters: {{ rasterFetchError }}
+        {{ t('chip.rasterFetchError', { detail: rasterFetchError }) }}
       </p>
       <p
         v-else-if="rasterEmpty"
         data-testid="raster-empty"
+        role="status"
         class="rounded bg-slate-900/95 p-3 text-sm text-slate-400 shadow-lg"
       >
-        Sin raster para esta selección.
+        {{ t('chip.rasterEmpty') }}
       </p>
       <dl
         v-else-if="raster"
@@ -163,7 +192,7 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
                 <button
                   type="button"
                   data-testid="vcp-help-button"
-                  aria-label="Qué es este VCP"
+                  :aria-label="t('chip.vcpHelpAriaLabel')"
                   class="grid h-4 w-4 shrink-0 -translate-y-px place-items-center rounded-full bg-[#1565A8] text-[10px] font-bold leading-none text-white hover:brightness-110"
                   @click="vcpInfoModal?.open()"
                 >
@@ -172,17 +201,17 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
               </span>
             </div>
             <div v-if="raster.el_angle != null" class="flex gap-2">
-              <dt class="text-slate-400">Elev</dt>
+              <dt class="text-slate-400">{{ t('chip.elevLabel') }}</dt>
               <dd class="font-mono">{{ raster.el_angle }}°</dd>
             </div>
           </div>
         </div>
         <div class="flex justify-between">
-          <dt class="text-slate-400">Valor bajo cursor</dt>
+          <dt class="text-slate-400">{{ t('chip.cursorValueLabel') }}</dt>
           <dd data-testid="cursor-value" class="font-mono">{{ cursorLabel ?? '—' }}</dd>
         </div>
         <div class="flex justify-between">
-          <dt class="text-slate-400">Lat/lon</dt>
+          <dt class="text-slate-400">{{ t('chip.latLonLabel') }}</dt>
           <dd data-testid="cursor-latlon" class="font-mono">{{ cursorLatLonLabel ?? '—' }}</dd>
         </div>
       </dl>
@@ -201,6 +230,7 @@ const hasError = computed(() => Boolean(props.radarsError || props.rasterFetchEr
       <p
         v-if="cogError"
         data-testid="cog-error"
+        role="alert"
         class="flex items-start gap-2 rounded bg-amber-900/40 p-3 text-sm text-amber-200 shadow-lg"
       >
         <span aria-hidden="true">⚠️</span>

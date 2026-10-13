@@ -1,0 +1,13 @@
+{
+  "common": {
+    "close": "Close",
+    "freshness": {
+      "min": "{n} min ago",
+      "hours": "{n} h ago",
+      "days": "{n} d ago",
+      "months": "{n} month ago | {n} months ago",
+      "years": "{n} year ago | {n} years ago"
+    },
+    "loading": "Loading…"
+  }
+}

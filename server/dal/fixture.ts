@@ -6,6 +6,10 @@ import type {
   Health,
   LightningBucketMeta,
   LightningBucketRow,
+  MosaicDomain,
+  MosaicDomainRow,
+  MosaicRasterMeta,
+  MosaicRasterRow,
   Phenomenon,
   PhenomenonRow,
   Product,
@@ -22,13 +26,16 @@ import type {
 } from '../../shared/contract'
 import { dayRange, dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract'
 import lightningJson from './fixtures/lightning.json'
+import mosaicDomainSitesJson from './fixtures/mosaic-domain-sites.json'
+import mosaicDomainsJson from './fixtures/mosaic-domains.json'
+import mosaicRastersJson from './fixtures/mosaic-rasters.json'
 import phenomenaJson from './fixtures/phenomena.json'
 import productsJson from './fixtures/products.json'
 import radarsJson from './fixtures/radars.json'
 import rastersJson from './fixtures/rasters.json'
 import vwpJson from './fixtures/vwp.json'
 import windJson from './fixtures/wind.json'
-import { buildHealth, pickClosest, toLightningMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
+import { buildHealth, pickClosest, pickClosestBy, toLightningMeta, toMosaicMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { Dal, RasterLookupMode } from './types'
 
 // Las grabaciones incluyen created_at (columna NOT NULL, grabada tal cual);
@@ -45,8 +52,26 @@ const wind = windJson as (WindGridRow & { created_at: string })[]
 // pipeline implemente la ingesta GLM — misma forma que la tabla propuesta.
 const lightning = lightningJson as (LightningBucketRow & { created_at: string })[]
 
+// mosaico es SINTÉTICO (scripts/make-mosaic-fixture.mjs): re-grabar hoy
+// destruiría el caso e2e BYX 03:08:18 (COGs irreproducibles tras la purga
+// de 72 h). Misma forma que las tablas de 0002_mosaic.sql.
+const mosaicDomains = mosaicDomainsJson as (MosaicDomainRow & {
+  created_at: string
+  updated_at: string
+})[]
+const mosaicDomainSites = mosaicDomainSitesJson as { domain_id: string, site_id: string }[]
+const mosaicRasters = mosaicRastersJson as (MosaicRasterRow & { created_at: string })[]
+
 const byVolTime = <T extends { vol_time: string }>(a: T, b: T) =>
   a.vol_time.localeCompare(b.vol_time)
+
+const bySlotTime = <T extends { slot_time: string }>(a: T, b: T) =>
+  a.slot_time.localeCompare(b.slot_time)
+
+const toMeta = (row: MosaicRasterRow & { created_at: string }, base: string | null) => {
+  const { size_bytes: _size, created_at: _created, ...cols } = row
+  return toMosaicMeta(cols, base)
+}
 
 export class FixtureDal implements Dal {
   constructor(private readonly r2BaseUrl: string | null) {}
@@ -169,6 +194,60 @@ export class FixtureDal implements Dal {
       .filter(b => b.site_id === site && b.bucket_start >= from && b.bucket_start < to)
       .sort((a, b) => a.bucket_start.localeCompare(b.bucket_start))
       .map(({ size_bytes: _size, created_at: _created, ...row }) => toLightningMeta(row, this.r2BaseUrl))
+  }
+
+  async listMosaicDomains(): Promise<MosaicDomain[]> {
+    return [...mosaicDomains]
+      .sort((a, b) => a.domain_id.localeCompare(b.domain_id))
+      .map(({ created_at: _created, updated_at: _updated, ...row }) => ({
+        ...row,
+        site_ids: mosaicDomainSites
+          .filter(m => m.domain_id === row.domain_id)
+          .map(m => m.site_id)
+          .sort(),
+      }))
+  }
+
+  async listMosaicRasters(
+    domain: string,
+    productCode: number,
+    day: string,
+  ): Promise<MosaicRasterMeta[]> {
+    const { from, to } = dayRange(day)
+    return mosaicRasters
+      .filter(m =>
+        m.domain_id === domain
+        && m.product_code === productCode
+        && m.slot_time >= from
+        && m.slot_time < to,
+      )
+      .sort(bySlotTime)
+      .map(row => toMeta(row, this.r2BaseUrl))
+  }
+
+  async findMosaicRaster(
+    domain: string,
+    productCode: number,
+    t: string,
+    mode: RasterLookupMode,
+  ) {
+    const series = mosaicRasters
+      .filter(m => m.domain_id === domain && m.product_code === productCode)
+      .sort(bySlotTime)
+
+    let row: (MosaicRasterRow & { created_at: string }) | null
+    if (mode === 'next') {
+      row = series.find(m => m.slot_time > t) ?? null
+    }
+    else if (mode === 'prev') {
+      row = series.findLast(m => m.slot_time < t) ?? null
+    }
+    else {
+      const prev = series.findLast(m => m.slot_time <= t) ?? null
+      const next = series.find(m => m.slot_time >= t) ?? null
+      row = pickClosestBy(prev, next, t, m => m.slot_time)
+    }
+    return row ? toMeta(row, this.r2BaseUrl) : null
   }
 
   async health(now: Date): Promise<Health> {

@@ -8,6 +8,8 @@ import type { Palette } from '#shared/products'
 import type { UnitsPref } from '../utils/units'
 import { legendGeometry } from '../utils/export/legend-geometry'
 
+const { t } = useI18n()
+
 const props = withDefaults(
   defineProps<{ palette: Palette, units?: UnitsPref }>(),
   { units: 'imperial' },
@@ -25,7 +27,7 @@ const gradientStops = computed(() =>
       :viewBox="`0 0 ${g.width} ${g.height}`"
       class="w-full"
       role="img"
-      :aria-label="`Leyenda (${g.unitLabel})`"
+      :aria-label="t('map.legendAriaLabel', { unit: g.unitLabel })"
     >
       <defs v-if="g.mode === 'interpolated'">
         <linearGradient id="legend-ramp" x1="0" y1="0" x2="1" y2="0">
@@ -91,7 +93,7 @@ const gradientStops = computed(() =>
         class="inline-block h-3 w-3 rounded-sm"
         :style="{ backgroundColor: g.rangeFoldedColor }"
       />
-      RF — range folded
+      {{ t('map.rangeFoldedLegend') }}
     </figcaption>
   </figure>
 </template>

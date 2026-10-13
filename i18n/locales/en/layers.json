@@ -1,0 +1,84 @@
+{
+  "layers": {
+    "pills": {
+      "menu": "Menu",
+      "feedback": "Feedback",
+      "satellite": "Satellite",
+      "phenomena": "Phenomena",
+      "wind": "Wind",
+      "lightning": "Lightning"
+    },
+    "panel": {
+      "title": "Layers",
+      "close": "Close"
+    },
+    "basemap": {
+      "label": "Base map",
+      "options": {
+        "osm": "OSM",
+        "carto-voyager": "CARTO Voyager",
+        "carto-positron": "CARTO Positron",
+        "carto-dark": "CARTO Dark"
+      }
+    },
+    "opacity": {
+      "label": "Opacity"
+    },
+    "smooth": {
+      "toggle": "Smooth raster cells",
+      "radiusLabel": "Smoothing radius",
+      "radius1": "1× (no resampling)",
+      "radius2": "2×",
+      "radius4": "4×",
+      "radius8": "8×",
+      "disabledDuringAnimation": "Not available during animation."
+    },
+    "palette": {
+      "toggle": "Show color palette"
+    },
+    "satellite": {
+      "title": "Satellite",
+      "variantLabel": "Variant",
+      "variantIr": "Infrared",
+      "variantVis": "Visible",
+      "opacityLabel": "Opacity",
+      "hiddenDuringAnimation": "Not shown during animation."
+    },
+    "phenomena": {
+      "title": "Phenomena",
+      "trackPast": "Past track (all)",
+      "trackFuture": "Future track (all)",
+      "meso": "Mesocyclones / TVS"
+    },
+    "wind": {
+      "title": "Wind",
+      "levelLabel": "Height level",
+      "hiddenDuringAnimation": "Not shown during animation.",
+      "levels": {
+        "10m": "Surface (10 m)",
+        "850hPa": "850 hPa",
+        "700hPa": "700 hPa",
+        "500hPa": "500 hPa"
+      }
+    },
+    "lightning": {
+      "title": "Lightning",
+      "hiddenDuringAnimation": "Not shown during animation."
+    },
+    "data": {
+      "legend": "Data",
+      "cells": "Cells",
+      "trend": "Trend",
+      "vwp": "VWP"
+    },
+    "prefs": {
+      "legendRadar": "Preferences & Feedback",
+      "legendMosaic": "Preferences",
+      "openRadar": "Units, time, radar range",
+      "openMosaic": "Units, time, coverage",
+      "annotations": "Annotate the map",
+      "export": "Export map image",
+      "feedback": "Leave feedback / Suggestion"
+    }
+  }
+}

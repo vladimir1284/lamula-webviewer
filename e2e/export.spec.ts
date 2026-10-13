@@ -87,8 +87,11 @@ test('canario: la forma de .ol-layers que asume el compositor sigue vigente', as
   }
   // el canvas WebGL del raster declara su tamaño CSS (rama 2 del transform)
   expect(shape!.some(c => c.transform === '' && c.width !== '')).toBe(true)
-  // viento y rayos siguen siendo canvas sueltos sin transform NI width
-  // (rama 3: la que la receta oficial de OL descartaría con NaN)
+  // Viento y rayos siguen siendo canvas SUELTOS dentro de .ol-layers y sin
+  // transform — ahí es donde la receta oficial de OL metería NaN y los
+  // descartaría en silencio. Desde F7.3 sí declaran tamaño CSS (hace falta
+  // para poder subir el búfer a 2× en el export), así que el compositor los
+  // resuelve por la rama 2; la rama 3 se mantiene como respaldo.
   const custom = await page.evaluate(() =>
     ['.wind-particle-canvas', '.lightning-canvas'].map((sel) => {
       const c = document.querySelector<HTMLCanvasElement>(sel)
@@ -101,7 +104,7 @@ test('canario: la forma de .ol-layers que asume el compositor sigue vigente', as
     if (!c.found) continue
     expect(c.inLayers).toBe(true)
     expect(c.transform).toBe('')
-    expect(c.width).toBe('')
+    expect(c.width).toMatch(/^\d/)
   }
 })
 
@@ -222,4 +225,31 @@ test('dos exports seguidos de la misma vista dan el MISMO fichero (puerta F7.1)'
   const b = await grab()
   expect(a.length).toBeGreaterThan(1000)
   expect(b.equals(a)).toBe(true)
+})
+
+// F7.2: la marca de agua se dibuja sobre el ÁREA DEL MAPA en los tres modos
+// de chrome, así que su interruptor tiene que cambiar los bytes también con
+// el chrome apagado.
+test('la marca de agua se puede apagar y cambia la imagen', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openExportDialog(page, 'base=off')
+  await page.getByTestId('export-chrome-none').click()
+  await expect(page.getByTestId('export-download')).toBeEnabled({ timeout: 30_000 })
+
+  const grab = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('export-download').click(),
+    ])
+    return readFileSync(await download.path())
+  }
+
+  const conMarca = await grab()
+  await page.getByTestId('export-part-watermark').uncheck()
+  await expect(page.getByTestId('export-download')).toBeEnabled({ timeout: 30_000 })
+  const sinMarca = await grab()
+
+  expect(sinMarca.equals(conMarca)).toBe(false)
+  // sin foto cargada, incluir el avatar no es una opción activable
+  await expect(page.getByTestId('export-part-avatar')).toBeDisabled()
 })

@@ -9,6 +9,9 @@ export const BASE_MAP_IDS = ['osm', 'carto-voyager', 'carto-positron', 'carto-da
 
 export type BaseMapId = (typeof BASE_MAP_IDS)[number] | 'off'
 
+// Respaldo en español. Lo que ve el usuario sale del catálogo i18n
+// (`layers.basemap.options.<id>`, F5/D52): este módulo es puro y no debe
+// importar nada de Vue. Mantener ambas listas en sync al añadir un mapa base.
 export const BASE_MAP_LABELS: Record<(typeof BASE_MAP_IDS)[number], string> = {
   'osm': 'OSM',
   'carto-voyager': 'CARTO Voyager',

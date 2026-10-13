@@ -6,6 +6,9 @@ import Database from 'better-sqlite3'
 import type { PgLike } from '~/server/dal/types'
 
 import lightning from '~/server/dal/fixtures/lightning.json'
+import mosaicDomainSites from '~/server/dal/fixtures/mosaic-domain-sites.json'
+import mosaicDomains from '~/server/dal/fixtures/mosaic-domains.json'
+import mosaicRasters from '~/server/dal/fixtures/mosaic-rasters.json'
 import phenomena from '~/server/dal/fixtures/phenomena.json'
 import products from '~/server/dal/fixtures/products.json'
 import radars from '~/server/dal/fixtures/radars.json'
@@ -25,6 +28,10 @@ function sqliteCompatible(sql: string): string {
     .replaceAll('TIMESTAMPTZ', 'TEXT')
     .replaceAll('JSONB', 'TEXT')
     .replaceAll('now()', 'CURRENT_TIMESTAMP')
+    // SQLite no soporta `ADD COLUMN IF NOT EXISTS` (error de sintaxis en "EXISTS").
+    // Acá cada test arranca con una base nueva, así que la idempotencia que la
+    // migración necesita en Postgres no hace falta: basta con el ADD COLUMN pelado.
+    .replaceAll(/ALTER TABLE (\S+)\s+ADD COLUMN IF NOT EXISTS/gi, 'ALTER TABLE $1 ADD COLUMN')
     .replaceAll(/::[a-zA-Z0-9_]+(\[\])?/g, '')
 }
 
@@ -72,6 +79,9 @@ export function createSeededDb(): Database.Database {
   insertRows(db, 'vwp', vwp)
   insertRows(db, 'wind_grids', wind)
   insertRows(db, 'lightning_buckets', lightning)
+  insertRows(db, 'mosaic_domains', mosaicDomains)
+  insertRows(db, 'mosaic_domain_sites', mosaicDomainSites)
+  insertRows(db, 'mosaic_rasters', mosaicRasters)
   return db
 }
 

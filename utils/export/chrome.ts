@@ -14,7 +14,9 @@ import type { Palette } from '#shared/products'
 import type { ClockPref } from '../time-display'
 import type { UnitsPref } from '../units'
 import { formatFull } from '../time-display'
+import { drawAvatar } from './brand'
 import { legendGeometry } from './legend-geometry'
+import type { BrandImage } from './types'
 
 export type ChromeMode = 'bar' | 'overlay' | 'none'
 
@@ -23,6 +25,9 @@ export interface ChromeParts {
   meta: boolean
   legend: boolean
   attribution: boolean
+  /** logo como marca de agua sobre el mapa — lo dibuja `captureMap`, no `drawChrome` */
+  watermark: boolean
+  avatar: boolean
 }
 
 export interface ChromeSpec {
@@ -39,6 +44,8 @@ export interface ChromeSpec {
   palette: Palette | null
   attributions: string[]
   parts: ChromeParts
+  /** foto del usuario, ya decodificada; null = sin avatar (F7.2) */
+  avatar?: BrandImage | null
 }
 
 export const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
@@ -55,6 +62,9 @@ const LINE_GAP = 5
 const LEGEND_MIN = 220
 const LEGEND_MAX = 420
 const LEGEND_FRACTION = 0.36
+/** el avatar acompaña al bloque de texto: ni más alto que él, ni ilegible */
+const AVATAR_MIN = 32
+const AVATAR_MAX = 56
 
 const COLORS = {
   barBg: 'rgba(15, 23, 42, 0.94)',
@@ -75,6 +85,10 @@ export interface ChromeLayout {
   /** caja de la leyenda en px CSS, relativa al canvas final */
   legend: { x: number, y: number, width: number } | null
   attribution: string | null
+  /** caja del avatar en px CSS; null = sin avatar (F7.2) */
+  avatar: { x: number, y: number, size: number } | null
+  /** izquierda del bloque de texto: el avatar lo desplaza */
+  textX: number
 }
 
 function headLine(spec: ChromeSpec): string {
@@ -125,7 +139,7 @@ function attrExtraHeight(hasAttribution: boolean): number {
  */
 export function chromeLayout(spec: ChromeSpec, widthCss: number, heightCss: number): ChromeLayout {
   if (spec.mode === 'none') {
-    return { barHeight: 0, lines: [], legend: null, attribution: null }
+    return { barHeight: 0, lines: [], legend: null, attribution: null, avatar: null, textX: 0 }
   }
 
   const lines = textLines(spec)
@@ -137,9 +151,16 @@ export function chromeLayout(spec: ChromeSpec, widthCss: number, heightCss: numb
   const lw = legendWidth(widthCss)
   const lh = showLegend ? legendGeometry(spec.palette!, spec.units, lw).height : 0
 
+  const textH = linesHeight(lines)
+  // sin texto el avatar no tiene de qué tomar la altura: va al mínimo legible
+  const avatarSize = spec.parts.avatar && spec.avatar
+    ? (textH > 0 ? Math.min(AVATAR_MAX, Math.max(AVATAR_MIN, textH)) : AVATAR_MIN)
+    : 0
+  const avatarGap = avatarSize > 0 ? avatarSize + GAP : 0
+
   if (spec.mode === 'bar') {
     const attrH = attribution ? ATTR_SIZE + LINE_GAP : 0
-    const body = Math.max(linesHeight(lines), lh)
+    const body = Math.max(textH, lh, avatarSize)
     const barHeight = body === 0 && attrH === 0 ? 0 : PAD * 2 + body + attrH
     return {
       barHeight,
@@ -148,19 +169,28 @@ export function chromeLayout(spec: ChromeSpec, widthCss: number, heightCss: numb
         ? { x: widthCss - PAD - lw, y: heightCss + PAD + Math.max(0, (body - lh) / 2), width: lw }
         : null,
       attribution,
+      avatar: avatarSize > 0
+        ? { x: PAD, y: heightCss + PAD + Math.max(0, (body - avatarSize) / 2), size: avatarSize }
+        : null,
+      textX: PAD + avatarGap,
     }
   }
 
-  // overlay: pastilla arriba-izquierda con el texto; abajo-izquierda otra con
-  // la leyenda y, dentro de ella, la atribución
+  // overlay: pastilla arriba-izquierda con avatar + texto; abajo-izquierda
+  // otra con la leyenda y, dentro de ella, la atribución
   const attrExtra = attrExtraHeight(attribution !== null)
+  const contentX = PAD + GAP
   return {
     barHeight: 0,
     lines,
     legend: showLegend
-      ? { x: PAD + GAP, y: heightCss - PAD - GAP - lh - attrExtra, width: lw }
+      ? { x: contentX, y: heightCss - PAD - GAP - lh - attrExtra, width: lw }
       : null,
     attribution,
+    avatar: avatarSize > 0
+      ? { x: contentX, y: PAD + GAP + Math.max(0, (textH - avatarSize) / 2), size: avatarSize }
+      : null,
+    textX: contentX + avatarGap,
   }
 }
 
@@ -235,7 +265,7 @@ export function drawChrome(
 ): void {
   if (spec.mode === 'none') return
   const layout = chromeLayout(spec, px.widthCss, px.heightCss)
-  if (layout.lines.length === 0 && !layout.legend && !layout.attribution) return
+  if (layout.lines.length === 0 && !layout.legend && !layout.attribution && !layout.avatar) return
 
   ctx.save()
   ctx.setTransform(px.scale, 0, 0, px.scale, 0, 0)
@@ -250,24 +280,32 @@ export function drawChrome(
 
   let y: number
   if (spec.mode === 'bar') {
-    const body = Math.max(textH, layout.legend ? legendGeometry(spec.palette!, spec.units, layout.legend.width).height : 0)
+    const body = Math.max(
+      textH,
+      layout.legend ? legendGeometry(spec.palette!, spec.units, layout.legend.width).height : 0,
+      layout.avatar?.size ?? 0,
+    )
     y = px.heightCss + PAD + Math.max(0, (body - textH) / 2)
   }
   else {
-    if (layout.lines.length > 0) {
+    if (layout.lines.length > 0 || layout.avatar) {
       // ancho medido, no adivinado: un nombre de producto largo no se sale
       let w = 0
       for (const line of layout.lines) {
         ctx.font = `${line.weight} ${line.size}px ${FONT_STACK}`
         w = Math.max(w, ctx.measureText(line.text).width)
       }
-      const boxW = Math.min(px.widthCss - PAD * 2, w + GAP * 2)
-      fillPill(ctx, PAD, PAD, boxW, textH + GAP * 2, 10)
+      const avatarW = layout.avatar ? layout.avatar.size + GAP : 0
+      const boxW = Math.min(px.widthCss - PAD * 2, avatarW + w + GAP * 2)
+      const boxH = Math.max(textH, layout.avatar?.size ?? 0) + GAP * 2
+      fillPill(ctx, PAD, PAD, boxW, boxH, 10)
     }
     y = PAD + GAP
   }
 
-  const textX = spec.mode === 'bar' ? PAD : PAD + GAP
+  if (layout.avatar && spec.avatar) drawAvatar(ctx, spec.avatar, layout.avatar)
+
+  const textX = layout.textX
   ctx.textAlign = 'left'
   for (const line of layout.lines) {
     ctx.font = `${line.weight} ${line.size}px ${FONT_STACK}`

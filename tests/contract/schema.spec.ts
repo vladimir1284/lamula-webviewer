@@ -83,6 +83,35 @@ const DEPENDED_COLUMNS: Record<string, ColumnSpec[]> = {
     { name: 'r2_key', type: 'TEXT', notnull: false },
     { name: 'source', type: 'TEXT', notnull: true },
   ],
+  mosaic_domains: [
+    { name: 'domain_id', type: 'TEXT', notnull: false }, // PK
+    { name: 'name', type: 'TEXT', notnull: true },
+    { name: 'proj4', type: 'TEXT', notnull: true },
+    { name: 'width', type: 'INTEGER', notnull: true },
+    { name: 'height', type: 'INTEGER', notnull: true },
+    { name: 'cell_m', type: 'REAL', notnull: true },
+    { name: 'radius_m', type: 'REAL', notnull: true },
+  ],
+  mosaic_domain_sites: [
+    { name: 'domain_id', type: 'TEXT', notnull: true },
+    { name: 'site_id', type: 'TEXT', notnull: true },
+  ],
+  mosaic_rasters: [
+    { name: 'domain_id', type: 'TEXT', notnull: true },
+    { name: 'product_code', type: 'INTEGER', notnull: true },
+    { name: 'slot_time', type: 'TEXT', notnull: true },
+    { name: 'slot_s', type: 'INTEGER', notnull: true },
+    { name: 'r2_key', type: 'TEXT', notnull: true },
+    { name: 'value_scale', type: 'REAL', notnull: true },
+    { name: 'value_offset', type: 'REAL', notnull: true },
+    { name: 'max_level', type: 'INTEGER', notnull: false },
+    { name: 'proj4', type: 'TEXT', notnull: true },
+    { name: 'width', type: 'INTEGER', notnull: true },
+    { name: 'height', type: 'INTEGER', notnull: true },
+    { name: 'cell_m', type: 'REAL', notnull: true },
+    { name: 'method', type: 'TEXT', notnull: true },
+    { name: 'contributing', type: 'TEXT', notnull: true },
+  ],
 }
 
 interface PragmaColumn {

@@ -3,6 +3,10 @@ import type {
   Health,
   LightningBucketMeta,
   LightningBucketRow,
+  MosaicDomain,
+  MosaicDomainRow,
+  MosaicRasterMeta,
+  MosaicRasterRow,
   Phenomenon,
   PhenomenonRow,
   Product,
@@ -15,7 +19,7 @@ import type {
   WindLevel,
 } from '../../shared/contract'
 import { dayRange, dayRangePadded, LIGHTNING_DAY_PAD_S, WIND_DAY_PAD_S } from '../../shared/contract'
-import { buildHealth, pickClosest, toLightningMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
+import { buildHealth, pickClosest, pickClosestBy, toLightningMeta, toMosaicMeta, toPhenomenon, toRasterMeta, toWindMeta } from './mappers'
 import type { Dal, PgLike, RasterLookupMode } from './types'
 
 type RasterCols = Omit<RasterRow, 'size_bytes'>
@@ -26,6 +30,12 @@ const RASTER_COLS
 
 const PHENOMENON_COLS
   = 'site_id, product_code, vol_time, kind, cell_id, lat, lon, azimuth_deg, range_km, attrs'
+
+type MosaicCols = Omit<MosaicRasterRow, 'size_bytes'>
+
+const MOSAIC_COLS
+  = 'domain_id, product_code, slot_time, slot_s, r2_key, value_scale, value_offset, '
+    + 'max_level, proj4, width, height, cell_m, method, contributing'
 
 export class LiveDal implements Dal {
   constructor(
@@ -155,6 +165,67 @@ export class LiveDal implements Dal {
       [site, from, to],
     )
     return results.map(row => toLightningMeta(row, this.r2BaseUrl))
+  }
+
+  async listMosaicDomains(): Promise<MosaicDomain[]> {
+    const [domains, members] = await Promise.all([
+      this.db.query<MosaicDomainRow>(
+        'SELECT domain_id, name, proj4, width, height, cell_m, radius_m '
+        + 'FROM mosaic_domains ORDER BY domain_id',
+      ),
+      this.db.query<{ domain_id: string, site_id: string }>(
+        'SELECT domain_id, site_id FROM mosaic_domain_sites ORDER BY domain_id, site_id',
+      ),
+    ])
+    return domains.map(d => ({
+      ...d,
+      site_ids: members.filter(m => m.domain_id === d.domain_id).map(m => m.site_id),
+    }))
+  }
+
+  async listMosaicRasters(
+    domain: string,
+    productCode: number,
+    day: string,
+  ): Promise<MosaicRasterMeta[]> {
+    const { from, to } = dayRange(day)
+    const results = await this.db.query<MosaicCols>(
+      `SELECT ${MOSAIC_COLS} FROM mosaic_rasters `
+      + 'WHERE domain_id = $1 AND product_code = $2 AND slot_time >= $3 AND slot_time < $4 '
+      + 'ORDER BY slot_time',
+      [domain, productCode, from, to],
+    )
+    return results.map(row => toMosaicMeta(row, this.r2BaseUrl))
+  }
+
+  async findMosaicRaster(
+    domain: string,
+    productCode: number,
+    t: string,
+    mode: RasterLookupMode,
+  ) {
+    const one = async (cmp: string, order: string) => {
+      const rows = await this.db.query<MosaicCols>(
+        `SELECT ${MOSAIC_COLS} FROM mosaic_rasters `
+        + `WHERE domain_id = $1 AND product_code = $2 AND slot_time ${cmp} $3 `
+        + `ORDER BY slot_time ${order} LIMIT 1`,
+        [domain, productCode, t],
+      )
+      return rows[0] ?? null
+    }
+
+    let row: MosaicCols | null
+    if (mode === 'next') {
+      row = await one('>', 'ASC')
+    }
+    else if (mode === 'prev') {
+      row = await one('<', 'DESC')
+    }
+    else {
+      const [prev, next] = await Promise.all([one('<=', 'DESC'), one('>=', 'ASC')])
+      row = pickClosestBy(prev, next, t, r => r.slot_time)
+    }
+    return row ? toMosaicMeta(row, this.r2BaseUrl) : null
   }
 
   async health(now: Date): Promise<Health> {

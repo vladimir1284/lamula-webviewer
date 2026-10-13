@@ -1,10 +1,38 @@
 # Plan: feedback de usuarios con perfil, persistencia y respuestas
 
-!!! info "Estado: planificado, sin implementar"
-    Documento de trabajo para que un agente lo ejecute de principio a fin. Nada de lo que
-    describe existe todavía en el código. Las fases están ordenadas por dependencia: cada una
-    asume que la anterior está en verde. Las decisiones ya están tomadas y validadas con el
-    responsable del proyecto — no re-litigar sin motivo, igual que en
+!!! success "Estado: implementado (decisión 39, PR #11, mergeado)"
+    Queda como documento de trabajo original — las fases describen lo que se pidió ejecutar, no
+    siempre lo que terminó construido al pie de la letra. Diferencias reales con lo planeado,
+    verificadas contra el código:
+
+    - **Fase 1 (migración):** no quedó como runbook manual de `psql` — `0001_feedback.sql` se
+      aplica **on-boot** vía `server/plugins/migrate-feedback.ts` (SQL embebido en el plugin, no
+      leído de disco: el contenedor de producción solo empaqueta `.output/`). Mantenerlo en sync
+      manual con el `.sql` versionado es responsabilidad de quien toque el schema. Razón y
+      decisión completa en [decisión 39](decisiones.md).
+    - **Fase 4 (`feedbackMachine`):** quedó en **cuatro** regiones paralelas (`identity`,
+      `dialog`, `form`, `thread`), no tres — el diálogo abierto/cerrado se separó de `form` en vez
+      de vivir dentro; no hay región `nudge` aparte, esa política vive dentro de `identity`. Ver
+      [Máquinas de estado](maquinas-estado.md#feedbackmachine) (añadido ahí; faltaba en el commit
+      original, contra la convención del propio `CLAUDE.md`).
+    - **Fase 5 (`FeedbackDialog.vue`):** el aviso de que `TabModal.vue` ya no existe (nota dejada
+      en la Fase 5 de abajo) sigue siendo correcto — la lógica de tabs se copió inline de
+      `DataModal.vue`, como anticipaba el aviso.
+    - **Fase 7 (documentación):** `docs/feedback.md` (schema/GRANTs/env vars/runbook) **nunca se
+      creó** — esa referencia no existe en el repo; lo más cercano es el resumen en `CLAUDE.md`.
+      `runtimeConfig.public.buildId` sí se añadió a `nuxt.config.ts`, pero el `ARG GIT_SHA` del
+      Dockerfile planeado en la Fase 3/5 **no se añadió** — el build de producción no pasa
+      `GIT_SHA`, así que `buildId` queda siempre en `'dev'` en el contexto automático adjunto al
+      feedback. Pendiente si se quiere que el campo sirva para algo.
+
+    **Actualización 2026-10-11 (decisión 50):** la bandeja dejó de ser de un solo producto.
+    `lamula-process` escribe en la misma `viewer.feedback` y la columna `app`
+    (`'webviewer' | 'process'`, migración `0002_app.sql`) dice de cuál viene cada mensaje; el
+    admin filtra por ella. Eso trajo el primer CORS del repo
+    (`server/middleware/cors.ts` + `server/utils/cors.ts`), acotado a `/api/feedback**`.
+    El plan del lado cliente vive en el otro repo: `docs/plan-feedback.md` de `lamula-process`.
+
+    No re-litigar las decisiones de diseño sin motivo — siguen vigentes, igual que en
     [Decisiones de diseño](decisiones.md).
 
 ## Contexto
@@ -149,6 +177,13 @@ que mantiene el e2e determinista y el dev offline. **Falla cerrado**: en producc
 503 en vez de aceptar sin captcha; el bypass exige `NUXT_TURNSTILE_DISABLED=1` explícito.
 Rate-limit en memoria por IP y por token (p. ej. 5/hora): un solo contenedor, se pierde al
 reiniciar — suficiente, y no añade Redis.
+
+> **Actualización (D51).** Lo de arriba sigue valiendo para el webviewer. `lamula-process` queda
+> **exento** del captcha (`CAPTCHA_EXEMPT_APPS` en `server/utils/feedback-policy.ts`) porque es una
+> app offline-first y el widget sería su única dependencia de red externa. Ese camino lleva un cubo
+> de rate-limit extra por IP (`noCaptcha:${ip}`, 30/h), y `resolveClientIp` pasó a usar
+> `cf-connecting-ip` / el último elemento de `x-forwarded-for` — el primer elemento de XFF lo
+> controla quien llama y servía para estrenar cubo en cada envío.
 
 **Aviso de feedback nuevo.** `NUXT_FEEDBACK_WEBHOOK_URL`: un POST JSON genérico, fire-and-forget,
 cuyo fallo **nunca** rompe el envío del usuario. Sirve tal cual para la API de Telegram, un webhook

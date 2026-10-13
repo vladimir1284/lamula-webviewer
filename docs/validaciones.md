@@ -2,6 +2,9 @@
 
 Parte manual de cada puerta del [plan de implementación](plan-implementacion.md). Las ejecuta el experto de dominio / QA; el resultado se registra en el PR que cierra la fase.
 
+> [!NOTE]
+> Las puertas F0–F4 se ejecutaron sobre la infraestructura original (Cloudflare Pages + D1) y quedan como registro histórico tal cual se validaron. Desde la decisión 38 el viewer corre como contenedor Node en el Docker Swarm del pipeline, con Postgres self-hosted en vez de D1 — las puertas **todavía por ejecutar** (F5, F6) deben leerse contra esa infraestructura actual, no contra Pages/D1.
+
 ## F0 — Andamiaje
 
 1. Abrir la URL del deploy de Pages: el esqueleto carga.
@@ -53,5 +56,5 @@ Alcance recortado (decisión 22): sin VIL/top/granizo por celda — el feed no d
 
 1. **Semana de operación**: el experto usa el viewer contra el pipeline vivo a diario; se registra cada incidencia; cero bloqueantes al cierre.
 2. Al menos un episodio convectivo real observado en vivo con storm + VWP correctos.
-3. Deploy desde cero en un proyecto Pages limpio siguiendo solo la documentación: funciona sin pasos no documentados.
-4. Revisión de consumo del tier gratuito (lecturas D1, requests) tras la semana de uso: dentro de presupuesto.
+3. Deploy desde cero en el Swarm (`docker stack deploy`) siguiendo solo la documentación: funciona sin pasos no documentados.
+4. Revisión de recursos del contenedor (CPU/memoria del Nuxt Node, conexiones Postgres) tras la semana de uso: dentro de presupuesto — ya no aplica el tier gratuito de Cloudflare (D1/Pages, riesgo retirado por decisión 38).

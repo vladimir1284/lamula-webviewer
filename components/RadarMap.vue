@@ -11,6 +11,7 @@
 import Feature from 'ol/Feature'
 import Map from 'ol/Map'
 import { defaults as defaultControls } from 'ol/control'
+import { defaults as defaultInteractions } from 'ol/interaction'
 import View from 'ol/View'
 import { Point } from 'ol/geom'
 import Polygon, { circular } from 'ol/geom/Polygon'
@@ -28,8 +29,19 @@ import 'ol/ol.css'
 import type { BaseMapId } from '#shared/basemaps'
 import type { Phenomenon, Radar, RasterMeta, WindGridFile } from '#shared/contract'
 import type { RasterProductDef } from '#shared/products'
+import Collection from 'ol/Collection'
+import Draw from 'ol/interaction/Draw'
+import Modify from 'ol/interaction/Modify'
 import type { CursorSample } from '../utils/map/cursor'
 import { sampleFromLevel } from '../utils/map/cursor'
+import type { Annotation, AnnotationKind } from '../utils/export/annotations'
+import {
+  ANNOTATION_PROP,
+  annotationFromGeometry,
+  annotationStyle,
+  buildAnnotationFeatures,
+  drawTypeFor,
+} from '../utils/map/annotation-layer'
 import { createBaseMapSources } from '../utils/map/base-layers'
 import { getCogBlob } from '../utils/map/cog-cache'
 import { buildDownsampledCogBlob } from '../utils/map/downsample-source'
@@ -77,6 +89,13 @@ const props = withDefaults(defineProps<{
   /** strikes normalizados de la ventana del frame (capa 'lightning');
    * null = capa limpia. Lista nueva ⇒ el bucle reinicia en fase 0 */
   lightningStrikes?: NormalizedStrike[] | null
+  /** anotaciones del sitio mostrado (F7.2); null = ninguna */
+  annotations?: Annotation[] | null
+  /** herramienta de dibujo activa; null = modo anotación apagado */
+  annotationTool?: AnnotationKind | null
+  annotationColor?: string
+  /** rótulo que usará el próximo punto con la herramienta 'text' */
+  annotationText?: string
   /** suavizado cliente de la capa raster estática: bilineal nativo GPU sobre el nivel
    * crudo + lerp de color (decisión 32) — modo estático únicamente */
   smooth?: boolean
@@ -103,6 +122,10 @@ const props = withDefaults(defineProps<{
   animPlaying: false,
   windGrid: null,
   lightningStrikes: null,
+  annotations: null,
+  annotationTool: null,
+  annotationColor: '#f8fafc',
+  annotationText: '',
 })
 
 const emit = defineEmits<{
@@ -112,7 +135,13 @@ const emit = defineEmits<{
   frameError: [index: number, message: string]
   moveEnd: []
   selectCell: [cellId: string]
+  /** trazo nuevo terminado (F7.2) — la página lo manda a annotationMachine */
+  annotationAdd: [annotation: Annotation]
+  /** trazo existente movido o reformado con Modify */
+  annotationUpdate: [annotation: Annotation]
 }>()
+
+const { t } = useI18n()
 
 const container = ref<HTMLDivElement>()
 let resizeObserver: ResizeObserver | undefined
@@ -130,26 +159,35 @@ let lightningLayer: LightningLayer | undefined
 const coverageSource = new VectorSource()
 const phenomenaSource = new VectorSource()
 let phenomenaLayer: VectorLayer<VectorSource> | undefined
+const annotationSource = new VectorSource()
+let drawInteraction: Draw | undefined
+let modifyInteraction: Modify | undefined
 
 const animationMode = () => Array.isArray(props.frames) && props.frames.length > 0
 
-// (Re)construir el pool de animación (altas/bajas de capa) puede por sí solo
-// hacer que OL dispare un 'moveend' — no es un MapBrowserEvent, así que la
-// librería no distingue "el usuario paneó/zoomeó" de "el render interno se
-// asentó tras un cambio de capas" (confirmado empíricamente: initOrUpdatePool
-// dispara uno sin que medie ningún gesto). El listener de abajo reenvía TODO
-// moveend como 'moveEnd' hacia animationMachine, que lo interpreta siempre
-// como pan/zoom real y pausa el playback — si ese moveend espurio llega justo
-// tras arrancar la animación, aborta el play recién iniciado. Se descarta
-// como mucho UN moveend inmediatamente después de tocar el pool; el timeout
-// es la red de seguridad si ese moveend nunca llega (no debe quedar
-// suprimiendo uno genuino más adelante).
-let suppressNextMoveEnd = false
-let suppressMoveEndTimer: ReturnType<typeof setTimeout> | undefined
-function armMoveEndSuppression() {
-  suppressNextMoveEnd = true
-  clearTimeout(suppressMoveEndTimer)
-  suppressMoveEndTimer = setTimeout(() => { suppressNextMoveEnd = false }, 500)
+// OL emite 'moveend' tanto tras un pan/zoom real como al asentarse su propio
+// render interno — no es un MapBrowserEvent, así que la librería no distingue
+// los dos casos (confirmado: reconstruir el pool de animación dispara uno sin
+// que medie ningún gesto). animationMachine lo interpreta siempre como pan/zoom
+// real y pausa el playback, así que un moveend espurio aborta el play recién
+// arrancado. El filtro es por ORIGEN, no por tiempo: un temporizador no sirve
+// — en una máquina lenta (SwiftShader, 2 núcleos) un frame de render ya pasa
+// de 200 ms, y cualquier ventana fija o se queda corta o se come un pan
+// genuino.
+//
+// El gesto se consume en 'movestart', de modo que el par (gesto, movimiento)
+// queda emparejado. Un click que no llega a mover el mapa (seleccionar una
+// celda) sí deja la marca puesta, así que `resetMoveOrigin()` la limpia justo
+// antes de cada reconstrucción del pool — el único momento en que la app
+// provoca un moveend por su cuenta.
+let userGesture = false
+let moveFromUser = false
+function markUserGesture() {
+  userGesture = true
+}
+function resetMoveOrigin() {
+  userGesture = false
+  moveFromUser = false
 }
 
 // 'true' cuando el raster vigente terminó de renderizar (rendercomplete de
@@ -263,6 +301,72 @@ function centerOnSelectedCell() {
   }
 }
 
+// ── Anotaciones (F7.2) ───────────────────────────────────────────────────
+// La fuente se reconstruye desde las props: el modelo (annotationMachine)
+// manda, la capa nunca guarda estado propio. Por eso el Draw NO escribe en
+// `annotationSource` (dibuja sobre una Collection suelta) — si lo hiciera, el
+// trazo entraría dos veces: una por OL y otra al volver por props.
+
+function updateAnnotations() {
+  annotationSource.clear()
+  if (!props.annotations || props.annotations.length === 0) return
+  annotationSource.addFeatures(buildAnnotationFeatures(props.annotations))
+}
+
+function teardownAnnotationTools() {
+  if (drawInteraction) {
+    map?.removeInteraction(drawInteraction)
+    drawInteraction.dispose()
+    drawInteraction = undefined
+  }
+  if (modifyInteraction) {
+    map?.removeInteraction(modifyInteraction)
+    modifyInteraction.dispose()
+    modifyInteraction = undefined
+  }
+}
+
+function updateAnnotationTools() {
+  teardownAnnotationTools()
+  const tool = props.annotationTool
+  if (!map || !tool) return
+
+  drawInteraction = new Draw({
+    type: drawTypeFor(tool),
+    features: new Collection(), // ver nota de arriba: la fuente la manda el modelo
+    freehand: tool === 'freehand',
+    maxPoints: tool === 'arrow' ? 2 : undefined,
+  })
+  drawInteraction.on('drawend', (event) => {
+    const geometry = event.feature.getGeometry()
+    if (!geometry) return
+    const annotation = annotationFromGeometry(tool, geometry, {
+      color: props.annotationColor,
+      text: props.annotationText,
+    })
+    // un rótulo vacío o un trazo degenerado devuelve null: se descarta en
+    // silencio, el usuario simplemente no ve aparecer nada
+    if (annotation) emit('annotationAdd', annotation)
+  })
+  map.addInteraction(drawInteraction)
+
+  modifyInteraction = new Modify({ source: annotationSource })
+  modifyInteraction.on('modifyend', (event) => {
+    event.features.forEach((feature) => {
+      const previous = feature.get(ANNOTATION_PROP) as Annotation | undefined
+      const geometry = feature.getGeometry()
+      if (!previous || !geometry) return
+      const annotation = annotationFromGeometry(previous.kind, geometry, {
+        color: previous.color,
+        text: previous.text,
+        id: previous.id,
+      })
+      if (annotation) emit('annotationUpdate', annotation)
+    })
+  })
+  map.addInteraction(modifyInteraction)
+}
+
 // ── Modo estático (F2, intacto) ─────────────────────────────────────────
 
 function updateRasterLayer() {
@@ -354,7 +458,9 @@ function teardownPool() {
 
 function initOrUpdatePool() {
   if (!map || !props.productDef || !animationMode()) return
-  armMoveEndSuppression()
+  // altas/bajas de capa hacen que OL emita un moveend propio: que no herede
+  // un gesto viejo y se lo lleve puesto el playback recién arrancado
+  resetMoveOrigin()
   const frames = props.frames!
   const projCode = registerRadarProjection(props.radar.site_id, props.radar.proj4)
   const style = rasterStyle(
@@ -394,6 +500,18 @@ onMounted(() => {
   map = new Map({
     target: container.value,
     controls: defaultControls({ zoom: false }),
+    // Interacciones explícitas en vez de las que `Map` monta solo: OL 10.9
+    // las construye con `onFocusOnly: true` (ver `ol/Map.js`), y esa opción
+    // SOLO muerde cuando el elemento target tiene `tabindex` — que es lo que
+    // pide la accesibilidad por teclado (D54). El efecto era que `DragPan` y
+    // `MouseWheelZoom` exigían que el mapa YA tuviera el foco: el foco llega
+    // en `mousedown`, posterior al `pointerdown` donde OL evalúa la condición,
+    // así que el PRIMER arrastre tras cargar la página no movía nada. Con
+    // `onFocusOnly: false` el comportamiento vuelve a ser el de antes de poner
+    // `tabindex` (sin el atributo, `focusWithTabindex` se cortocircuitaba a
+    // `true`), y el teclado sigue funcionando: KeyboardPan/KeyboardZoom no
+    // usan esta opción, solo necesitan que el keydown llegue al target.
+    interactions: defaultInteractions({ onFocusOnly: false }),
     layers: [
       baseLayer,
       satelliteLayer,
@@ -422,6 +540,13 @@ onMounted(() => {
         declutter: true,
         style: overlayStyle,
       })),
+      // anotaciones del usuario por encima de todo (F7.2): son su lectura de
+      // la escena, nada del dato las puede tapar
+      new VectorLayer({
+        source: annotationSource,
+        zIndex: 21,
+        style: annotationStyle,
+      }),
     ],
     view: new View({
       center: fromLonLat([props.radar.lon, props.radar.lat]),
@@ -463,14 +588,24 @@ onMounted(() => {
     )
     emit('cursor', { lon, lat, level: sample?.level ?? null, value: sample?.value ?? null, rangeFolded: sample?.rangeFolded ?? false })
   })
-  map.getViewport().addEventListener('pointerleave', () => emit('cursor', null))
+  const viewport = map.getViewport()
+  viewport.addEventListener('pointerleave', () => emit('cursor', null))
+  // pointerdown cubre arrastre y los botones de zoom de OL (viven dentro del
+  // viewport); wheel y keydown cubren el resto de gestos de la vista. El
+  // pointerup NO sirve para descartar el click que no arrastró: los botones de
+  // zoom de OL disparan su animación después del click, así que el movestart
+  // llega más tarde que el pointerup.
+  viewport.addEventListener('pointerdown', markUserGesture)
+  viewport.addEventListener('wheel', markUserGesture, { passive: true })
+  viewport.addEventListener('keydown', markUserGesture)
+  map.on('movestart', () => {
+    moveFromUser = userGesture
+    userGesture = false
+  })
   map.on('moveend', () => {
     if (animationMode()) pool?.invalidateInactive()
-    if (suppressNextMoveEnd) {
-      suppressNextMoveEnd = false
-      clearTimeout(suppressMoveEndTimer)
-      return
-    }
+    if (!moveFromUser) return
+    moveFromUser = false
     emit('moveEnd')
   })
   // click en el marker de una celda → seleccionar (las líneas de track y
@@ -486,6 +621,8 @@ onMounted(() => {
 
   updateCoverage()
   updatePhenomena()
+  updateAnnotations()
+  updateAnnotationTools()
   updateWind()
   updateLightning()
   if (animationMode()) initOrUpdatePool()
@@ -534,11 +671,13 @@ watch(
 
 // scrubbing / avance de la animación: swap dentro del mismo pool, sin
 // refetch si ya estaba listo (texturas ya en GPU)
-watch(() => props.activeFrame, (i) => {
+function showFrame(i: number) {
   if (!animationMode() || !pool) return
   pool.activate(i)
   rasterLoaded.value = pool.isReady(i) ? 'true' : 'false'
-})
+}
+
+watch(() => props.activeFrame, showFrame)
 
 watch(
   () => [
@@ -555,6 +694,11 @@ watch(
 watch(() => props.selectedCell, (cellId, prev) => {
   if (cellId !== null && cellId !== prev) centerOnSelectedCell()
 })
+
+watch(() => props.annotations, updateAnnotations)
+// la herramienta se recrea entera al cambiar: un Draw no cambia de tipo de
+// geometría en caliente
+watch(() => props.annotationTool, updateAnnotationTools)
 
 watch(() => props.opacity, (o) => {
   rasterLayer?.setOpacity(o)
@@ -611,12 +755,30 @@ const captureHandle: MapCaptureHandle = {
     // cuando se enganchó el `once` — forzar un frame más garantiza el evento
     map.render()
   }),
+
+  // ── F7.3: el driver del export conduce frames y reloj ──────────────────
+  // Va directo al pool y a las capas animadas, SIN pasar por el estado de la
+  // página: `updateLightning()` oculta los rayos con `animPlaying`, y el
+  // export quiere verlos. El driver restaura el frame original al acabar.
+  frameCount: () => (animationMode() ? (pool?.size() ?? 0) : 0),
+  activeFrame: () => pool?.activeFrame() ?? -1,
+  activateFrame: showFrame,
+  frameSettled: (i: number) => pool?.isSettled(i) ?? false,
+  setExportClock: (clock) => {
+    windLayer?.setExportMode(clock ? clock.windDtS : null)
+    lightningLayer?.setExportPhase(clock ? clock.lightningPhase : null)
+    if (clock) windLayer?.stepExport()
+  },
+  setExportPixelRatio: (r) => {
+    windLayer?.setExportPixelRatio(r)
+    lightningLayer?.setExportPixelRatio(r)
+  },
 }
 
 defineExpose(captureHandle)
 
 onBeforeUnmount(() => {
-  clearTimeout(suppressMoveEndTimer)
+  teardownAnnotationTools()
   resizeObserver?.disconnect()
   resizeObserver = undefined
   rasterRequestId += 1 // invalida cualquier fetch de raster en curso
@@ -633,10 +795,24 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!--
+    `tabindex="0"` no es decorativo: sin él el viewport nunca recibe foco y las
+    interacciones KeyboardPan/KeyboardZoom que `defaults()` de OL ya monta no
+    disparan jamás. `role="application"` es lo único que hace que un lector de
+    pantalla entregue las flechas al mapa en vez de moverlas por el buffer
+    virtual; es aceptable acá porque dentro del div solo hay canvas — todo dato
+    legible (celdas, valor bajo el cursor, VWP) vive en paneles fuera del mapa.
+    El listener global de flechas de la página se desactiva mientras el foco
+    está acá dentro, si no un ArrowLeft paneaba Y saltaba de frame a la vez.
+  -->
   <div
     ref="container"
     data-testid="radar-map"
     :data-raster-loaded="rasterLoaded"
     class="h-full w-full"
+    tabindex="0"
+    role="application"
+    :aria-label="t('map.ariaLabel')"
+    :aria-roledescription="t('map.ariaRoleDescription')"
   />
 </template>

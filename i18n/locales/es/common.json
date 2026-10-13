@@ -1,0 +1,13 @@
+{
+  "common": {
+    "close": "Cerrar",
+    "freshness": {
+      "min": "hace {n} min",
+      "hours": "hace {n} h",
+      "days": "hace {n} d",
+      "months": "hace {n} mes | hace {n} meses",
+      "years": "hace {n} año | hace {n} años"
+    },
+    "loading": "Cargando…"
+  }
+}

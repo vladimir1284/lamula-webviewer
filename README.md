@@ -4,7 +4,7 @@ Visualizador web de productos de radar NEXRAD Level III. Reescritura del viewer 
 
 Proyecto de **solo lectura**: no genera ni persiste datos. El contrato de datos (schema Postgres + layout R2) lo posee el pipeline.
 
-**Estado: F1 (contrato + DAL).** El plan reconciliado completo (arquitectura, decisiones, contrato, fases) está en `docs/` (MkDocs Material), desplegado automáticamente a Cloudflare Pages.
+**Estado: F0–F4 hechas, viento/rayos/export(F7.1-F7.2)/feedback hechos; F5 (mosaico+i18n), F6 (validación E2E) y F7.3 (GIF/WebM) pendientes.** Detalle en `CLAUDE.md`. El plan reconciliado completo (arquitectura, decisiones, contrato, fases) está en `docs/` (MkDocs Material), desplegado automáticamente a Cloudflare Pages.
 
 ## Desarrollo
 

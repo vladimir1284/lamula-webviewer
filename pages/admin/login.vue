@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+const { t } = useI18n()
+
 useHead({
   title: 'Admin Login — LAMULA WebViewer',
   meta: [{ name: 'robots', content: 'noindex' }],
@@ -25,7 +27,7 @@ async function onLogin() {
   }
   catch (err: unknown) {
     const errorObj = err as { statusMessage?: string; message?: string }
-    error.value = errorObj.statusMessage || errorObj.message || 'Contraseña incorrecta'
+    error.value = errorObj.statusMessage || errorObj.message || t('admin.login.invalidPassword')
   }
   finally {
     loading.value = false
@@ -37,20 +39,20 @@ async function onLogin() {
   <div class="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100 p-4">
     <div class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
       <h1 class="text-lg font-bold text-teal-400 mb-1">
-        Administración LAMULA
+        {{ t('admin.login.title') }}
       </h1>
       <p class="text-xs text-slate-400 mb-6">
-        Inicia sesión con la contraseña de administrador.
+        {{ t('admin.login.subtitle') }}
       </p>
 
       <form class="space-y-4" @submit.prevent="onLogin">
         <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña</label>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">{{ t('admin.login.passwordLabel') }}</label>
           <input
             v-model="password"
             type="password"
             data-testid="admin-password-input"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-sm text-slate-100 focus:border-teal-400 focus:outline-none"
+            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-sm text-slate-100 focus:border-teal-400"
             placeholder="••••••••"
           >
         </div>
@@ -65,7 +67,7 @@ async function onLogin() {
           :disabled="loading || !password.trim()"
           class="w-full rounded-lg bg-teal-600 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-teal-500 disabled:opacity-50"
         >
-          {{ loading ? 'Ingresando...' : 'Iniciar sesión' }}
+          {{ loading ? t('admin.login.loggingIn') : t('admin.login.submit') }}
         </button>
       </form>
     </div>

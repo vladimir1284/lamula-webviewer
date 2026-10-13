@@ -10,6 +10,8 @@ import type {
 } from '#shared/contract'
 import { FEEDBACK_KINDS, FEEDBACK_ROLES } from '#shared/contract'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   open: boolean
   activeTab: 'submit' | 'mine'
@@ -78,6 +80,7 @@ function onSubmit() {
   if (!canSubmit.value) return
 
   const payload: FeedbackSubmission = {
+    app: 'webviewer',
     role: role.value,
     roleOther: role.value === 'otro' ? roleOther.value.trim() : null,
     kind: kind.value,
@@ -108,7 +111,7 @@ function onSubmit() {
   >
     <div class="flex items-center justify-between border-b border-slate-800 px-5 py-4">
       <h2 id="feedback-dialog-title" class="text-base font-bold text-slate-100">
-        Opinión y Sugerencias
+        {{ t('feedback.dialog.title') }}
       </h2>
       <button
         type="button"
@@ -129,7 +132,7 @@ function onSubmit() {
         :class="activeTab === 'submit' ? 'border-teal-400 text-teal-400' : 'border-transparent text-slate-400 hover:text-slate-200'"
         @click="emit('switch-tab', 'submit')"
       >
-        Enviar opinión
+        {{ t('feedback.dialog.tabSubmit') }}
       </button>
       <button
         type="button"
@@ -138,7 +141,7 @@ function onSubmit() {
         :class="activeTab === 'mine' ? 'border-teal-400 text-teal-400' : 'border-transparent text-slate-400 hover:text-slate-200'"
         @click="emit('switch-tab', 'mine')"
       >
-        Mis mensajes ({{ items.length }})
+        {{ t('feedback.dialog.tabMine', { n: items.length }) }}
       </button>
     </div>
 
@@ -146,46 +149,46 @@ function onSubmit() {
     <div v-if="activeTab === 'submit'" class="space-y-4 p-5 text-sm">
       <div class="grid grid-cols-2 gap-3">
         <label class="block">
-          <span class="mb-1 block text-slate-400 font-medium">Ocupación / Perfil <span class="text-teal-400">*</span></span>
+          <span class="mb-1 block text-slate-400 font-medium">{{ t('feedback.form.roleLabel') }} <span class="text-teal-400">*</span></span>
           <select
             :value="role"
             data-testid="feedback-role-select"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400 focus:outline-none"
+            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400"
             @change="onRoleChange"
           >
             <option v-for="r in FEEDBACK_ROLES" :key="r" :value="r">
-              {{ r }}
+              {{ t(`feedback.roles.${r}`) }}
             </option>
           </select>
         </label>
 
         <label class="block">
-          <span class="mb-1 block text-slate-400 font-medium">Tipo de mensaje</span>
+          <span class="mb-1 block text-slate-400 font-medium">{{ t('feedback.form.kindLabel') }}</span>
           <select
             :value="kind"
             data-testid="feedback-kind-select"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400 focus:outline-none"
+            class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400"
             @change="onKindChange"
           >
             <option v-for="k in FEEDBACK_KINDS" :key="k" :value="k">
-              {{ k }}
+              {{ t(`feedback.kinds.${k}`) }}
             </option>
           </select>
         </label>
       </div>
 
       <label v-if="role === 'otro'" class="block">
-        <span class="mb-1 block text-slate-400 font-medium">Especificar ocupación <span class="text-teal-400">*</span></span>
+        <span class="mb-1 block text-slate-400 font-medium">{{ t('feedback.form.roleOtherLabel') }} <span class="text-teal-400">*</span></span>
         <input
           v-model="roleOther"
           type="text"
-          class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400 focus:outline-none"
-          placeholder="Ej: Aficionado a la meteorología"
+          class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-100 focus:border-teal-400"
+          :placeholder="t('feedback.form.roleOtherPlaceholder')"
         >
       </label>
 
       <div>
-        <span class="mb-1 block text-slate-400 font-medium">Valoración (opcional)</span>
+        <span class="mb-1 block text-slate-400 font-medium">{{ t('feedback.form.ratingLabel') }}</span>
         <div class="flex items-center gap-1">
           <button
             v-for="star in 5"
@@ -202,13 +205,13 @@ function onSubmit() {
       </div>
 
       <label class="block">
-        <span class="mb-1 block text-slate-400 font-medium">Mensaje <span class="text-teal-400">*</span></span>
+        <span class="mb-1 block text-slate-400 font-medium">{{ t('feedback.form.messageLabel') }} <span class="text-teal-400">*</span></span>
         <textarea
           v-model="message"
           data-testid="feedback-message-input"
           rows="4"
-          class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2.5 text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:outline-none"
-          placeholder="Escribe aquí tu opinión, reporte de bug o sugerencia..."
+          class="w-full rounded-lg border border-slate-700 bg-slate-800 p-2.5 text-slate-100 placeholder-slate-400 focus:border-teal-400"
+          :placeholder="t('feedback.form.messagePlaceholder')"
         />
       </label>
 
@@ -219,13 +222,13 @@ function onSubmit() {
           class="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-400 hover:text-slate-200"
           @click="showAboutMe = !showAboutMe"
         >
-          <span>Contacto opcional (sobre ti)</span>
+          <span>{{ t('feedback.form.aboutMeToggle') }}</span>
           <span>{{ showAboutMe ? '▲' : '▼' }}</span>
         </button>
 
         <div v-if="showAboutMe" class="mt-3 grid grid-cols-2 gap-3 text-xs">
           <label class="block">
-            <span class="mb-1 block text-slate-400">Nombre</span>
+            <span class="mb-1 block text-slate-400">{{ t('feedback.form.nameLabel') }}</span>
             <input
               v-model="displayName"
               type="text"
@@ -233,7 +236,7 @@ function onSubmit() {
             >
           </label>
           <label class="block">
-            <span class="mb-1 block text-slate-400">Email</span>
+            <span class="mb-1 block text-slate-400">{{ t('feedback.form.emailLabel') }}</span>
             <input
               v-model="email"
               type="email"
@@ -241,7 +244,7 @@ function onSubmit() {
             >
           </label>
           <label class="block">
-            <span class="mb-1 block text-slate-400">Institución</span>
+            <span class="mb-1 block text-slate-400">{{ t('feedback.form.organizationLabel') }}</span>
             <input
               v-model="organization"
               type="text"
@@ -249,7 +252,7 @@ function onSubmit() {
             >
           </label>
           <label class="block">
-            <span class="mb-1 block text-slate-400">País</span>
+            <span class="mb-1 block text-slate-400">{{ t('feedback.form.countryLabel') }}</span>
             <input
               v-model="country"
               type="text"
@@ -269,7 +272,7 @@ function onSubmit() {
           class="rounded-lg px-4 py-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
           @click="emit('close')"
         >
-          Cancelar
+          {{ t('feedback.form.cancel') }}
         </button>
         <button
           type="button"
@@ -278,15 +281,15 @@ function onSubmit() {
           class="rounded-lg bg-teal-600 px-5 py-2 font-bold text-slate-950 transition-colors hover:bg-teal-500 disabled:opacity-50"
           @click="onSubmit"
         >
-          {{ submitting ? 'Enviando...' : 'Enviar opinión' }}
+          {{ submitting ? t('feedback.form.submitting') : t('feedback.form.submit') }}
         </button>
       </div>
     </div>
 
     <!-- Tab 2: Mis mensajes -->
     <div v-else-if="activeTab === 'mine'" class="max-h-96 overflow-y-auto space-y-3 p-5 text-sm">
-      <p v-if="items.length === 0" class="py-6 text-center text-slate-500">
-        Aún no has enviado mensajes desde este navegador.
+      <p v-if="items.length === 0" class="py-6 text-center text-slate-400">
+        {{ t('feedback.messages.empty') }}
       </p>
 
       <div
@@ -311,7 +314,7 @@ function onSubmit() {
           >
             <div class="flex justify-between font-bold text-teal-400 mb-1">
               <span>{{ reply.author }}</span>
-              <span class="text-[10px] text-slate-500">{{ reply.createdAt.slice(0, 16).replace('T', ' ') }}</span>
+              <span class="text-[10px] text-slate-400">{{ reply.createdAt.slice(0, 16).replace('T', ' ') }}</span>
             </div>
             <p class="whitespace-pre-wrap text-slate-200">{{ reply.body }}</p>
           </div>

@@ -12,7 +12,7 @@ describe('useExportPrefs', () => {
   })
 
   it('ida y vuelta', () => {
-    saveExportPrefs({ v: 1, chrome: 'overlay', scale: 1, parts: { title: false, meta: true, legend: true, attribution: false } })
+    saveExportPrefs({ v: 2, chrome: 'overlay', scale: 1, avatarDataUrl: null, parts: { ...EXPORT_PREF_DEFAULTS.parts, title: false, attribution: false } })
     const p = loadExportPrefs()
     expect(p.chrome).toBe('overlay')
     expect(p.scale).toBe(1)
@@ -20,14 +20,40 @@ describe('useExportPrefs', () => {
   })
 
   it('un shape inválido cae a defaults en vez de romper', () => {
-    localStorage.setItem('lamula:export', JSON.stringify({ v: 1, chrome: 'nope', scale: 7 }))
+    localStorage.setItem('lamula:export', JSON.stringify({ v: 2, chrome: 'nope', scale: 7 }))
     expect(loadExportPrefs().chrome).toBe('bar')
     localStorage.setItem('lamula:export', '{{{')
     expect(loadExportPrefs().chrome).toBe('bar')
   })
 
+  it('migra la v1 sin tirar las preferencias (F7.2 añadió marca y avatar)', () => {
+    localStorage.setItem('lamula:export', JSON.stringify({
+      v: 1,
+      chrome: 'overlay',
+      scale: 1,
+      parts: { title: false, meta: true, legend: true, attribution: false },
+    }))
+    const p = loadExportPrefs()
+    expect(p.v).toBe(2)
+    expect(p.chrome).toBe('overlay')
+    expect(p.parts.title).toBe(false)
+    expect(p.parts.watermark).toBe(true) // default nuevo
+    expect(p.parts.avatar).toBe(false)
+    expect(p.avatarDataUrl).toBeNull()
+  })
+
+  it('solo acepta un avatar en data-URL de imagen', () => {
+    saveExportPrefs({ ...loadExportPrefs(), avatarDataUrl: 'data:image/png;base64,AAAA' })
+    expect(loadExportPrefs().avatarDataUrl).toBe('data:image/png;base64,AAAA')
+    localStorage.setItem('lamula:export', JSON.stringify({
+      ...loadExportPrefs(),
+      avatarDataUrl: 'https://ejemplo.invalid/foto.png',
+    }))
+    expect(loadExportPrefs().avatarDataUrl).toBeNull()
+  })
+
   it('no contamina la clave del viewer', () => {
-    saveExportPrefs({ v: 1, chrome: 'none', scale: 1, parts: EXPORT_PREF_DEFAULTS.parts })
+    saveExportPrefs({ v: 2, chrome: 'none', scale: 1, avatarDataUrl: null, parts: EXPORT_PREF_DEFAULTS.parts })
     expect(localStorage.getItem('lamula:prefs')).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 site_name: LAMULA-WebViewer
-site_description: Visualizador web de productos NEXRAD Level III — Nuxt 3 + OpenLayers sobre Cloudflare Pages (D1 + R2)
+site_description: Visualizador web de productos NEXRAD Level III — Nuxt 3 + OpenLayers, contenedor Node en Docker Swarm (Postgres + R2)
 repo_url: https://github.com/vladimir1284/lamula-webviewer
 repo_name: vladimir1284/lamula-webviewer
 

@@ -72,3 +72,22 @@ export function strikesInWindow(
   }
   return out.sort((a, b) => a.progress - b.progress)
 }
+
+/** Dos radares vecinos del mismo dominio de mosaico reciben del pipeline la
+ * MISMA descarga (los cubos se llenan filtrando el feed GLM por radio de
+ * sitio, no por territorio exclusivo), así que la unión de sus ficheros trae
+ * duplicados exactos — misma posición y mismo instante. Se deduplica por
+ * (lon, lat, progress) redondeados; el orden ascendente por progress se
+ * conserva. Solo lo usa la vista de mosaico: en un solo radar no hay dos
+ * fuentes que puedan repetir. */
+export function dedupeStrikes(strikes: NormalizedStrike[]): NormalizedStrike[] {
+  const seen = new Set<string>()
+  const out: NormalizedStrike[] = []
+  for (const s of strikes) {
+    const key = `${s.lon.toFixed(4)}|${s.lat.toFixed(4)}|${s.progress.toFixed(6)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(s)
+  }
+  return out
+}

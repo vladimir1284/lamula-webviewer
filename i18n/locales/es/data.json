@@ -1,0 +1,30 @@
+{
+  "data": {
+    "title": "Datos",
+    "tabs": {
+      "cells": "Celdas",
+      "trend": "Tendencia",
+      "vwp": "VWP"
+    },
+    "vwp": {
+      "tabChart": "Gráfico",
+      "tabTable": "Datos",
+      "error": "Error consultando el VWP: {error}",
+      "empty": "Sin perfil de viento hasta este instante del día."
+    },
+    "cells": {
+      "title": "Celdas de tormenta",
+      "noJoin": "Sin datos de celdas cerca de este instante.",
+      "empty": "Sin celdas detectadas en este volumen.",
+      "dbzMaxHeader": "dBZ máx",
+      "altHeader": "Alt ({unit})",
+      "movHeader": "Mov",
+      "pastHeader": "Pas.",
+      "futureHeader": "Fut.",
+      "pastTitle": "Trayectoria pasada",
+      "futureTitle": "Trayectoria futura",
+      "newBadge": "Nueva"
+    },
+    "tabsAriaLabel": "Secciones de datos"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "prefs": {
+    "title": "Preferencias",
+    "coverage": "Mostrar alcance del radar",
+    "units": {
+      "legend": "Unidades",
+      "imperial": "Aeronáuticas (kt, kft)",
+      "si": "Sistema internacional (km/h, km)"
+    },
+    "clock": {
+      "legend": "Hora",
+      "local": "Local (tu zona horaria)",
+      "utc": "UTC",
+      "note": "Los días de la timeline siguen siendo UTC."
+    }
+  }
+}

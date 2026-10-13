@@ -52,5 +52,75 @@ export function sampleWind(grid: WindGridFile, lon: number, lat: number): WindVe
     const d = arr[at(i0 + 1, j0 + 1)]!
     return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty
   }
-  return { u: lerp2(grid.u), v: lerp2(grid.v) }
+  const u = lerp2(grid.u)
+  const v = lerp2(grid.v)
+  // NaN = celda sin dato (hueco de la lattice unión del mosaico, ver
+  // mergeWindGrids): se trata igual que estar fuera de la grilla — la
+  // partícula respawnea en vez de arrastrar NaN por el campo
+  if (Number.isNaN(u) || Number.isNaN(v)) return null
+  return { u, v }
+}
+
+// ── Unión de grillas de varios sitios (mosaico, D49) ─────────────────────
+// El pipeline sirve un `WindGridFile` POR SITIO; un dominio de mosaico son
+// N radares, así que para pintar una sola capa de partículas hay que unir
+// las N grillas en una. Se remuestrea sobre una lattice propia (bbox unión,
+// paso = el más fino de las fuentes) muestreando cada fuente con el mismo
+// `sampleWind` bilineal: no exige que las grillas estén alineadas entre sí
+// y gana la PRIMERA que cubra la celda (no se promedia en el solape —
+// promediar dos campos GFS del mismo ciclo no aporta nada y escondería un
+// desacuerdo entre ellos).
+//
+// Las celdas que NO cubre ninguna fuente quedan en NaN a propósito, no en 0:
+// `sampleWind` devuelve null ahí (su guard de NaN) y la partícula respawnea,
+// que es lo correcto — un 0 sería viento en calma inventado.
+
+/** tope de celdas de la lattice unión: más allá se engrosa el paso. A 0.25°
+ * (GFS) son ~128° de lado, de sobra para cualquier dominio de mosaico. */
+const MAX_MERGED_CELLS = 512
+
+export function mergeWindGrids(grids: WindGridFile[]): WindGridFile | null {
+  if (grids.length === 0) return null
+  if (grids.length === 1) return grids[0]!
+
+  const bounds = grids.map(gridBounds)
+  const west = Math.min(...bounds.map(b => b.west))
+  const east = Math.max(...bounds.map(b => b.east))
+  const north = Math.max(...bounds.map(b => b.north))
+  const south = Math.min(...bounds.map(b => b.south))
+
+  let dx = Math.min(...grids.map(g => g.header.dx))
+  let dy = Math.min(...grids.map(g => g.header.dy))
+  if (!(dx > 0) || !(dy > 0)) return grids[0]!
+  // engrosa el paso si la unión se dispara (grillas muy separadas)
+  while ((east - west) / dx + 1 > MAX_MERGED_CELLS) dx *= 2
+  while ((north - south) / dy + 1 > MAX_MERGED_CELLS) dy *= 2
+
+  const nx = Math.floor((east - west) / dx) + 1
+  const ny = Math.floor((north - south) / dy) + 1
+  const u = new Array<number>(nx * ny).fill(Number.NaN)
+  const v = new Array<number>(nx * ny).fill(Number.NaN)
+
+  for (let j = 0; j < ny; j++) {
+    const lat = north - j * dy
+    for (let i = 0; i < nx; i++) {
+      const lon = west + i * dx
+      for (const grid of grids) {
+        const uv = sampleWind(grid, lon, lat)
+        if (uv === null || Number.isNaN(uv.u) || Number.isNaN(uv.v)) continue
+        u[j * nx + i] = uv.u
+        v[j * nx + i] = uv.v
+        break
+      }
+    }
+  }
+
+  // refTime/forecastHour del primero: todas las filas del join salen del
+  // mismo ciclo del modelo (el índice se consulta por el mismo valid_time)
+  const head = grids[0]!.header
+  return {
+    header: { nx, ny, lo1: west, la1: north, dx, dy, refTime: head.refTime, forecastHour: head.forecastHour },
+    u,
+    v,
+  }
 }
