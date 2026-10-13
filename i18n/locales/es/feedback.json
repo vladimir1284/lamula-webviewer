@@ -18,6 +18,7 @@
       "emailLabel": "Email",
       "organizationLabel": "Institución",
       "countryLabel": "País",
+      "captchaRequired": "Completa la verificación de seguridad",
       "cancel": "Cancelar",
       "submit": "Enviar opinión",
       "submitting": "Enviando..."
