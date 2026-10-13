@@ -156,6 +156,11 @@ export default defineNuxtConfig({
     feedbackWebhookUrl: '',
     turnstileSecret: '',
     turnstileDisabled: '',
+    // Better Stack Logs — NUXT_BETTERSTACK_TOKEN vía secret Swarm propio
+    // del viewer (nexrad_viewer_betterstack_token), separado del
+    // nexrad_betterstack_source_token del pipeline (servicios ingest).
+    betterstackToken: '',
+    betterstackEndpoint: '',
     // NUXT_CORS_ORIGINS — orígenes permitidos en /api/feedback**, separados por comas
     // (decisión 50). Vacío = sin CORS, como antes.
     // Producción: https://process.ladetec.com (solo ese; los previews de Pages quedan fuera).
