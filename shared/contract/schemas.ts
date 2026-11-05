@@ -18,7 +18,14 @@ export const zRadarRow = z.object({
   icao: z.string().nullable(),
   lat: z.number(),
   lon: z.number(),
-  height_m: z.number(),
+  // Metros sobre el nivel del mar. El PDB del Level III la trae en PIES
+  // (ICD 2620001) y el pipeline convierte al decodificar; hasta
+  // 2026-11-05 no lo hacía y la columna guardaba pies (issue #8 del
+  // pipeline). La banda es guardia de regresión parcial: ningún WSR-88D
+  // pasa de ~3250 m (KICX), así que un valor en pies rompe CI cuando el
+  // sitio está por encima de ~1220 m (ABX da 5951). Por debajo de eso no
+  // la detecta: 111 pies son 111 m perfectamente plausibles.
+  height_m: z.number().min(-100).max(4000),
   proj4: z.string().startsWith('+proj=aeqd'),
   first_seen_at: zIsoNaive,
   last_seen_at: zIsoNaive,
