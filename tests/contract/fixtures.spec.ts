@@ -96,6 +96,21 @@ describe('fixtures grabadas vs schemas Zod del contrato', () => {
     z.array(zRadarRow).parse(radars)
   })
 
+  // El pipeline guardaba pies en `height_m` (su issue #8, arreglado el
+  // 2026-11-05 con migración de datos). Esto fija que las grabaciones
+  // estén del lado correcto y que la banda de zRadarRow siga mordiendo.
+  it('radars: height_m en metros, no en pies', () => {
+    const jua = radars.find(r => r.site_id === 'JUA')!
+    expect(jua.height_m).toBeCloseTo(901.6, 1) // 2958 ft, antena de montaña en PR
+
+    // La banda solo ataja pies por encima de 4000, o sea sitios a más de
+    // ~1220 m: ABX (5951 ft) sí, JUA (2958 ft) no. Es guardia parcial a
+    // propósito — un valor en pies de un sitio bajo es indistinguible de
+    // un valor en metros de un sitio alto, y esta banda no puede saberlo.
+    expect(() => zRadarRow.parse({ ...jua, height_m: 5951 })).toThrow()
+    expect(() => zRadarRow.parse({ ...jua, height_m: 2958 })).not.toThrow()
+  })
+
   it('products: los tres kinds representados', () => {
     z.array(zProductRow).parse(products)
     expect(new Set(products.map(p => p.kind))).toEqual(

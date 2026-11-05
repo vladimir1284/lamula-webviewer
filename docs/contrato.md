@@ -18,11 +18,29 @@ Esta página es la **vista del consumidor**: qué lee el viewer de cada tabla y 
 |---|---|
 | `site_id` | id de 3 chars del feed (AMX, JUA); clave de todas las consultas |
 | `icao` | display (KAMX, TJUA) cuando existe — **observado null en todo el feed del demo (jul-2026)**: el viewer cae a `site_id` |
-| `lat`, `lon`, `height_m` | centrado de vista, círculo de cobertura, cálculos VWP |
+| `lat`, `lon` | centrado de vista, círculo de cobertura, cálculos VWP |
+| `height_m` | altitud de la antena **en metros** sobre el nivel del mar (ver aviso abajo) |
 | `proj4` | definición AEQD registrada **tal cual** con `proj4.defs` — el viewer no construye proyecciones |
 | `last_seen_at` | frescura ("minutos desde el último scan"), semáforo de estado por radar |
 
 Sin radares hardcodeados en ninguno de los dos proyectos: lo que hay en la tabla es lo que el viewer ofrece.
+
+!!! warning "`height_m` cambió de unidad el 2026-11-05 (mismo nombre, otros valores)"
+    El PDB del Level III trae la altura de antena en **pies** (ICD 2620001) y
+    el pipeline la guardaba sin convertir: la columna decía metros y contenía
+    pies (issue #8 del pipeline, arreglado + migración de datos
+    `0003_radar_height_feet_to_m.sql`). Desde esa fecha los valores son
+    metros de verdad y las filas viejas quedaron convertidas. Sin cambio de
+    schema: no hay drift que detectar, solo valores ~3,28 veces menores.
+    Las fixtures grabadas (`server/dal/fixtures/radars.json`) ya están en
+    metros, y `zRadarRow` acota `height_m` a `[-100, 4000]` como guardia de
+    regresión — ningún WSR-88D pasa de ~3250 m, así que una vuelta a pies
+    rompe CI en los radares de montaña (no en los costeros: 111 pies son
+    111 m plausibles).
+
+    El viewer hoy solo transporta la columna (DAL → tipo); ningún componente
+    calcula con ella. Si algún día se usa para altura de haz o corrección de
+    terreno, la unidad es metros.
 
 ### `products` — descriptores mínimos
 
@@ -64,6 +82,7 @@ Una fila por `(site_id, valid_time, level)`: `cycle_time`, `forecast_hour`, `mod
 ## R2
 
 - Convención de claves: `{site}/{mnemo}/{YYYY}/{MM}/{DD}/{site}_{mnemo}_{YYYYMMDD_HHMMSS}.tif` — pero el viewer **no construye claves**: usa `rasters.r2_key` literal.
+- Desde 2026-11-05 el pipeline admite un prefijo opcional de instancia (`R2_KEY_PREFIX`, vacío en producción) que antepone `{prefijo}/` a toda clave R2 — rasters, mosaico, viento y rayos — para que varias instancias compartan bucket (LAMULA Jobs: una por job). **Nada que cambiar aquí**, justamente porque el viewer usa `r2_key` literal y arma la URL como `${base}/${r2_key}`; el prefijo viaja dentro del valor. El único efecto visible es que `r2_key` puede no empezar por el `site_id` ni, en el mosaico, por `mosaic/` — no asumir ninguna de las dos cosas.
 - COG: niveles crudos uint8, scale/offset también embebidos en el TIFF, CRS proj4 AEQD, overviews internos. Peor caso 3680×3680 (N0B) — bajo el cap de textura WebGL de 4096.
 - Acceso: lectura pública (dominio custom o `r2.dev`) con **CORS** habilitado para el origen del viewer y soporte de **range requests** (nativo en R2). El viewer descarga solo tiles/overviews del viewport.
 

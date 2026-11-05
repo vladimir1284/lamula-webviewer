@@ -4,7 +4,7 @@
     "icao": null,
     "lat": 25.611,
     "lon": -80.413,
-    "height_m": 111,
+    "height_m": 33.8328,
     "proj4": "+proj=aeqd +lat_0=25.611 +lon_0=-80.413 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
     "first_seen_at": "2026-07-08T01:42:17",
     "last_seen_at": "2026-07-11T03:17:57"
@@ -14,7 +14,7 @@
     "icao": null,
     "lat": 24.597,
     "lon": -81.703,
-    "height_m": 89,
+    "height_m": 27.1272,
     "proj4": "+proj=aeqd +lat_0=24.597 +lon_0=-81.703 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
     "first_seen_at": "2026-07-10T04:29:18",
     "last_seen_at": "2026-07-11T03:16:44"
@@ -24,7 +24,7 @@
     "icao": null,
     "lat": 37.654,
     "lon": -97.443,
-    "height_m": 1400,
+    "height_m": 426.72,
     "proj4": "+proj=aeqd +lat_0=37.654 +lon_0=-97.443 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
     "first_seen_at": "2026-07-10T05:29:57",
     "last_seen_at": "2026-07-10T05:30:03"
@@ -34,7 +34,7 @@
     "icao": null,
     "lat": 18.116,
     "lon": -66.078,
-    "height_m": 2958,
+    "height_m": 901.5984,
     "proj4": "+proj=aeqd +lat_0=18.116 +lon_0=-66.078 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
     "first_seen_at": "2026-07-08T01:42:43",
     "last_seen_at": "2026-07-11T03:18:46"

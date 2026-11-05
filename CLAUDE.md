@@ -62,6 +62,8 @@ Viewer web de productos NEXRAD Level III: reescritura de VestaWeb2 (Svelte 3 + D
 - DAL con adaptadores live (Postgres directo/R2 por URL) y fixture (grabaciones + COGs golden) — todo lo de arriba es agnóstico a la fuente.
 - Stack: Nuxt 3 (preset `node-server`, contenedor en el Swarm), **XState v5 + `@xstate/vue`** (decisión 18 — todo el estado de UI, URL como fuente de verdad; ver `docs/maquinas-estado.md`), Tailwind, PrimeVue v4 unstyled, `@nuxtjs/i18n` (es+en), OpenLayers ≥ 9 + proj4, Vitest + Playwright. Pinia sigue instalado (módulo Nuxt cargado) pero sin uso — el estado de UI vive en XState.
 - Calibración raster: `físico = nivel · value_scale + value_offset` (niveles ≥ 2); 0 = nodata, 1 = range folded.
+- `radars.height_m` está en **metros** MSL. El pipeline guardaba ahí los pies crudos del PDB hasta 2026-11-05 (su issue #8 + migración de datos); las fixtures ya están convertidas y `zRadarRow` acota `[-100, 4000]` como guardia parcial (ver aviso en `docs/contrato.md`). Hoy el viewer solo transporta la columna; si algún día calcula con ella, la unidad es metros.
+- `r2_key` se usa **literal** (`${base}/${r2_key}`): desde 2026-11-05 el pipeline puede anteponerle un prefijo de instancia (`R2_KEY_PREFIX`, vacío en producción), así que la clave puede no empezar por `site_id` ni por `mosaic/`. No parsearla.
 
 ## Comandos
 
