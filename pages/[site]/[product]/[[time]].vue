@@ -59,6 +59,7 @@ definePageMeta({
 
 const route = useRoute()
 const { t } = useI18n()
+const demoJob = !!useRuntimeConfig().public.demoJob
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 const exportDialog = ref<{ open: () => void }>()
@@ -571,6 +572,7 @@ const { snapshot: feedbackSnapshot, send: feedbackSend } = useActor(feedbackMach
 const feedbackCtx = computed(() => feedbackSnapshot.value.context)
 
 onMounted(() => {
+  if (demoJob) return // plano demo: sin base de feedback
   feedbackSend({ type: 'FETCH_MINE' })
 
   const nudgeInterval = setInterval(() => {
@@ -1067,6 +1069,7 @@ function onSatOpacityInput(event: Event) {
          mobile sigue siendo overlay full-screen (sin lugar para correr el
          mapa en una pantalla angosta). -->
     <LayersMenu
+      :demo="demoJob"
       :base="ctx.base"
       :panel-open="!!ctx.panel"
       :has-palette="!!productDef"

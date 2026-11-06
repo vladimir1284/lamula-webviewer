@@ -1,0 +1,13 @@
+{
+  "job": {
+    "title": "Tu reproducción",
+    "queued": "En cola: esperando al procesador de radar.",
+    "running": "Procesando. Los primeros productos aparecen en un par de minutos.",
+    "ready": "Listo. Abriendo el visor…",
+    "failed": "El trabajo falló. Vuelve a lanzarlo desde la página de solicitud.",
+    "notFound": "Este enlace no existe o caducó.",
+    "unreachable": "No se pudo consultar el estado. Reintentando…",
+    "window": "Ventana: {from} a {to} UTC",
+    "notOfficial": "Productos generados con una reproducción propia del procesamiento de radar. No son productos oficiales del NWS."
+  }
+}
