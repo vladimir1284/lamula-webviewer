@@ -8,6 +8,25 @@
     "notFound": "Este enlace no existe o caducó.",
     "unreachable": "No se pudo consultar el estado. Reintentando…",
     "window": "Ventana: {from} a {to} UTC",
-    "notOfficial": "Productos generados con una reproducción propia del procesamiento de radar. No son productos oficiales del NWS."
+    "notOfficial": "Productos generados con una reproducción propia del procesamiento de radar. No son productos oficiales del NWS.",
+    "selTitle": "Elige qué reproducir",
+    "selToken": "Token de acceso",
+    "selTokenGo": "Entrar",
+    "selTokenBad": "Token no válido, caducado o revocado.",
+    "selCases": "Casos preparados",
+    "selCustom": "O elige tú el radar y el día",
+    "selDay": "Día (UTC)",
+    "selSite": "Radar",
+    "selFrom": "Desde",
+    "selTo": "Hasta",
+    "selLoad": "Ver radares",
+    "selNoSites": "Sin datos ese día.",
+    "selEstimate": "{n} volúmenes · unos {min} min de proceso · {mb} MB",
+    "selLaunch": "Lanzar",
+    "selLaunching": "Lanzando…",
+    "selBusy": "Ese radar y esas horas ya tienen un trabajo en marcha. Prueba más tarde o con otra ventana.",
+    "selQuota": "Superaste tu cuota.",
+    "selError": "No se pudo completar: {msg}",
+    "selCaseDetail": "{n} volúmenes · unos {min} min"
   }
 }
