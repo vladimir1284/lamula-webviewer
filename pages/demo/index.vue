@@ -2,16 +2,17 @@
 // Selector del plano demo (lamula-jobs, F4): token de acceso → caso preparado o radar/día/rango → estimación → lanzar.
 // Todo pasa por /api/demo/*, que pone el token desde una cookie httpOnly; esta página nunca lo reenvía.
 import { computed, ref } from 'vue'
+import { isoToPath } from '#shared/url/time-path'
 
-interface Caso { id: string, titulo: string, icao: string, desde: string, hasta: string }
+interface Caso { id: string, titulo: string, icao: string, desde: string, hasta: string, n_volumes: number }
 interface Vol { key: string, bytes: number, time: string }
-interface Detalle { id: string, volumes: Vol[], estimate: { n_volumes: number, bytes: number, minutos: number } }
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const token = ref('')
 const entered = ref(false)
 const casos = ref<Caso[]>([])
+const casosUrl = useRuntimeConfig().public.casosUrl.replace(/\/$/, '')
 const err = ref('')
 const busy = ref(false)
 
@@ -45,12 +46,20 @@ async function guard<T>(fn: () => Promise<T>): Promise<T | undefined> {
   finally { busy.value = false }
 }
 
+// Los casos preparados son públicos (D19): se listan sin token y cada uno es un enlace a la instancia de casos.
+try { casos.value = await $fetch<Caso[]>('/api/demo/cases') }
+catch { /* sin lista, la página sigue sirviendo para observaciones propias */ }
+
+function casoHref(c: Caso): string {
+  return `${casosUrl}/${c.icao}/153/${isoToPath(c.desde.slice(0, 19))}`
+}
+
 async function enter() {
   err.value = ''
   busy.value = true
   try {
     await $fetch('/api/demo/session', { method: 'POST', body: { token: token.value.trim() } })
-    casos.value = await $fetch<Caso[]>('/api/demo/catalog/cases')
+    await $fetch('/api/demo/catalog/sites', { query: { day: day.value } })
     entered.value = true
   }
   catch (e) {
@@ -76,10 +85,6 @@ async function launch(icao: string, keys: string[]) {
   if (r) await navigateTo(localePath(`/j/${r.result_token}`))
 }
 
-async function launchCase(c: Caso) {
-  const d = await guard(() => $fetch<Detalle>(`/api/demo/catalog/cases/${c.id}`))
-  if (d) await launch(c.icao, d.volumes.map(v => v.key))
-}
 </script>
 
 <template>
@@ -88,6 +93,23 @@ async function launchCase(c: Caso) {
       {{ t('job.selTitle') }}
     </h1>
 
+    <section v-if="casos.length">
+      <h2 class="mb-2 font-medium">
+        {{ t('job.selCases') }}
+      </h2>
+      <ul class="flex flex-col gap-2">
+        <li v-for="c in casos" :key="c.id">
+          <a :href="casoHref(c)" class="block w-full rounded border px-3 py-2 text-left" :data-testid="`demo-case-${c.id}`">
+            <span class="font-medium">{{ c.titulo }}</span>
+            <span class="block text-xs opacity-70">{{ c.icao }} · {{ c.desde.slice(0, 16).replace('T', ' ') }} → {{ c.hasta.slice(0, 16).replace('T', ' ') }} UTC · {{ t('job.selCaseDetail', { n: c.n_volumes, min: Math.round(c.n_volumes * MIN_POR_VOLUMEN) }) }}</span>
+          </a>
+        </li>
+      </ul>
+    </section>
+
+    <h2 class="font-medium">
+      {{ t('job.selCustom') }}
+    </h2>
     <form v-if="!entered" class="flex gap-2" @submit.prevent="enter">
       <input v-model="token" type="password" autocomplete="off" :placeholder="t('job.selToken')" :aria-label="t('job.selToken')" class="flex-1 rounded border px-3 py-2" data-testid="demo-token">
       <button type="submit" :disabled="busy || !token" class="rounded border px-4 py-2" data-testid="demo-enter">
@@ -96,24 +118,8 @@ async function launchCase(c: Caso) {
     </form>
 
     <template v-else>
-      <section>
-        <h2 class="mb-2 font-medium">
-          {{ t('job.selCases') }}
-        </h2>
-        <ul class="flex flex-col gap-2">
-          <li v-for="c in casos" :key="c.id">
-            <button type="button" :disabled="busy" class="w-full rounded border px-3 py-2 text-left" :data-testid="`demo-case-${c.id}`" @click="launchCase(c)">
-              <span class="font-medium">{{ c.titulo }}</span>
-              <span class="block text-xs opacity-70">{{ c.icao }} · {{ c.desde.slice(0, 16).replace('T', ' ') }} → {{ c.hasta.slice(0, 16).replace('T', ' ') }} UTC</span>
-            </button>
-          </li>
-        </ul>
-      </section>
 
       <section class="flex flex-col gap-3">
-        <h2 class="font-medium">
-          {{ t('job.selCustom') }}
-        </h2>
         <div class="flex items-end gap-2">
           <label class="flex flex-col text-sm">{{ t('job.selDay') }}
             <input v-model="day" type="date" class="rounded border px-2 py-1" data-testid="demo-day">

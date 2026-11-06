@@ -176,6 +176,8 @@ export default defineNuxtConfig({
       turnstileSiteKey: '',
       // NUXT_PUBLIC_DEMO_JOB=true en el viewer demo: oculta viento y rayos (sin GFS/GLM históricos)
       demoJob: false,
+      // NUXT_PUBLIC_CASOS_URL — origen de la instancia del viewer de casos preparados (D19); vacío = esta misma
+      casosUrl: '',
       buildId: process.env.GIT_SHA || 'dev',
       cartoApiKey: process.env.NUXT_PUBLIC_CARTO_API_KEY || 'cb1_4iib_1_1dfa4e98cff8bebc4902181e',
     },

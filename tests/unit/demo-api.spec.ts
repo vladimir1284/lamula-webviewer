@@ -3,8 +3,8 @@ import { callJobsApi, catalogPathAllowed, validAccessToken } from '~/server/dal/
 
 describe('proxy del selector demo', () => {
   it('solo deja pasar las rutas del catálogo', () => {
-    for (const ok of ['sites', 'volumes', 'cases', 'cases/irma']) expect(catalogPathAllowed(ok)).toBe(true)
-    for (const mal of ['', 'jobs', '../jobs', 'cases/../x', 'sites/x', 'cases/IRMA', 'results/abc']) expect(catalogPathAllowed(mal)).toBe(false)
+    for (const ok of ['sites', 'volumes']) expect(catalogPathAllowed(ok)).toBe(true)
+    for (const mal of ['', 'jobs', '../jobs', 'cases', 'cases/irma', 'sites/x', 'results/abc']) expect(catalogPathAllowed(mal)).toBe(false)
   })
 
   it('valida la forma del token de acceso', () => {

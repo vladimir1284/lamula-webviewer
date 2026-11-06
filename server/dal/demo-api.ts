@@ -5,7 +5,7 @@
 
 export const ACCESS_COOKIE = 'lamula_access'
 const TOKEN_RE = /^[A-Za-z0-9_.-]{8,200}$/
-const CATALOG_PATHS = [/^sites$/, /^volumes$/, /^cases$/, /^cases\/[a-z0-9_-]{1,40}$/]
+const CATALOG_PATHS = [/^sites$/, /^volumes$/]
 
 export function validAccessToken(t: unknown): t is string {
   return typeof t === 'string' && TOKEN_RE.test(t)
