@@ -7,6 +7,8 @@ import { useDal } from '../../dal'
 import { parseQueryParams } from '../../dal/params'
 
 export default defineEventHandler(async (event) => {
+  // Plano demo: los jobs no tienen capa de rayos (no hay archivo histórico)
+  if (useRuntimeConfig(event).jobsApiUrl) throw createError({ statusCode: 404 })
   const { site, day } = parseQueryParams(event, zSiteDay)
   const buckets = await useDal(event).listLightningBuckets(site, day)
   setResponseHeader(event, 'Cache-Control', 'public, max-age=30')

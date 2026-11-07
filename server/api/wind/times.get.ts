@@ -7,6 +7,8 @@ import { useDal } from '../../dal'
 import { parseQueryParams } from '../../dal/params'
 
 export default defineEventHandler(async (event) => {
+  // Plano demo: los jobs no tienen capa de viento (no hay archivo histórico)
+  if (useRuntimeConfig(event).jobsApiUrl) throw createError({ statusCode: 404 })
   const { site, day, level } = parseQueryParams(event, zSiteDayLevel)
   const grids = await useDal(event).listWindTimes(site, day, level)
   setResponseHeader(event, 'Cache-Control', 'public, max-age=30')

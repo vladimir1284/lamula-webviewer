@@ -45,6 +45,8 @@ const props = withDefaults(defineProps<{
   /** en 'mosaic' solo se honra 'cells' (ver MOSAIC_LAYERS) */
   layers: OverlayLayerId[]
   windLevel?: WindLevel
+  /** Plano demo (lamula-jobs): sin viento ni rayos (no hay GFS/GLM archivados) y sin feedback (no hay base de feedback) */
+  demo?: boolean
   windInfo?: string | null
   lightningInfo?: string | null
   overlayJoinInfo?: string | null
@@ -61,6 +63,7 @@ const props = withDefaults(defineProps<{
   satOpacity: 0.6,
   satTimeLabel: null,
   windLevel: '10m',
+  demo: false,
   windInfo: null,
   lightningInfo: null,
   overlayJoinInfo: null,
@@ -147,7 +150,7 @@ function openAnnotations() {
 
     <div class="hidden md:flex md:flex-col md:items-end md:gap-2">
       <button
-        v-if="isRadar"
+        v-if="isRadar && !demo"
         type="button"
         data-testid="feedback-pill"
         class="pointer-events-auto relative z-50 flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/95 py-1.5 pl-4 pr-3 text-sm font-bold shadow-lg hover:bg-slate-800"
@@ -191,6 +194,7 @@ function openAnnotations() {
       </label>
 
       <label
+        v-if="!demo"
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
         <span class="whitespace-nowrap">{{ t('layers.pills.wind') }}</span>
@@ -205,6 +209,7 @@ function openAnnotations() {
       </label>
 
       <label
+        v-if="!demo"
         class="group pointer-events-auto relative z-50 flex w-auto max-w-[calc(100vw-2rem)] items-center justify-end rounded-full border border-slate-700 bg-slate-900/70 py-2.5 pl-4 pr-11 text-right text-sm shadow-lg has-[:checked]:bg-slate-900 has-[:checked]:font-bold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-400"
       >
         <span class="whitespace-nowrap">{{ t('layers.pills.lightning') }}</span>
@@ -423,7 +428,7 @@ function openAnnotations() {
         </p>
       </fieldset>
 
-      <fieldset class="rounded bg-slate-800 p-3">
+      <fieldset v-if="!demo" class="rounded bg-slate-800 p-3">
         <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': layers.includes('wind') }">
           <span class="flex items-center gap-2"><LayerIcon kind="wind" class="h-5 w-5" />{{ t('layers.wind.title') }}<template v-if="layers.includes('wind')"> ({{ t(`layers.wind.levels.${windLevel}`) }})</template></span>
           <input
@@ -460,7 +465,7 @@ function openAnnotations() {
         </template>
       </fieldset>
 
-      <fieldset class="rounded bg-slate-800 p-3">
+      <fieldset v-if="!demo" class="rounded bg-slate-800 p-3">
         <label class="flex min-h-11 cursor-pointer items-center justify-between md:min-h-0" :class="{ 'font-bold': layers.includes('lightning') }">
           <span class="flex items-center gap-2"><LayerIcon kind="lightning" class="h-5 w-5" />{{ t('layers.lightning.title') }}</span>
           <input
@@ -544,7 +549,7 @@ function openAnnotations() {
             {{ t('layers.prefs.export') }}
           </button>
           <button
-            v-if="isRadar"
+            v-if="isRadar && !demo"
             type="button"
             data-testid="menu-feedback-open"
             class="flex min-h-11 w-full items-center justify-between rounded border border-slate-500 bg-slate-900 px-2 py-1.5 hover:bg-slate-700 md:min-h-0"

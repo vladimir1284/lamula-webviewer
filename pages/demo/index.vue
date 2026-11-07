@@ -1,0 +1,179 @@
+<script setup lang="ts">
+// Selector del plano demo (lamula-jobs, F4): token de acceso → caso preparado o radar/día/rango → estimación → lanzar.
+// Todo pasa por /api/demo/*, que pone el token desde una cookie httpOnly; esta página nunca lo reenvía.
+import { computed, ref } from 'vue'
+import { isoToPath } from '#shared/url/time-path'
+
+interface Caso { id: string, titulo: string, icao: string, site_id: string, desde: string, hasta: string, n_volumes: number }
+interface Vol { key: string, bytes: number, time: string }
+
+const { t } = useI18n()
+const localePath = useLocalePath()
+const token = ref('')
+const entered = ref(false)
+const casos = ref<Caso[]>([])
+const casosUrl = useRuntimeConfig().public.casosUrl.replace(/\/$/, '')
+const err = ref('')
+const busy = ref(false)
+
+const day = ref(new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10))
+const sites = ref<string[] | null>(null)
+const site = ref('')
+const vols = ref<Vol[]>([])
+const iFrom = ref(0)
+const iTo = ref(0)
+
+const picked = computed(() => vols.value.slice(Math.min(iFrom.value, iTo.value), Math.max(iFrom.value, iTo.value) + 1))
+const MIN_POR_VOLUMEN = 80 / 12 // el mismo que catalogo.py: no se inventa otra estimación
+const estimate = computed(() => ({
+  n: picked.value.length,
+  min: Math.round(picked.value.length * MIN_POR_VOLUMEN),
+  mb: Math.round(picked.value.reduce((a, v) => a + v.bytes, 0) / 1e6),
+}))
+
+function msg(e: unknown): string {
+  const x = e as { statusCode?: number, statusMessage?: string }
+  if (x.statusCode === 409) return t('job.selBusy')
+  if (x.statusCode === 429) return t('job.selQuota')
+  return t('job.selError', { msg: x.statusMessage ?? String(e) })
+}
+
+async function guard<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  err.value = ''
+  busy.value = true
+  try { return await fn() }
+  catch (e) { err.value = msg(e) }
+  finally { busy.value = false }
+}
+
+// Los casos preparados son públicos (D19): se listan sin token y cada uno es un enlace a la instancia de casos.
+try { casos.value = await $fetch<Caso[]>('/api/demo/cases') }
+catch { /* sin lista, la página sigue sirviendo para observaciones propias */ }
+
+function casoHref(c: Caso): string {
+  return `${casosUrl}/${c.site_id}/153/${isoToPath(c.desde.slice(0, 19))}`
+}
+
+async function enter() {
+  err.value = ''
+  busy.value = true
+  try {
+    await $fetch('/api/demo/session', { method: 'POST', body: { token: token.value.trim() } })
+    await $fetch('/api/demo/catalog/sites', { query: { day: day.value } })
+    entered.value = true
+  }
+  catch (e) {
+    err.value = (e as { statusCode?: number }).statusCode === 401 ? t('job.selTokenBad') : msg(e)
+  }
+  finally { busy.value = false }
+}
+
+async function loadSites() {
+  sites.value = null
+  vols.value = []
+  const r = await guard(() => $fetch<{ sites: string[] }>('/api/demo/catalog/sites', { query: { day: day.value } }))
+  if (r) { sites.value = r.sites; site.value = r.sites[0] ?? ''; if (site.value) await loadVols() }
+}
+
+async function loadVols() {
+  const r = await guard(() => $fetch<{ volumes: Vol[] }>('/api/demo/catalog/volumes', { query: { site: site.value, day: day.value } }))
+  if (r) { vols.value = r.volumes; iFrom.value = 0; iTo.value = Math.min(11, r.volumes.length - 1) }
+}
+
+async function launch(icao: string, keys: string[]) {
+  const r = await guard(() => $fetch<{ result_token: string }>('/api/demo/jobs', { method: 'POST', body: { icao, source_keys: keys } }))
+  if (r) await navigateTo(localePath(`/j/${r.result_token}`))
+}
+
+</script>
+
+<template>
+  <main class="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-6">
+    <h1 class="text-2xl font-semibold">
+      {{ t('job.selTitle') }}
+    </h1>
+
+    <section v-if="casos.length">
+      <h2 class="mb-2 font-medium">
+        {{ t('job.selCases') }}
+      </h2>
+      <ul class="flex flex-col gap-2">
+        <li v-for="c in casos" :key="c.id">
+          <a :href="casoHref(c)" class="block w-full rounded border px-3 py-2 text-left" :data-testid="`demo-case-${c.id}`">
+            <span class="font-medium">{{ c.titulo }}</span>
+            <span class="block text-xs opacity-70">{{ c.icao }} · {{ c.desde.slice(0, 16).replace('T', ' ') }} → {{ c.hasta.slice(0, 16).replace('T', ' ') }} UTC · {{ t('job.selCaseDetail', { n: c.n_volumes, min: Math.round(c.n_volumes * MIN_POR_VOLUMEN) }) }}</span>
+          </a>
+        </li>
+      </ul>
+    </section>
+
+    <h2 class="font-medium">
+      {{ t('job.selCustom') }}
+    </h2>
+    <form v-if="!entered" class="flex gap-2" @submit.prevent="enter">
+      <input v-model="token" type="password" autocomplete="off" :placeholder="t('job.selToken')" :aria-label="t('job.selToken')" class="flex-1 rounded border px-3 py-2" data-testid="demo-token">
+      <button type="submit" :disabled="busy || !token" class="rounded border px-4 py-2" data-testid="demo-enter">
+        {{ t('job.selTokenGo') }}
+      </button>
+    </form>
+
+    <details v-if="!entered" class="rounded border px-3 py-2" data-testid="req-details">
+      <summary class="cursor-pointer font-medium">
+        {{ t('job.reqTitle') }}
+      </summary>
+      <p class="my-3 text-sm opacity-80">
+        {{ t('job.reqIntro') }}
+      </p>
+      <DemoRequestForm />
+    </details>
+
+    <template v-else>
+
+      <section class="flex flex-col gap-3">
+        <div class="flex items-end gap-2">
+          <label class="flex flex-col text-sm">{{ t('job.selDay') }}
+            <input v-model="day" type="date" class="rounded border px-2 py-1" data-testid="demo-day">
+          </label>
+          <button type="button" :disabled="busy || !day" class="rounded border px-3 py-1" data-testid="demo-load" @click="loadSites">
+            {{ t('job.selLoad') }}
+          </button>
+        </div>
+        <p v-if="sites && !sites.length">
+          {{ t('job.selNoSites') }}
+        </p>
+        <template v-if="sites?.length">
+          <label class="flex flex-col text-sm">{{ t('job.selSite') }}
+            <select v-model="site" class="rounded border px-2 py-1" data-testid="demo-site" @change="loadVols">
+              <option v-for="s in sites" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </label>
+          <div v-if="vols.length" class="flex gap-2">
+            <label class="flex flex-1 flex-col text-sm">{{ t('job.selFrom') }}
+              <select v-model.number="iFrom" class="rounded border px-2 py-1" data-testid="demo-from">
+                <option v-for="(v, i) in vols" :key="v.key" :value="i">{{ v.time.slice(11, 16) }}</option>
+              </select>
+            </label>
+            <label class="flex flex-1 flex-col text-sm">{{ t('job.selTo') }}
+              <select v-model.number="iTo" class="rounded border px-2 py-1" data-testid="demo-to">
+                <option v-for="(v, i) in vols" :key="v.key" :value="i">{{ v.time.slice(11, 16) }}</option>
+              </select>
+            </label>
+          </div>
+          <p v-if="picked.length" class="text-sm" data-testid="demo-estimate">
+            {{ t('job.selEstimate', estimate) }}
+          </p>
+          <button type="button" :disabled="busy || !picked.length" class="rounded border px-4 py-2" data-testid="demo-launch" @click="launch(site, picked.map(v => v.key))">
+            {{ busy ? t('job.selLaunching') : t('job.selLaunch') }}
+          </button>
+        </template>
+      </section>
+    </template>
+
+    <p v-if="err" role="alert" class="text-sm text-red-600" data-testid="demo-error">
+      {{ err }}
+    </p>
+    <p class="text-xs opacity-60">
+      {{ t('job.notOfficial') }}
+    </p>
+  </main>
+</template>
