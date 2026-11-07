@@ -117,6 +117,16 @@ async function launch(icao: string, keys: string[]) {
       </button>
     </form>
 
+    <details v-if="!entered" class="rounded border px-3 py-2" data-testid="req-details">
+      <summary class="cursor-pointer font-medium">
+        {{ t('job.reqTitle') }}
+      </summary>
+      <p class="my-3 text-sm opacity-80">
+        {{ t('job.reqIntro') }}
+      </p>
+      <DemoRequestForm />
+    </details>
+
     <template v-else>
 
       <section class="flex flex-col gap-3">
