@@ -4,7 +4,7 @@
 import { computed, ref } from 'vue'
 import { isoToPath } from '#shared/url/time-path'
 
-interface Caso { id: string, titulo: string, icao: string, desde: string, hasta: string, n_volumes: number }
+interface Caso { id: string, titulo: string, icao: string, site_id: string, desde: string, hasta: string, n_volumes: number }
 interface Vol { key: string, bytes: number, time: string }
 
 const { t } = useI18n()
@@ -51,7 +51,7 @@ try { casos.value = await $fetch<Caso[]>('/api/demo/cases') }
 catch { /* sin lista, la página sigue sirviendo para observaciones propias */ }
 
 function casoHref(c: Caso): string {
-  return `${casosUrl}/${c.icao}/153/${isoToPath(c.desde.slice(0, 19))}`
+  return `${casosUrl}/${c.site_id}/153/${isoToPath(c.desde.slice(0, 19))}`
 }
 
 async function enter() {

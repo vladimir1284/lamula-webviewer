@@ -27,6 +27,7 @@
     "selBusy": "Ese radar y esas horas ya tienen un trabajo en marcha. Prueba más tarde o con otra ventana.",
     "selQuota": "Superaste tu cuota.",
     "selError": "No se pudo completar: {msg}",
-    "selCaseDetail": "{n} volúmenes · unos {min} min"
+    "selCaseDetail": "{n} volúmenes · unos {min} min",
+    "notOfficialBadge": "Reproducción propia del procesamiento de radar. No son productos oficiales del NWS."
   }
 }

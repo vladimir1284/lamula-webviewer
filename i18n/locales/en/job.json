@@ -27,6 +27,7 @@
     "selBusy": "That radar and those hours already have a job running. Try later or with another window.",
     "selQuota": "You went over your quota.",
     "selError": "Could not complete: {msg}",
-    "selCaseDetail": "{n} volumes · about {min} min"
+    "selCaseDetail": "{n} volumes · about {min} min",
+    "notOfficialBadge": "Our own replay of the radar processing. Not official NWS products."
   }
 }

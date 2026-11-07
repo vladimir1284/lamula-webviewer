@@ -952,6 +952,9 @@ function onSatOpacityInput(event: Event) {
         </div>
       </div>
 
+      <!-- plano demo: etiqueta fija «no oficial NWS» (D19, puerta de F4) -->
+      <NotOfficialBadge v-if="demoJob" />
+
       <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
            + el primer bloque del aside izquierdo -->
       <RadarProductChip
