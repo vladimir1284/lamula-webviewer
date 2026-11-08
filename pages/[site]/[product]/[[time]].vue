@@ -60,6 +60,7 @@ definePageMeta({
 const route = useRoute()
 const { t } = useI18n()
 const demoJob = !!useRuntimeConfig().public.demoJob
+const casosOnly = !!useRuntimeConfig().public.casosOnly
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 const exportDialog = ref<{ open: () => void }>()
@@ -552,6 +553,8 @@ const annotationTool = computed<AnnotationKind | null>(() =>
 )
 
 onMounted(() => {
+  // casos: datos fijos, nada que seguir
+  if (casosOnly) send({ type: 'SET_LIVE_REFRESH', value: false })
   // localStorage no existe en SSR: la colección entra tras montar, igual que
   // las prefs de display
   annotationSend({ type: 'LOADED', bySite: loadAnnotations() })
@@ -1027,7 +1030,8 @@ function onSatOpacityInput(event: Event) {
             :can-next="canStepNext"
             :clock="ctx.clock"
             :playing="animPlaying"
-            :live-refresh="ctx.liveRefresh"
+            :live-refresh="ctx.liveRefresh && !casosOnly"
+            :hide-live="casosOnly"
             @select="onTimelineSelect"
             @step="onTimelineStep"
             @toggle="onToggleAnimation"

@@ -59,6 +59,13 @@ async function runMigration() {
     return
   }
 
+  // Plano demo (jobs y casos): el feedback está apagado y la base puede ser de
+  // solo lectura (casos); crear el schema `viewer` ahí sería escribir en ella.
+  if (config.public.demoJob) {
+    console.debug('[migrate-feedback] demoJob=true, se omite')
+    return
+  }
+
   const host = config.pgHost
   const database = config.pgDatabase
 

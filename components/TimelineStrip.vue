@@ -41,6 +41,8 @@ const props = withDefaults(defineProps<{
   clock?: ClockPref
   playing: boolean
   liveRefresh: boolean
+  /** oculta la pastilla «EN VIVO» (instancia de casos: datos históricos fijos) */
+  hideLive?: boolean
   /** oculta el botón play/pause (D43/P4: la vista de mosaico aún no anima —
    * geometría por fila, ver utils/map/frame-pool.ts) — default true, ningún
    * llamador existente lo pasa */
@@ -415,6 +417,7 @@ const tickLabels = computed(() => {
             ningún `v-if` sobre ancho medido, así que no parpadea al hidratar.
           -->
           <label
+            v-if="!hideLive"
             data-testid="live-refresh-toggle-mobile"
             class="flex h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-3 text-[11px] font-bold text-white shadow"
             :style="{ background: liveRefresh ? PRIMARY_BLUE : SLATE }"
@@ -446,6 +449,7 @@ const tickLabels = computed(() => {
       <!-- wrapper del track: 100% en móvil, flex-1 ml-3 en desktop -->
       <div class="relative my-1 min-w-0 flex-1 sm:my-0 sm:ml-3" style="overflow: visible;">
         <label
+          v-if="!hideLive"
           data-testid="live-refresh-toggle"
           class="absolute hidden -translate-x-1/2 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold text-white shadow z-10 sm:flex"
           style="bottom: 100%; margin-bottom: 6px;"
