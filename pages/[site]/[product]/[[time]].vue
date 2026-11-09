@@ -59,6 +59,8 @@ definePageMeta({
 
 const route = useRoute()
 const { t } = useI18n()
+const demoJob = !!useRuntimeConfig().public.demoJob
+const casosOnly = !!useRuntimeConfig().public.casosOnly
 const prefsDialog = ref<{ open: () => void }>()
 const timelineMenu = ref<{ open: () => void }>()
 const exportDialog = ref<{ open: () => void }>()
@@ -551,6 +553,8 @@ const annotationTool = computed<AnnotationKind | null>(() =>
 )
 
 onMounted(() => {
+  // casos: datos fijos, nada que seguir
+  if (casosOnly) send({ type: 'SET_LIVE_REFRESH', value: false })
   // localStorage no existe en SSR: la colección entra tras montar, igual que
   // las prefs de display
   annotationSend({ type: 'LOADED', bySite: loadAnnotations() })
@@ -571,6 +575,7 @@ const { snapshot: feedbackSnapshot, send: feedbackSend } = useActor(feedbackMach
 const feedbackCtx = computed(() => feedbackSnapshot.value.context)
 
 onMounted(() => {
+  if (demoJob) return // plano demo: sin base de feedback
   feedbackSend({ type: 'FETCH_MINE' })
 
   const nudgeInterval = setInterval(() => {
@@ -950,6 +955,9 @@ function onSatOpacityInput(event: Event) {
         </div>
       </div>
 
+      <!-- plano demo: etiqueta fija «no oficial NWS» (D19, puerta de F4) -->
+      <NotOfficialBadge v-if="demoJob" />
+
       <!-- identidad + estado del raster activo (D36): reemplaza el header fijo
            + el primer bloque del aside izquierdo -->
       <RadarProductChip
@@ -1022,7 +1030,8 @@ function onSatOpacityInput(event: Event) {
             :can-next="canStepNext"
             :clock="ctx.clock"
             :playing="animPlaying"
-            :live-refresh="ctx.liveRefresh"
+            :live-refresh="ctx.liveRefresh && !casosOnly"
+            :hide-live="casosOnly"
             @select="onTimelineSelect"
             @step="onTimelineStep"
             @toggle="onToggleAnimation"
@@ -1067,6 +1076,7 @@ function onSatOpacityInput(event: Event) {
          mobile sigue siendo overlay full-screen (sin lugar para correr el
          mapa en una pantalla angosta). -->
     <LayersMenu
+      :demo="demoJob"
       :base="ctx.base"
       :panel-open="!!ctx.panel"
       :has-palette="!!productDef"

@@ -10,6 +10,7 @@ const LOCALE_FILES = [
   'data.json',
   'feedback.json',
   'export.json',
+  'job.json',
   'layers.json',
   'locale.json',
   'map.json',
@@ -152,6 +153,10 @@ export default defineNuxtConfig({
     pgPassword: '',
     pgWriteUser: '',
     pgWritePassword: '',
+    // Plano demo (lamula-jobs): si hay URL, las credenciales de Postgres salen del token del job (cookie).
+    // NUXT_JOBS_API_URL / NUXT_JOBS_INTERNAL_KEY. Vacío = viewer de producción, sin cambios.
+    jobsApiUrl: '',
+    jobsInternalKey: '',
     adminToken: '',
     feedbackWebhookUrl: '',
     turnstileSecret: '',
@@ -169,6 +174,12 @@ export default defineNuxtConfig({
       // NUXT_PUBLIC_R2_BASE_URL — origen público del bucket R2 (cog_url)
       r2BaseUrl: 'https://nexrad-raster.ladetec.com',
       turnstileSiteKey: '',
+      // NUXT_PUBLIC_DEMO_JOB=true en el viewer demo: oculta viento y rayos (sin GFS/GLM históricos)
+      demoJob: false,
+      // Instancia de casos preparados: datos históricos fijos, sin pastilla «EN VIVO»
+      casosOnly: false,
+      // NUXT_PUBLIC_CASOS_URL — origen de la instancia del viewer de casos preparados (D19); vacío = esta misma
+      casosUrl: '',
       buildId: process.env.GIT_SHA || 'dev',
       cartoApiKey: process.env.NUXT_PUBLIC_CARTO_API_KEY || 'cb1_4iib_1_1dfa4e98cff8bebc4902181e',
     },

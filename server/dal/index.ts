@@ -6,17 +6,40 @@
 import type { H3Event } from 'h3'
 import { FixtureDal } from './fixture'
 import { LiveDal } from './live'
+import { JOB_COOKIE, JobNotFound, resolveJob, validToken } from './job-token'
 import { getPgClient } from './pg'
-import type { Dal } from './types'
+import type { Dal, PgLike } from './types'
 
 let fixtureSingleton: FixtureDal | undefined
 
-export function useDal(event: H3Event): Dal {
+/** `jobToken`: para el endpoint que acaba de recibirlo y aún no tiene la cookie en la petición. */
+export function useDal(event: H3Event, jobToken?: string): Dal {
   const config = useRuntimeConfig(event)
 
   if (config.dalAdapter === 'fixture') {
     fixtureSingleton ??= new FixtureDal(config.public.r2BaseUrl || null)
     return fixtureSingleton
+  }
+
+  // Plano demo (lamula-jobs): credenciales por petición, sacadas del token del job que viaja en la cookie.
+  if (config.jobsApiUrl) {
+    const token = jobToken ?? getCookie(event, JOB_COOKIE)
+    const lazy: PgLike = {
+      query: async <T>(text: string, params: unknown[] = []) => {
+        if (!validToken(token)) throw createError({ statusCode: 401, statusMessage: 'Falta el enlace del job' })
+        const job = await resolveJob(token, { url: config.jobsApiUrl, key: config.jobsInternalKey })
+          .catch((e) => { throw createError({ statusCode: 502, statusMessage: String(e.message ?? e) }) })
+        if (!job) throw createError({ statusCode: 404, statusMessage: 'El job no existe o caducó' })
+        return getPgClient({
+          host: config.pgHost,
+          port: Number(config.pgPort) || 5432,
+          database: config.pgDatabase,
+          username: job.pg_user,
+          password: job.pg_password,
+        }, { max: 2 }).query<T>(text, params)
+      },
+    }
+    return new LiveDal(lazy, config.public.r2BaseUrl || null)
   }
 
   if (!config.pgHost || !config.pgDatabase || !config.pgUser) {
@@ -38,4 +61,5 @@ export function useDal(event: H3Event): Dal {
   return new LiveDal(db, config.public.r2BaseUrl || null)
 }
 
+export { JobNotFound }
 export type { Dal } from './types'
